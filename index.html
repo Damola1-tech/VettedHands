@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VettedHands · People you can trust for the job</title>
+<meta name="description" content="A trust-first platform connecting you to vetted, reliable artisans — electricians, plumbers, tailors, phone repairers, and more. Join the waitlist." />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #F4F1EA;
+    --surface: #FFFFFF;
+    --ink: #1E1B16;
+    --ink-soft: #6B6357;
+    --line: #E1DACB;
+    --primary: #1F3A34;
+    --primary-light: #2E534B;
+    --accent: #B5651D;
+    --accent-light: #F0DFC8;
+    --success: #2E7D4F;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.5;
+  }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    padding: 22px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 19px;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-mark {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent-light);
+  }
+  .location-pill {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: var(--surface);
+  }
+
+  /* Hero */
+  .hero {
+    padding: 56px 0 48px;
+    text-align: center;
+  }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 22px;
+  }
+  .hero h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(32px, 6vw, 52px);
+    line-height: 1.08;
+    margin: 0 0 18px;
+    color: var(--primary);
+    letter-spacing: -0.01em;
+  }
+  .hero p {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    max-width: 540px;
+    margin: 0 auto 34px;
+  }
+
+  /* Waitlist form */
+  #waitlist-form {
+    display: flex;
+    gap: 10px;
+    max-width: 440px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #waitlist-form input[type="email"] {
+    flex: 1;
+    min-width: 220px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    font-size: 15px;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  #waitlist-form input[type="email"]:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  #waitlist-form button {
+    padding: 14px 22px;
+    border-radius: 10px;
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  #waitlist-form button:hover { background: var(--primary-light); }
+  .form-note { font-size: 12.5px; color: var(--ink-soft); margin-top: 12px; }
+  #form-success {
+    display: none;
+    max-width: 440px;
+    margin: 0 auto;
+    background: #EAF4EC;
+    color: var(--success);
+    border-radius: 10px;
+    padding: 16px 18px;
+    font-size: 14.5px;
+    font-weight: 500;
+  }
+
+  /* Trust strip */
+  .trust-strip {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    flex-wrap: wrap;
+    padding: 30px 0 6px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .trust-strip span { display: flex; align-items: center; gap: 6px; }
+
+  /* Sections */
+  section { padding: 46px 0; border-top: 1px solid var(--line); }
+  .section-kicker {
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .section-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 28px;
+    color: var(--primary);
+    margin: 0 0 30px;
+    max-width: 480px;
+  }
+
+  /* How it works */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 22px;
+  }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .step-num {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .step h3 { margin: 0 0 8px; font-size: 15.5px; }
+  .step p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+
+  /* Trades */
+  .trades-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 600px) { .trades-grid { grid-template-columns: 1fr; } }
+  .trades-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .trades-card h4 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .trades-card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .trades-card li {
+    font-size: 14.5px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+  .trades-card.tomorrow .dot { background: var(--accent); opacity: 0.7; }
+  .trades-card.tomorrow li { color: var(--ink-soft); }
+
+  /* Final CTA */
+  .final-cta {
+    text-align: center;
+    padding: 54px 0 70px;
+  }
+  .final-cta h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 26px;
+    color: var(--primary);
+    margin: 0 0 8px;
+  }
+  .final-cta p { color: var(--ink-soft); margin: 0 0 26px; font-size: 14.5px; }
+
+  footer {
+    text-align: center;
+    padding: 24px 0 34px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+
+  <div class="wrap">
+    <header>
+      <div class="logo">
+        <span class="logo-mark">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+        </span>
+        VettedHands
+      </div>
+      <div class="location-pill">Launching first in your school area</div>
+    </header>
+
+    <div class="hero">
+      <div class="hero-eyebrow">Coming soon</div>
+      <h1>People you can trust<br />for the job.</h1>
+      <p>Vetted electricians, plumbers, tailors, and phone repairers — checked before they're listed, not just forwarded to you on WhatsApp. Join the waitlist to be first in when we launch.</p>
+
+      <form id="waitlist-form" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+        <input type="email" name="email" placeholder="you@email.com" required />
+        <button type="submit">Join the waitlist</button>
+      </form>
+      <div id="form-success">You're on the list — we'll reach out as soon as VettedHands opens in your area.</div>
+      <div class="form-note">No spam. Just one email when we launch.</div>
+
+      <div class="trust-strip">
+        <span>✓ Vetted before listing</span>
+        <span>✓ Real completed job history</span>
+        <span>✓ See who's online right now</span>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="section-kicker">How it works</div>
+      <h2 class="section-title">No more gambling on a forwarded number.</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <h3>We vet, you don't guess</h3>
+          <p>Every artisan is personally checked before they can appear on VettedHands — no open sign-ups.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <h3>See who's actually available</h3>
+          <p>Online/offline status shows you who's reachable right now, not who might reply eventually.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <h3>Book with a real track record</h3>
+          <p>Ratings and completed jobs come from bookings that actually happened — not a bio someone wrote themselves.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-kicker">Services</div>
+      <h2 class="section-title">Starting focused, built to grow.</h2>
+      <div class="trades-grid">
+        <div class="trades-card today">
+          <h4>Available at launch</h4>
+          <ul>
+            <li><span class="dot"></span>Electrician</li>
+            <li><span class="dot"></span>Plumber</li>
+            <li><span class="dot"></span>Tailor</li>
+            <li><span class="dot"></span>Phone &amp; laptop repair</li>
+          </ul>
+        </div>
+        <div class="trades-card tomorrow">
+          <h4>Coming next</h4>
+          <ul>
+            <li><span class="dot"></span>Cleaner</li>
+            <li><span class="dot"></span>Barber</li>
+            <li><span class="dot"></span>Photographer</li>
+            <li><span class="dot"></span>Mechanic</li>
+            <li><span class="dot"></span>Tutor</li>
+            <li><span class="dot"></span>AC technician</li>
+            <li><span class="dot"></span>Carpenter</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="final-cta">
+      <h2>Be first to know when we launch.</h2>
+      <p>Join now — it takes five seconds.</p>
+      <form class="waitlist-form-2" action="https://formspree.io/f/YOUR_FORM_ID" method="POST" id="waitlist-form-2">
+        <div style="display:flex; gap:10px; max-width:440px; margin:0 auto; flex-wrap:wrap; justify-content:center;">
+          <input type="email" name="email" placeholder="you@email.com" required style="flex:1; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
+          <button type="submit" style="padding:14px 22px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-weight:600; font-size:15px; cursor:pointer; font-family:inherit;">Join the waitlist</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer>VettedHands · Built for people who just want the job done right.</footer>
+
+  <script>
+    // Handles both waitlist forms. Replace YOUR_FORM_ID above with your real Formspree
+    // endpoint (free at formspree.io) once you've created one — no backend needed for that.
+    function wireForm(form) {
+      if (!form) return;
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = form.querySelector("button");
+        const originalText = btn.textContent;
+        btn.textContent = "Joining…";
+        btn.disabled = true;
+
+        try {
+          const res = await fetch(form.action, {
+            method: "POST",
+            body: new FormData(form),
+            headers: { Accept: "application/json" },
+          });
+          if (res.ok) {
+            form.style.display = "none";
+            const success = document.getElementById("form-success");
+            if (success) success.style.display = "block";
+          } else {
+            btn.textContent = "Try again";
+            btn.disabled = false;
+          }
+        } catch (err) {
+          btn.textContent = "Try again";
+          btn.disabled = false;
+        }
+      });
+    }
+    wireForm(document.getElementById("waitlist-form"));
+    wireForm(document.getElementById("waitlist-form-2"));
+  </script>
+
+</body>
+</html>
