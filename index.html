@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VettedHands</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useRef, useEffect } = React;
+
+/* ============ SVG ICON SYSTEM (replaces lucide-react) ============ */
+const ICON_PATHS = {
+  search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
+  mapPin: <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>,
+  star: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>,
+  checkCircle2: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
+  arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+  zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+  droplet: <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>,
+  scissors: <><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></>,
+  smartphone: <><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>,
+  clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+  chevronRight: <polyline points="9 18 15 12 9 6"/>,
+  send: <polygon points="22 2 15 22 11 13 2 9 22 2"/>,
+  flag: <><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></>,
+  home: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
+  compass: <><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></>,
+  clipboardList: <><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-5"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>,
+  messageCircle: <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>,
+  user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+  logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+  shieldCheck: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>,
+  helpCircle: <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+  hammer: <><path d="M15 12l-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9"/><path d="M17.64 15L22 10.64"/><path d="M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.44 2.44"/></>,
+  camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+  x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+  award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+  pencil: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
+  trash2: <><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
+};
+
+function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, ...rest }) {
+  const shape = ICON_PATHS[name];
+  if (!shape) return null;
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill={fill} stroke={color || stroke} strokeWidth={strokeWidth}
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} {...rest}>
+      {shape}
+    </svg>
+  );
+}
+
+/* Named wrappers so the rest of the app code below is unchanged from the original lucide-react imports */
+const Search = (p) => <Icon name="search" {...p} />;
+const Bell = (p) => <Icon name="bell" {...p} />;
+const MapPin = (p) => <Icon name="mapPin" {...p} />;
+const Star = (p) => <Icon name="star" {...p} />;
+const CheckCircle2 = (p) => <Icon name="checkCircle2" {...p} />;
+const ArrowLeft = (p) => <Icon name="arrowLeft" {...p} />;
+const Zap = (p) => <Icon name="zap" {...p} />;
+const Droplet = (p) => <Icon name="droplet" {...p} />;
+const Scissors = (p) => <Icon name="scissors" {...p} />;
+const Smartphone = (p) => <Icon name="smartphone" {...p} />;
+const Clock = (p) => <Icon name="clock" {...p} />;
+const ChevronRight = (p) => <Icon name="chevronRight" {...p} />;
+const Send = (p) => <Icon name="send" {...p} />;
+const Flag = (p) => <Icon name="flag" {...p} />;
+const Home = (p) => <Icon name="home" {...p} />;
+const Compass = (p) => <Icon name="compass" {...p} />;
+const ClipboardList = (p) => <Icon name="clipboardList" {...p} />;
+const MessageCircle = (p) => <Icon name="messageCircle" {...p} />;
+const UserIcon = (p) => <Icon name="user" {...p} />;
+const LogOut = (p) => <Icon name="logOut" {...p} />;
+const ShieldCheck = (p) => <Icon name="shieldCheck" {...p} />;
+const HelpCircle = (p) => <Icon name="helpCircle" {...p} />;
+const Hammer = (p) => <Icon name="hammer" {...p} />;
+const Camera = (p) => <Icon name="camera" {...p} />;
+const X = (p) => <Icon name="x" {...p} />;
+const Award = (p) => <Icon name="award" {...p} />;
+const Pencil = (p) => <Icon name="pencil" {...p} />;
+const Trash2 = (p) => <Icon name="trash2" {...p} />;
+
+/* ============ ORIGINAL APP CODE (unchanged below) ============ */
+
+const trades = [
+  { id: "electrician", label: "Electrician", icon: Zap },
+  { id: "plumber", label: "Plumber", icon: Droplet },
+  { id: "tailor", label: "Tailor", icon: Scissors },
+  { id: "phone-repair", label: "Phone Repair", icon: Smartphone },
+];
+const areas = ["All areas", "Main Gate", "Fanuyi", "Odo-Ado", "Ureju"];
+
+const artisans = [
+  { id: "a1", name: "Tunde Bakare", trade: "electrician", tradeLabel: "Electrician", area: "Fanuyi", online: true, rating: 4.9, jobs: 34, responseTime: "~12 min", bio: "Wiring, sockets, fan and inverter installs. 5 years fixing lodges around campus.", initials: "TB", color: "#1F3A34" },
+  { id: "a2", name: "Blessing Uche", trade: "tailor", tradeLabel: "Tailor", area: "Main Gate", online: true, rating: 5.0, jobs: 51, responseTime: "~30 min", bio: "Asoebi, corper wear, alterations. Keeps your measurements on file so you never repeat yourself.", initials: "BU", color: "#B5651D" },
+  { id: "a3", name: "Emeka Obi", trade: "plumber", tradeLabel: "Plumber", area: "Odo-Ado", online: false, rating: 4.7, jobs: 21, responseTime: "~1 hr", bio: "Leaking pipes, blocked drains, tank installs. Comes with his own tools, no delays.", initials: "EO", color: "#2E534B" },
+  { id: "a4", name: "Kabiru Sani", trade: "phone-repair", tradeLabel: "Phone Repair", area: "Fanuyi", online: true, rating: 4.8, jobs: 67, responseTime: "~10 min", bio: "Screen, battery, charging port. Fixes while you wait if it's a quick job.", initials: "KS", color: "#1F3A34" },
+  { id: "a5", name: "Chidinma Eze", trade: "tailor", tradeLabel: "Tailor", area: "Ureju", online: false, rating: 4.6, jobs: 18, responseTime: "~2 hrs", bio: "Native wears and quick fixes. Affordable rates for students.", initials: "CE", color: "#B5651D" },
+  { id: "a6", name: "Ibrahim Musa", trade: "electrician", tradeLabel: "Electrician", area: "Main Gate", online: true, rating: 4.9, jobs: 40, responseTime: "~15 min", bio: "Generator servicing and rewiring. Vetted after three checked jobs on campus.", initials: "IM", color: "#2E534B" },
+];
+
+const artisanReplies = ["Sure, I can be there. Let's get it sorted!", "Noted — I'll head over shortly.", "Okay, on it. Will update you once I'm close.", "Got it, thanks for the details."];
+const reportReasons = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
+
+function fmtStars(n) { return n.toFixed(1); }
+function timeNow() { return new Date().toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" }); }
+function findArtisan(id) { return artisans.find((a) => a.id === id); }
+function sysMsg(text) { return { id: "m" + Date.now() + Math.random(), from: "system", text, time: timeNow() }; }
+
+function App() {
+  const [view, setView] = useState("home");
+  const [navTab, setNavTab] = useState("home");
+  const [selectedId, setSelectedId] = useState(null);
+  const [area, setArea] = useState("All areas");
+  const [query, setQuery] = useState("");
+  const [tradeFilter, setTradeFilter] = useState(null);
+  const [activeRequestId, setActiveRequestId] = useState(null);
+
+  const [profile, setProfile] = useState({ name: "Damola", area: "Main Gate" });
+  const [artisanApp, setArtisanApp] = useState(null); // {trade,bio,photos,status,online,verified}
+  const [incomingJobs, setIncomingJobs] = useState([
+    { id: "ij1", studentName: "Bisola A.", job: "Bathroom light not working, need it fixed today", when: "Today", status: "new" },
+    { id: "ij2", studentName: "Wale O.", job: "Extension socket sparking near my desk", when: "Tomorrow", status: "new" },
+  ]);
+
+  const [requests, setRequests] = useState([]); // {id, artisanId, job, when, status, jobGroupId, createdAt, messages, rating, reviewText}
+  const [reports, setReports] = useState([]);
+  const timers = useRef([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const selected = findArtisan(selectedId);
+  const activeRequest = requests.find((r) => r.id === activeRequestId);
+
+  const filtered = useMemo(() => {
+    let list = artisans;
+    if (area !== "All areas") list = list.filter((a) => a.area === area);
+    if (tradeFilter) list = list.filter((a) => a.trade === tradeFilter);
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      list = list.filter((a) => a.name.toLowerCase().includes(q) || a.tradeLabel.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => (b.online === a.online ? b.rating - a.rating : b.online - a.online));
+  }, [area, tradeFilter, query]);
+
+  const onlineNow = artisans.filter((a) => a.online);
+
+  // open job groups a student can attach a new inquiry to (still comparing)
+  const openJobGroups = useMemo(() => {
+    const map = new Map();
+    requests.forEach((r) => {
+      if (["pending", "accepted"].includes(r.status) && !map.has(r.jobGroupId)) {
+        map.set(r.jobGroupId, { jobGroupId: r.jobGroupId, job: r.job, when: r.when });
+      }
+    });
+    return [...map.values()];
+  }, [requests]);
+
+  function openArtisanProfile(id) { setSelectedId(id); setView("artisanProfile"); }
+
+  function goNav(tab) {
+    setNavTab(tab);
+    if (tab === "home") setView("home");
+    else if (tab === "browse") { setTradeFilter(null); setView("browse"); }
+    else if (tab === "requests") setView("requestsList");
+    else if (tab === "messages") setView("messagesList");
+    else setView("userProfile");
+  }
+
+  function sendRequest(artisanId, job, when, jobGroupId) {
+    const id = "r" + Date.now();
+    const gId = jobGroupId || "g" + Date.now();
+    const newReq = { id, artisanId, job, when, status: "pending", jobGroupId: gId, createdAt: timeNow(),
+      messages: [{ id: "m" + Date.now(), from: "me", text: job, time: timeNow() }] };
+    setRequests((prev) => [newReq, ...prev]);
+    setActiveRequestId(id);
+
+    const t = setTimeout(() => {
+      setRequests((prev) => prev.map((r) => r.id !== id ? r : {
+        ...r, status: "accepted",
+        messages: [...r.messages, sysMsg(`${findArtisan(artisanId).name.split(" ")[0]} accepted your request.`),
+          { id: "m" + Date.now() + 2, from: "artisan", text: artisanReplies[Math.floor(Math.random() * artisanReplies.length)], time: timeNow() }],
+      }));
+    }, 2600);
+    timers.current.push(t);
+    setView("requestSent");
+  }
+
+  function sendMessage(requestId, text) {
+    setRequests((prev) => prev.map((r) => r.id !== requestId ? r : { ...r, messages: [...r.messages, { id: "m" + Date.now(), from: "me", text, time: timeNow() }] }));
+    const t = setTimeout(() => {
+      setRequests((prev) => prev.map((r) => r.id !== requestId ? r : { ...r, messages: [...r.messages, { id: "m" + Date.now() + 1, from: "artisan", text: artisanReplies[Math.floor(Math.random() * artisanReplies.length)], time: timeNow() }] }));
+    }, 1300);
+    timers.current.push(t);
+  }
+
+  function confirmRequest(requestId) {
+    setRequests((prev) => {
+      const target = prev.find((r) => r.id === requestId);
+      const gId = target.jobGroupId;
+      return prev.map((r) => {
+        if (r.id === requestId) return { ...r, status: "confirmed", messages: [...r.messages, sysMsg("Booking confirmed.")] };
+        if (r.jobGroupId === gId && r.id !== requestId && !["completed", "declined", "closed"].includes(r.status)) {
+          return { ...r, status: "closed", messages: [...r.messages, sysMsg("The student confirmed with another artisan for this job.")] };
+        }
+        return r;
+      });
+    });
+  }
+
+  function completeRequest(requestId, rating, reviewText, hasPhotos) {
+    setRequests((prev) => prev.map((r) => r.id !== requestId ? r : {
+      ...r, status: "completed", rating, reviewText, hasPhotos,
+      messages: [...r.messages, sysMsg(`Job marked complete · rated ${rating}★`)],
+    }));
+  }
+
+  function reportRequest(requestId, reason, note) {
+    const r = requests.find((x) => x.id === requestId);
+    setReports((prev) => [...prev, { id: "rep" + Date.now(), requestId, artisanId: r.artisanId, reason, note, time: timeNow() }]);
+    setRequests((prev) => prev.map((x) => x.id !== requestId ? x : { ...x, messages: [...x.messages, sysMsg(`Reported to VettedHands: ${reason}. Our team will review.`)] }));
+  }
+
+  function openConversation(requestId) { setActiveRequestId(requestId); setView("conversation"); }
+
+  return (
+    <div className="app">
+      <Style />
+      <div className="phone">
+        <div className="content">
+          {view === "home" && (
+            <HomeView area={area} setArea={setArea} query={query} setQuery={setQuery}
+              onlineNow={onlineNow} filtered={filtered} onOpenProfile={openArtisanProfile}
+              onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
+              onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }} />
+          )}
+          {view === "browse" && (
+            <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
+              area={area} setArea={setArea} filtered={filtered}
+              onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
+          )}
+          {view === "artisanProfile" && selected && (
+            <ArtisanProfileView artisan={selected} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
+          )}
+          {view === "request" && selected && (
+            <RequestView artisan={selected} openJobGroups={openJobGroups} onBack={() => setView("artisanProfile")}
+              onSend={(job, when, gId) => sendRequest(selected.id, job, when, gId)} />
+          )}
+          {view === "requestSent" && activeRequest && (
+            <RequestSentView artisan={findArtisan(activeRequest.artisanId)} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => setView("conversation")} />
+          )}
+          {view === "requestsList" && <RequestsListView requests={requests} onOpen={openConversation} />}
+          {view === "messagesList" && <MessagesListView requests={requests} onOpen={openConversation} />}
+          {view === "conversation" && activeRequest && (
+            <ConversationView request={activeRequest} artisan={findArtisan(activeRequest.artisanId)}
+              onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
+              onSend={(text) => sendMessage(activeRequest.id, text)}
+              onConfirm={() => confirmRequest(activeRequest.id)}
+              onComplete={(rating, review, photos) => completeRequest(activeRequest.id, rating, review, photos)}
+              onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)} />
+          )}
+          {view === "userProfile" && (
+            <UserProfileView profile={profile} setProfile={setProfile} requests={requests}
+              artisanApp={artisanApp} setArtisanApp={setArtisanApp} incomingJobs={incomingJobs}
+              onViewJobs={() => setView("artisanJobs")} onBrowse={() => goNav("browse")} />
+          )}
+          {view === "artisanJobs" && (
+            <ArtisanJobsView jobs={incomingJobs}
+              onRespond={(id, status) => setIncomingJobs((prev) => prev.map((j) => j.id === id ? { ...j, status } : j))}
+              onBack={() => setView("userProfile")} />
+          )}
+        </div>
+        <BottomNav active={navTab} onChange={goNav} requestCount={requests.filter((r) => r.status === "pending" || r.status === "accepted").length} />
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Home ---------------- */
+function HomeView({ area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll }) {
+  return (
+    <div className="screen">
+      <div className="topbar">
+        <div className="brand"><span className="brand-mark"><CheckCircle2 size={16} /></span><span className="brand-name">VettedHands</span></div>
+        <div className="topbar-icons"><button className="iconbtn"><Bell size={18} /></button><div className="avatar avatar--sm">D</div></div>
+      </div>
+      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+      <div className="section">
+        <div className="section-head"><span>Online now</span></div>
+        <div className="status-row">
+          {onlineNow.map((a) => (
+            <button key={a.id} className="status-item" onClick={() => onOpenProfile(a.id)}>
+              <div className="status-ring"><div className="avatar avatar--md" style={{ background: a.color }}>{a.initials}</div></div>
+              <div className="status-name">{a.name.split(" ")[0]}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="section">
+        <div className="section-head"><span>Browse a trade</span></div>
+        <div className="trade-grid">
+          {trades.map((t) => { const Icon2 = t.icon; return (
+            <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><Icon2 size={18} /></span>{t.label}</button>
+          ); })}
+        </div>
+      </div>
+      <div className="section section--flush">
+        <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
+        <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a.id)} />)}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Browse ---------------- */
+function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setArea, filtered, onBack, onOpenProfile }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Browse artisans</div><div style={{ width: 34 }} /></div>
+      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div className="chip-row">
+        <button className={"chip" + (!tradeFilter ? " chip--active" : "")} onClick={() => setTradeFilter(null)}>All trades</button>
+        {trades.map((t) => <button key={t.id} className={"chip" + (tradeFilter === t.id ? " chip--active" : "")} onClick={() => setTradeFilter(t.id)}>{t.label}</button>)}
+      </div>
+      <div className="area-row area-row--pad"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+      <div className="feed feed--scroll">
+        {filtered.length === 0 && <div className="empty"><div className="empty-title">No one matches yet</div><div className="empty-sub">Try a different area or trade.</div></div>}
+        {filtered.map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a.id)} />)}
+      </div>
+    </div>
+  );
+}
+
+function ArtisanCard({ artisan, onOpen }) {
+  return (
+    <button className="acard" onClick={onOpen}>
+      <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: artisan.color }}>{artisan.initials}</div><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} /></div>
+      <div className="acard-main">
+        <div className="acard-top"><span className="acard-name">{artisan.name}</span><span className="badge"><CheckCircle2 size={11} /> Vetted</span></div>
+        <div className="acard-trade">{artisan.tradeLabel} · {artisan.area}</div>
+        <div className="acard-meta"><span><Star size={12} fill="#B5651D" stroke="none" /> {fmtStars(artisan.rating)}</span><span className="dot-sep">·</span><span>{artisan.jobs} jobs</span><span className="dot-sep">·</span><span><Clock size={11} /> {artisan.responseTime}</span></div>
+      </div>
+    </button>
+  );
+}
+
+/* ---------------- Artisan profile ---------------- */
+function ArtisanProfileView({ artisan, onBack, onRequest }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Profile</div><div style={{ width: 34 }} /></div>
+      <div className="profile-hero">
+        <div className="avatar avatar--lg" style={{ background: artisan.color }}>{artisan.initials}</div>
+        <div className="profile-name">{artisan.name}</div>
+        <div className="profile-trade">{artisan.tradeLabel} · {artisan.area}</div>
+        <div className="profile-status"><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} />{artisan.online ? "Online now" : "Offline"}</div>
+        <div className="badge badge--lg"><CheckCircle2 size={13} /> Vetted by VettedHands</div>
+      </div>
+      <div className="stat-row">
+        <div className="stat"><div className="stat-num">{fmtStars(artisan.rating)}</div><div className="stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
+        <div className="stat"><div className="stat-num">{artisan.jobs}</div><div className="stat-label">Completed jobs</div></div>
+        <div className="stat"><div className="stat-num">{artisan.responseTime}</div><div className="stat-label">Avg. response</div></div>
+      </div>
+      <div className="section"><div className="section-head"><span>About</span></div><p className="bio">{artisan.bio}</p></div>
+      <div className="section"><div className="section-head"><span>Recent work</span></div><div className="work-row">{[0, 1, 2].map((i) => <div key={i} className="work-tile" style={{ background: shade(artisan.color, i) }} />)}</div></div>
+      <button className="primary-btn primary-btn--fixed" onClick={onRequest}>Request {artisan.name.split(" ")[0]}</button>
+    </div>
+  );
+}
+function shade(hex, i) { return hex + ["", "22", "44"][i % 3]; }
+
+/* ---------------- Request (with job-group attach) ---------------- */
+function RequestView({ artisan, openJobGroups, onBack, onSend }) {
+  const [mode, setMode] = useState("new"); // "new" | jobGroupId
+  const [job, setJob] = useState("");
+  const [when, setWhen] = useState("");
+  const attaching = mode !== "new";
+  const attachedGroup = attaching ? openJobGroups.find((g) => g.jobGroupId === mode) : null;
+  const valid = attaching ? true : job.trim() && when;
+
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Request · {artisan.name.split(" ")[0]}</div><div style={{ width: 34 }} /></div>
+      <div className="form">
+        {openJobGroups.length > 0 && (
+          <label>Is this for a job you're already comparing quotes on?
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="new">No — this is a new job</option>
+              {openJobGroups.map((g) => <option key={g.jobGroupId} value={g.jobGroupId}>Same as: "{g.job.slice(0, 34)}{g.job.length > 34 ? "…" : ""}"</option>)}
+            </select>
+          </label>
+        )}
+
+        {attaching ? (
+          <div className="info-note">Comparing {artisan.name.split(" ")[0]} against your other request for: <strong>"{attachedGroup.job}"</strong> ({attachedGroup.when}). The moment you confirm one artisan, the others for this same job close automatically.</div>
+        ) : (
+          <>
+            <label>What do you need done?<textarea rows={3} value={job} onChange={(e) => setJob(e.target.value)} placeholder="e.g. Fan not turning on, socket in room sparking" /></label>
+            <label>When<select value={when} onChange={(e) => setWhen(e.target.value)}><option value="">Select a time</option><option value="As soon as possible">As soon as possible</option><option value="Later today">Later today</option><option value="Tomorrow">Tomorrow</option><option value="This week">This week</option></select></label>
+          </>
+        )}
+        <div className="info-note">{artisan.name.split(" ")[0]} will accept or decline this request. Nothing is booked until you confirm — you're free to also check other online artisans in the meantime.</div>
+      </div>
+      <button className="primary-btn primary-btn--fixed" disabled={!valid}
+        onClick={() => valid && onSend(attaching ? attachedGroup.job : job.trim(), attaching ? attachedGroup.when : when, attaching ? attachedGroup.jobGroupId : null)}>
+        Send request
+      </button>
+    </div>
+  );
+}
+
+function RequestSentView({ artisan, onDone, onMessage }) {
+  return (
+    <div className="screen screen--center">
+      <div className="sent-icon"><CheckCircle2 size={40} /></div>
+      <div className="sent-title">Request sent to {artisan.name}</div>
+      <div className="sent-sub">You'll be notified as soon as they accept. If you confirm with someone else for this job, this request closes automatically.</div>
+      <button className="primary-btn" onClick={onMessage}>Open conversation</button>
+      <button className="ghost-btn ghost-btn--wide" onClick={onDone}>Back to home</button>
+    </div>
+  );
+}
+
+/* ---------------- Requests tab ---------------- */
+function statusMeta(status) {
+  if (status === "pending") return { label: "Pending", cls: "badge--pending" };
+  if (status === "accepted") return { label: "Accepted", cls: "badge--accepted" };
+  if (status === "confirmed") return { label: "Confirmed", cls: "badge--confirmed" };
+  if (status === "completed") return { label: "Completed", cls: "badge--completed" };
+  if (status === "closed") return { label: "Closed", cls: "badge--closed" };
+  return { label: "Declined", cls: "badge--declined" };
+}
+
+function RequestsListView({ requests, onOpen }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Your requests</div></div>
+      <div className="feed feed--scroll">
+        {requests.length === 0 && <div className="empty"><div className="empty-title">No requests yet</div><div className="empty-sub">When you request an artisan, it'll show up here.</div></div>}
+        {requests.map((r) => {
+          const a = findArtisan(r.artisanId);
+          const meta = statusMeta(r.status);
+          return (
+            <button key={r.id} className="req-card" onClick={() => onOpen(r.id)}>
+              <div className="avatar avatar--md" style={{ background: a.color }}>{a.initials}</div>
+              <div className="req-main">
+                <div className="req-top"><span className="req-name">{a.name}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
+                <div className="req-job">{r.job}</div>
+                <div className="req-when">{r.when} · {r.createdAt}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Messages tab ---------------- */
+function MessagesListView({ requests, onOpen }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Messages</div></div>
+      <div className="feed feed--scroll">
+        {requests.length === 0 && <div className="empty"><div className="empty-title">No conversations yet</div><div className="empty-sub">Message threads open once you request an artisan.</div></div>}
+        {requests.map((r) => {
+          const a = findArtisan(r.artisanId);
+          const last = r.messages[r.messages.length - 1];
+          return (
+            <button key={r.id} className="msg-row" onClick={() => onOpen(r.id)}>
+              <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: a.color }}>{a.initials}</div><span className={"dot " + (a.online ? "dot--online" : "dot--offline")} /></div>
+              <div className="msg-main">
+                <div className="msg-top"><span className="msg-name">{a.name}</span><span className="msg-time">{last.time}</span></div>
+                <div className="msg-preview">{last.from === "me" ? "You: " : ""}{last.text}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Conversation (confirm / complete / report) ---------------- */
+function ConversationView({ request, artisan, onBack, onSend, onConfirm, onComplete, onReport }) {
+  const [text, setText] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [showComplete, setShowComplete] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [request.messages.length]);
+  const meta = statusMeta(request.status);
+  const canAct = !["completed", "declined", "closed"].includes(request.status);
+
+  return (
+    <div className="screen">
+      <div className="topbar">
+        <button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button>
+        <div className="topbar-title">{artisan.name}</div>
+        <div className="avatar avatar--sm" style={{ background: artisan.color }}>{artisan.initials}</div>
+      </div>
+      <div className="convo-status"><span className={"status-badge " + meta.cls}>{meta.label}</span><span className="convo-job">{request.job}</span></div>
+
+      <div className="convo-messages">
+        {request.messages.map((m) => (
+          <div key={m.id} className={"bubble-row " + (m.from === "me" ? "bubble-row--me" : m.from === "system" ? "bubble-row--sys" : "bubble-row--them")}>
+            {m.from === "system" ? <div className="bubble-sys">{m.text}</div> : <div className={"bubble " + (m.from === "me" ? "bubble--me" : "bubble--them")}>{m.text}<span className="bubble-time">{m.time}</span></div>}
+          </div>
+        ))}
+        {request.status === "completed" && request.rating && (
+          <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> You rated this job {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {canAct && request.status === "accepted" && !confirming && (
+        <button className="action-btn" onClick={() => setConfirming(true)}>Confirm booking with {artisan.name.split(" ")[0]}</button>
+      )}
+      {confirming && (
+        <div className="inline-confirm">
+          <div className="inline-confirm-text">This closes any other pending requests you sent for this same job. Confirm?</div>
+          <div className="settle-actions">
+            <button className="ghost-btn" onClick={() => setConfirming(false)}>Cancel</button>
+            <button className="settle-btn" onClick={() => { onConfirm(); setConfirming(false); }}>Yes, confirm</button>
+          </div>
+        </div>
+      )}
+
+      {canAct && request.status === "confirmed" && !showComplete && (
+        <button className="action-btn" onClick={() => setShowComplete(true)}>Mark job complete &amp; rate</button>
+      )}
+      {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t, p) => { onComplete(r, t, p); setShowComplete(false); }} />}
+
+      {canAct && !showReport && (
+        <button className="report-link" onClick={() => setShowReport(true)}><Flag size={13} /> Report a problem</button>
+      )}
+      {showReport && <ReportForm onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
+
+      {request.status === "closed" && <div className="info-note" style={{ margin: "0 16px 10px" }}>This request closed because you confirmed a different artisan for this job.</div>}
+
+      <form className="convo-input" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { onSend(text.trim()); setText(""); } }}>
+        <input placeholder="Type a message…" value={text} onChange={(e) => setText(e.target.value)} />
+        <button type="submit" className="send-btn"><Send size={16} /></button>
+      </form>
+    </div>
+  );
+}
+
+function CompletionForm({ onCancel, onSubmit }) {
+  const [rating, setRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [photos, setPhotos] = useState(0);
+  return (
+    <div className="inline-panel">
+      <div className="quickadd-label">Rate the job</div>
+      <div className="star-row">{[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} className="star-btn" onClick={() => setRating(n)}><Star size={22} fill={n <= rating ? "#B5651D" : "none"} stroke={n <= rating ? "#B5651D" : "#C9BFAB"} /></button>
+      ))}</div>
+      <div className="quickadd-label">Leave a quick review (optional)</div>
+      <textarea rows={2} value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="How did it go?" className="review-textarea" />
+      <div className="quickadd-label">Before/after photo proof</div>
+      <div className="photo-picker">
+        {Array.from({ length: photos }).map((_, i) => <div key={i} className="photo-thumb" style={{ background: ["#1F3A34", "#B5651D"][i % 2] }} />)}
+        {photos < 2 && <button className="photo-add" onClick={() => setPhotos((p) => p + 1)}><Camera size={16} /> Add</button>}
+      </div>
+      <div className="settle-actions">
+        <button className="ghost-btn" onClick={onCancel}>Cancel</button>
+        <button className="settle-btn" onClick={() => onSubmit(rating, reviewText.trim(), photos)}>Submit</button>
+      </div>
+    </div>
+  );
+}
+
+function ReportForm({ onCancel, onSubmit }) {
+  const [reason, setReason] = useState(reportReasons[0]);
+  const [note, setNote] = useState("");
+  return (
+    <div className="inline-panel">
+      <div className="quickadd-label">What went wrong?</div>
+      <select className="review-textarea" value={reason} onChange={(e) => setReason(e.target.value)}>
+        {reportReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+      </select>
+      <textarea rows={2} className="review-textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add any details (optional)" />
+      <div className="settle-actions">
+        <button className="ghost-btn" onClick={onCancel}>Cancel</button>
+        <button className="settle-btn settle-btn--danger" onClick={() => onSubmit(reason, note.trim())}>Submit report</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Profile tab (pivots once approved) ---------------- */
+function UserProfileView({ profile, setProfile, requests, artisanApp, setArtisanApp, incomingJobs, onViewJobs, onBrowse }) {
+  const completed = requests.filter((r) => r.status === "completed").length;
+  const [showForm, setShowForm] = useState(false);
+  const [confirmingVerify, setConfirmingVerify] = useState(false);
+  const newJobs = incomingJobs.filter((j) => j.status === "new").length;
+  const jobsCompletedAsArtisan = incomingJobs.filter((j) => j.status === "completed").length;
+  const isArtisan = artisanApp && artisanApp.status === "approved";
+
+  return (
+    <div className="screen">
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Profile</div></div>
+
+      <div className="profile-hero">
+        <div className="avatar avatar--lg" style={{ background: "#1F3A34" }}>{profile.name.charAt(0).toUpperCase()}</div>
+        <input className="profile-name-input" value={profile.name} onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
+        <select className="profile-area-input" value={profile.area} onChange={(e) => setProfile((p) => ({ ...p, area: e.target.value }))}>
+          {areas.filter((a) => a !== "All areas").map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        {isArtisan && <div className="badge badge--lg" style={{ marginTop: 8 }}>{artisanApp.verified ? <><Award size={13} /> Top Rated artisan</> : <><CheckCircle2 size={13} /> Vetted artisan</>} · {artisanApp.trade}</div>}
+      </div>
+
+      {isArtisan ? (
+        <div className="stat-row">
+          <div className="stat"><div className="stat-num">{newJobs}</div><div className="stat-label">New requests</div></div>
+          <div className="stat"><div className="stat-num">{jobsCompletedAsArtisan}</div><div className="stat-label">Jobs completed</div></div>
+          <div className="stat"><div className="stat-num">{requests.length}</div><div className="stat-label">Requests you've sent</div></div>
+        </div>
+      ) : (
+        <div className="stat-row">
+          <div className="stat"><div className="stat-num">{requests.length}</div><div className="stat-label">Requests sent</div></div>
+          <div className="stat"><div className="stat-num">{completed}</div><div className="stat-label">Completed</div></div>
+        </div>
+      )}
+
+      {isArtisan && (
+        <div className="section">
+          <div className="section-head"><span>Your artisan tools</span></div>
+          <div className="pending-card pending-card--approved">
+            <div className="avail-row">
+              <span>Available for jobs</span>
+              <button className={"toggle" + (artisanApp.online ? " toggle--on" : "")} onClick={() => setArtisanApp((a) => ({ ...a, online: !a.online }))}><span className="toggle-knob" /></button>
+            </div>
+            <button className="jobs-btn" onClick={onViewJobs}>
+              <ClipboardList size={15} /> View incoming requests
+              {newJobs > 0 && <span className="nav-badge nav-badge--static">{newJobs}</span>}
+            </button>
+
+            {!artisanApp.verified && !confirmingVerify && (
+              <button className="verify-btn" onClick={() => setConfirmingVerify(true)}><Award size={15} /> Get Verified — ₦1,500/month</button>
+            )}
+            {!artisanApp.verified && confirmingVerify && (
+              <div className="inline-confirm">
+                <div className="inline-confirm-text">Top Rated verification puts you first in Browse and Online Now, plus a gold badge on your profile. Subscribe?</div>
+                <div className="settle-actions">
+                  <button className="ghost-btn" onClick={() => setConfirmingVerify(false)}>Cancel</button>
+                  <button className="settle-btn" onClick={() => { setArtisanApp((a) => ({ ...a, verified: true })); setConfirmingVerify(false); }}>Simulate: subscribe</button>
+                </div>
+              </div>
+            )}
+            {artisanApp.verified && <div className="verified-note"><Award size={14} /> You're a Top Rated verified artisan</div>}
+          </div>
+          <button className="browse-link" onClick={onBrowse}>Need a service yourself? Browse artisans <ChevronRight size={14} /></button>
+        </div>
+      )}
+
+      {!isArtisan && (
+        <div className="section">
+          <div className="section-head"><span>Offer your services</span></div>
+          {!artisanApp && !showForm && <button className="artisan-cta" onClick={() => setShowForm(true)}><Hammer size={17} /> Become a vetted artisan on VettedHands</button>}
+          {!artisanApp && showForm && <ArtisanApplyForm onCancel={() => setShowForm(false)} onSubmit={(data) => { setArtisanApp({ ...data, status: "pending", online: true, verified: false }); setShowForm(false); }} />}
+          {artisanApp && artisanApp.status === "pending" && (
+            <div className="pending-card">
+              <div className="pending-title">Application under review</div>
+              <div className="pending-sub">We're checking your details before your profile goes live to students. You'll be notified once approved.</div>
+              <div className="pending-meta">{artisanApp.trade} · {artisanApp.photos.length} photo{artisanApp.photos.length === 1 ? "" : "s"} added</div>
+              <button className="demo-btn" onClick={() => setArtisanApp((a) => ({ ...a, status: "approved" }))}>Simulate: get approved <span className="demo-tag">prototype only</span></button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="section">
+        <div className="settings-list">
+          <div className="settings-row"><ShieldCheck size={17} /> Notification preferences <ChevronRight size={15} className="chev" /></div>
+          <div className="settings-row"><HelpCircle size={17} /> Help &amp; support <ChevronRight size={15} className="chev" /></div>
+          <div className="settings-row settings-row--danger"><LogOut size={17} /> Log out</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArtisanApplyForm({ onCancel, onSubmit }) {
+  const [trade, setTrade] = useState(trades[0].label);
+  const [bio, setBio] = useState("");
+  const [photos, setPhotos] = useState([]);
+  const valid = trade && bio.trim().length > 10;
+  return (
+    <div className="form form--card">
+      <label>Trade<select value={trade} onChange={(e) => setTrade(e.target.value)}>{trades.map((t) => <option key={t.id} value={t.label}>{t.label}</option>)}</select></label>
+      <label>Tell students about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What you do, how long you've been doing it, what makes you reliable…" /></label>
+      <label>Photos of past work
+        <div className="photo-picker">
+          {photos.map((p, i) => <div key={i} className="photo-thumb" style={{ background: p }} />)}
+          {photos.length < 4 && <button type="button" className="photo-add" onClick={() => setPhotos((p) => [...p, ["#1F3A34", "#B5651D", "#2E534B", "#8C6A4E"][p.length % 4]])}><Camera size={16} /> Add</button>}
+        </div>
+        <span className="optional">Demo only — tap "Add" to simulate attaching a photo.</span>
+      </label>
+      <div className="info-note">Your profile won't be visible to students until it's vetted and approved.</div>
+      <div className="settle-actions">
+        <button className="ghost-btn" onClick={onCancel}><X size={14} /> Cancel</button>
+        <button className="settle-btn" disabled={!valid} onClick={() => valid && onSubmit({ trade, bio: bio.trim(), photos })}>Submit for review</button>
+      </div>
+    </div>
+  );
+}
+
+function ArtisanJobsView({ jobs, onRespond, onBack }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Incoming requests</div><div style={{ width: 34 }} /></div>
+      <div className="feed feed--scroll">
+        {jobs.length === 0 && <div className="empty"><div className="empty-title">Nothing yet</div><div className="empty-sub">Requests from students will show up here.</div></div>}
+        {jobs.map((j) => (
+          <div key={j.id} className="job-card">
+            <div className="job-top"><span className="job-student">{j.studentName}</span>
+              <span className={"status-badge " + (j.status === "new" ? "badge--pending" : j.status === "accepted" ? "badge--accepted" : j.status === "completed" ? "badge--completed" : "badge--declined")}>
+                {j.status === "new" ? "New" : j.status === "accepted" ? "Accepted" : j.status === "completed" ? "Completed" : "Declined"}
+              </span>
+            </div>
+            <div className="job-desc">{j.job}</div>
+            <div className="job-when">{j.when}</div>
+            {j.status === "new" && <div className="settle-actions" style={{ marginTop: 8 }}><button className="ghost-btn" onClick={() => onRespond(j.id, "declined")}>Decline</button><button className="settle-btn" onClick={() => onRespond(j.id, "accepted")}>Accept</button></div>}
+            {j.status === "accepted" && <button className="action-btn action-btn--sm" onClick={() => onRespond(j.id, "completed")}>Mark complete</button>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Bottom nav ---------------- */
+function BottomNav({ active, onChange, requestCount }) {
+  const items = [
+    { id: "home", label: "Home", icon: Home },
+    { id: "browse", label: "Browse", icon: Compass },
+    { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
+    { id: "messages", label: "Messages", icon: MessageCircle },
+    { id: "profile", label: "Profile", icon: UserIcon },
+  ];
+  return (
+    <div className="bottomnav">
+      {items.map((it) => { const Icon2 = it.icon; const isActive = active === it.id; return (
+        <button key={it.id} className={"nav-item" + (isActive ? " nav-item--active" : "")} onClick={() => onChange(it.id)}>
+          <span className="nav-icon-wrap"><Icon2 size={19} strokeWidth={isActive ? 2.4 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
+          <span>{it.label}</span>
+        </button>
+      ); })}
+    </div>
+  );
+}
+
+/* ---------------- Styles ---------------- */
+function Style() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+      :root { --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1B16; --ink-soft:#6B6357; --line:#E1DACB; --primary:#1F3A34; --primary-light:#2E534B; --accent:#B5651D; --accent-bg:#F0DFC8; --success:#2E7D4F; --warn:#B4790F; --warn-bg:#F7EAC9; --danger:#A8402D; }
+      * { box-sizing:border-box; }
+      body { margin:0; }
+      .app { min-height:100vh; background:#EDE7D8; display:flex; justify-content:center; padding:24px 12px; font-family:'Inter',sans-serif; color:var(--ink); }
+      .phone { width:100%; max-width:420px; min-height:760px; background:var(--bg); border-radius:22px; box-shadow:0 1px 0 rgba(30,27,22,0.06),0 20px 40px -24px rgba(30,27,22,0.4); overflow:hidden; border:1px solid var(--line); display:flex; flex-direction:column; }
+      .content { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+      .screen { display:flex; flex-direction:column; flex:1; padding-bottom:8px; }
+      .screen--center { align-items:center; justify-content:center; text-align:center; padding:40px 28px; gap:6px; }
+      .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 16px 8px; }
+      .brand { display:flex; align-items:center; gap:7px; }
+      .brand-mark { width:24px; height:24px; border-radius:7px; background:var(--primary); color:var(--accent-bg); display:flex; align-items:center; justify-content:center; }
+      .brand-name { font-family:'Fraunces',serif; font-weight:700; font-size:16.5px; color:var(--primary); }
+      .topbar-icons { display:flex; align-items:center; gap:10px; }
+      .topbar-title { font-weight:600; font-size:15px; flex:1; text-align:center; }
+      .iconbtn { width:34px; height:34px; border-radius:9px; background:var(--surface); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink); }
+      .avatar { border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; font-family:'Fraunces',serif; flex-shrink:0; }
+      .avatar--sm { width:30px; height:30px; font-size:12px; background:var(--primary); }
+      .avatar--md { width:46px; height:46px; font-size:15px; }
+      .avatar--lg { width:72px; height:72px; font-size:22px; }
+      .searchbar { margin:8px 16px 0; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--ink-soft); }
+      .searchbar input { border:none; outline:none; background:transparent; font-size:14px; width:100%; color:var(--ink); font-family:inherit; }
+      .area-row { margin:10px 16px 0; display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:12.5px; width:fit-content; }
+      .area-row--pad { margin-top:12px; }
+      .area-row select { border:none; background:transparent; font-family:inherit; font-size:12.5px; color:var(--primary); font-weight:600; }
+      .chip-row { display:flex; gap:8px; overflow-x:auto; padding:12px 16px 0; }
+      .chip { flex-shrink:0; border:1px solid var(--line); background:var(--surface); border-radius:20px; padding:7px 13px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
+      .chip--active { background:var(--primary); border-color:var(--primary); color:#fff; }
+      .section { margin-top:20px; padding:0 16px; }
+      .section--flush { flex:1; }
+      .section-head { display:flex; align-items:center; justify-content:space-between; font-size:13.5px; font-weight:700; color:var(--ink); margin-bottom:10px; }
+      .see-all { display:flex; align-items:center; gap:2px; font-size:12px; font-weight:600; color:var(--accent); background:none; border:none; cursor:pointer; font-family:inherit; }
+      .status-row { display:flex; gap:14px; overflow-x:auto; padding-bottom:4px; }
+      .status-item { flex-shrink:0; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; font-family:inherit; width:58px; }
+      .status-ring { padding:2.5px; border-radius:50%; border:2px solid var(--success); }
+      .status-name { font-size:10.5px; color:var(--ink-soft); }
+      .trade-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+      .trade-tile { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:10.5px; font-weight:600; color:var(--ink); cursor:pointer; font-family:inherit; text-align:center; }
+      .trade-icon { color:var(--primary); }
+      .feed { display:flex; flex-direction:column; gap:8px; padding:0 16px; }
+      .feed--scroll { padding:12px 16px 90px; overflow-y:auto; flex:1; }
+      .acard { display:flex; gap:12px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; text-align:left; cursor:pointer; font-family:inherit; }
+      .acard-avatar-wrap { position:relative; }
+      .dot { position:absolute; bottom:1px; right:1px; width:11px; height:11px; border-radius:50%; border:2px solid var(--surface); }
+      .dot--online { background:var(--success); }
+      .dot--offline { background:#B9B2A2; }
+      .acard-main { flex:1; min-width:0; }
+      .acard-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+      .acard-name { font-weight:600; font-size:14px; }
+      .badge { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color:var(--success); background:#E4F0E7; padding:3px 7px; border-radius:20px; flex-shrink:0; }
+      .badge--lg { font-size:12px; padding:6px 12px; }
+      .acard-trade { font-size:12px; color:var(--ink-soft); margin-top:2px; }
+      .acard-meta { display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--ink-soft); margin-top:6px; }
+      .dot-sep { color:var(--line); }
+      .profile-hero { display:flex; flex-direction:column; align-items:center; text-align:center; padding:8px 20px 18px; border-bottom:1px solid var(--line); }
+      .profile-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin-top:10px; }
+      .profile-trade { font-size:13px; color:var(--ink-soft); margin-top:2px; }
+      .profile-status { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); margin-top:8px; }
+      .profile-status .dot { position:static; border:none; }
+      .profile-name-input { font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin-top:10px; border:none; background:transparent; text-align:center; color:var(--ink); width:100%; }
+      .profile-name-input:focus { outline:none; border-bottom:1px solid var(--line); }
+      .profile-area-input { font-size:13px; color:var(--ink-soft); margin-top:4px; border:none; background:transparent; text-align:center; font-family:inherit; }
+      .stat-row { display:flex; justify-content:space-around; padding:16px; border-bottom:1px solid var(--line); }
+      .stat { text-align:center; }
+      .stat-num { font-family:'Fraunces',serif; font-weight:600; font-size:18px; color:var(--primary); }
+      .stat-label { font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:3px; justify-content:center; margin-top:2px; }
+      .bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0; }
+      .work-row { display:flex; gap:8px; }
+      .work-tile { flex:1; height:76px; border-radius:10px; }
+      .form { padding:16px; display:flex; flex-direction:column; gap:16px; flex:1; }
+      .form label { font-size:13px; font-weight:600; color:var(--ink-soft); display:flex; flex-direction:column; gap:6px; }
+      .form textarea, .form select { border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px; font-family:inherit; color:var(--ink); resize:none; background:var(--surface); }
+      .info-note { font-size:12px; color:var(--ink-soft); background:var(--accent-bg); border-radius:10px; padding:10px 12px; line-height:1.5; }
+      .primary-btn { margin:8px 16px 10px; background:var(--primary); color:#fff; border:none; border-radius:12px; padding:14px; font-size:14.5px; font-weight:600; cursor:pointer; font-family:inherit; }
+      .primary-btn:disabled { opacity:0.4; cursor:not-allowed; }
+      .primary-btn--fixed { margin-top:auto; }
+      .ghost-btn--wide { margin:0 16px 16px; background:transparent; border:1px solid var(--line); color:var(--ink-soft); border-radius:12px; padding:13px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; }
+      .sent-icon { color:var(--success); margin-bottom:4px; }
+      .sent-title { font-family:'Fraunces',serif; font-weight:600; font-size:18px; }
+      .sent-sub { font-size:13px; color:var(--ink-soft); margin:8px 0 22px; line-height:1.5; }
+      .empty { padding:30px 20px; text-align:center; }
+      .empty-title { font-weight:600; margin-bottom:4px; font-size:14px; }
+      .empty-sub { font-size:12.5px; color:var(--ink-soft); }
+      .bottomnav { display:flex; border-top:1px solid var(--line); background:var(--surface); padding:8px 4px; }
+      .nav-item { flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0; color:var(--ink-soft); cursor:pointer; font-family:inherit; font-size:9.5px; font-weight:600; }
+      .nav-item--active { color:var(--primary); }
+      .nav-icon-wrap { position:relative; }
+      .nav-badge { position:absolute; top:-5px; right:-8px; background:var(--accent); color:#fff; font-size:9px; font-weight:700; border-radius:8px; padding:1px 5px; }
+      .nav-badge--static { position:static; margin-left:2px; }
+      .req-card { display:flex; gap:12px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; text-align:left; cursor:pointer; font-family:inherit; }
+      .req-main { flex:1; min-width:0; }
+      .req-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+      .req-name { font-weight:600; font-size:14px; }
+      .req-job { font-size:12.5px; color:var(--ink-soft); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .req-when { font-size:11px; color:var(--ink-soft); margin-top:4px; opacity:0.8; }
+      .status-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:20px; flex-shrink:0; }
+      .badge--pending { background:var(--warn-bg); color:var(--warn); }
+      .badge--accepted { background:#E4F0E7; color:var(--success); }
+      .badge--confirmed { background:#DCE9E4; color:var(--primary); }
+      .badge--completed { background:var(--accent-bg); color:var(--accent); }
+      .badge--closed { background:#E7E2D5; color:var(--ink-soft); }
+      .badge--declined { background:#F3E1DC; color:var(--danger); }
+      .msg-row { display:flex; gap:12px; padding:12px 4px; background:transparent; border:none; border-bottom:1px solid var(--line); text-align:left; cursor:pointer; font-family:inherit; }
+      .msg-main { flex:1; min-width:0; }
+      .msg-top { display:flex; align-items:center; justify-content:space-between; }
+      .msg-name { font-weight:600; font-size:14px; }
+      .msg-time { font-size:11px; color:var(--ink-soft); }
+      .msg-preview { font-size:12.5px; color:var(--ink-soft); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .convo-status { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); }
+      .convo-job { font-size:12px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .convo-messages { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+      .bubble-row { display:flex; }
+      .bubble-row--me { justify-content:flex-end; }
+      .bubble-row--them { justify-content:flex-start; }
+      .bubble-row--sys { justify-content:center; }
+      .bubble { max-width:78%; padding:10px 13px; border-radius:14px; font-size:13.5px; line-height:1.4; position:relative; }
+      .bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:4px; }
+      .bubble--them { background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
+      .bubble-time { display:block; font-size:9.5px; opacity:0.65; margin-top:4px; }
+      .bubble-sys { font-size:11px; color:var(--ink-soft); background:var(--accent-bg); padding:5px 12px; border-radius:20px; }
+      .review-recap { text-align:center; font-size:12px; color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:8px 12px; }
+      .convo-input { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line); background:var(--surface); }
+      .convo-input input { flex:1; border:1px solid var(--line); border-radius:20px; padding:10px 14px; font-size:13.5px; font-family:inherit; outline:none; }
+      .send-btn { width:38px; height:38px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+      .action-btn { margin:10px 16px 0; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:12px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+      .action-btn--sm { margin:10px 0 0; width:100%; padding:9px; font-size:12.5px; }
+      .report-link { margin:8px 16px 0; background:none; border:none; color:var(--danger); font-size:12px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer; font-family:inherit; align-self:center; }
+      .inline-confirm, .inline-panel { margin:10px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+      .inline-confirm-text { font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+      .star-row { display:flex; gap:4px; }
+      .star-btn { background:none; border:none; padding:0; cursor:pointer; }
+      .review-textarea { border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:13px; font-family:inherit; resize:none; width:100%; }
+      .quickadd-label { font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; }
+      .photo-picker { display:flex; gap:8px; flex-wrap:wrap; }
+      .photo-thumb { width:56px; height:56px; border-radius:10px; }
+      .photo-add { width:56px; height:56px; border-radius:10px; border:1px dashed var(--line); background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:9px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
+      .settle-actions { display:flex; gap:8px; }
+      .ghost-btn { background:transparent; border:1px solid var(--line); color:var(--ink-soft); border-radius:10px; padding:11px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; justify-content:center; }
+      .settle-btn { background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; flex:1; }
+      .settle-btn--danger { background:var(--danger); }
+      .settle-btn:disabled { opacity:0.4; cursor:not-allowed; }
+      .artisan-cta { display:flex; align-items:center; gap:8px; width:100%; background:var(--accent-bg); color:var(--accent); border:1px dashed var(--accent); border-radius:12px; padding:13px 14px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+      .form--card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; flex:none; }
+      .pending-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; }
+      .pending-card--approved { border-color:var(--success); background:#EAF4EC; }
+      .pending-title { font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px; color:var(--accent); }
+      .pending-sub { font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5; }
+      .pending-meta { font-size:11.5px; color:var(--ink-soft); margin-top:8px; opacity:0.85; }
+      .demo-btn { margin-top:12px; width:100%; background:var(--bg); border:1px dashed var(--line); color:var(--ink-soft); border-radius:10px; padding:9px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .demo-tag { font-size:9px; text-transform:uppercase; letter-spacing:0.04em; background:var(--accent-bg); color:var(--accent); padding:2px 6px; border-radius:8px; }
+      .avail-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; }
+      .toggle { width:42px; height:24px; border-radius:20px; background:#D7D0BE; border:none; position:relative; cursor:pointer; padding:2px; }
+      .toggle--on { background:var(--success); }
+      .toggle-knob { display:block; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform 0.15s; }
+      .toggle--on .toggle-knob { transform:translateX(18px); }
+      .jobs-btn { margin-top:12px; width:100%; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .verify-btn { margin-top:10px; width:100%; background:none; border:1px dashed var(--accent); color:var(--accent); border-radius:10px; padding:10px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .verified-note { margin-top:10px; text-align:center; font-size:12px; font-weight:700; color:var(--accent); display:flex; align-items:center; justify-content:center; gap:5px; }
+      .browse-link { margin-top:10px; width:100%; background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
+      .job-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px; margin-bottom:8px; }
+      .job-top { display:flex; align-items:center; justify-content:space-between; }
+      .job-student { font-weight:700; font-size:13.5px; }
+      .job-desc { font-size:13px; color:var(--ink); margin-top:6px; line-height:1.4; }
+      .job-when { font-size:11.5px; color:var(--ink-soft); margin-top:5px; }
+      .settings-list { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
+      .settings-row { display:flex; align-items:center; gap:10px; padding:14px 16px; font-size:13.5px; font-weight:500; border-bottom:1px solid var(--line); color:var(--ink); }
+      .settings-row:last-child { border-bottom:none; }
+      .settings-row--danger { color:var(--danger); }
+      .chev { margin-left:auto; color:var(--ink-soft); }
+
+      /* ===================== RESPONSIVE: TABLET & DESKTOP ===================== */
+      @media (min-width: 760px) {
+        .app { padding: 40px 24px; align-items: flex-start; }
+        .phone { max-width: 880px; min-height: 680px; border-radius: 20px; flex-direction: row; }
+        .content { order: 1; min-width: 0; }
+        .bottomnav {
+          order: 2; flex-direction: column; width: 220px; flex-shrink: 0;
+          border-top: none; border-left: 1px solid var(--line);
+          padding: 22px 12px; gap: 4px; justify-content: flex-start;
+        }
+        .nav-item { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 11px 12px; border-radius: 10px; font-size: 13px; }
+        .nav-item--active { background: var(--accent-bg); }
+        .screen { padding-left: 8px; padding-right: 8px; }
+        .topbar, .searchbar, .area-row, .area-row--pad, .chip-row, .section, .form, .feed--scroll, .convo-status, .convo-messages, .convo-input { max-width: 640px; margin-left: auto; margin-right: auto; width: 100%; }
+        .feed--scroll { display: block; column-count: 2; column-gap: 14px; padding-bottom: 24px; }
+        .feed--scroll > * { break-inside: avoid; margin-bottom: 10px; }
+        .trade-grid { grid-template-columns: repeat(4, 1fr); }
+      }
+      @media (min-width: 1180px) {
+        .app { padding: 48px 24px; }
+        .phone { max-width: 1140px; }
+        .bottomnav { width: 240px; }
+        .topbar, .searchbar, .area-row, .area-row--pad, .chip-row, .section, .form, .feed--scroll, .convo-status, .convo-messages, .convo-input { max-width: 860px; }
+        .feed--scroll { column-count: 3; }
+      }
+    `}</style>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
