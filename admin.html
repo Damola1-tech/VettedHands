@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VettedHands Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+/* ============ SVG ICON SYSTEM (replaces lucide-react) ============ */
+const ICON_PATHS = {
+  shieldCheck: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>,
+  checkCircle2: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
+  xCircle: <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>,
+  users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+  clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+  activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
+  star: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>,
+  mapPin: <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>,
+  image: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+  alertTriangle: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+  award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+  arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+};
+
+function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, className, ...rest }) {
+  const shape = ICON_PATHS[name];
+  if (!shape) return null;
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill={fill} stroke={color || stroke} strokeWidth={strokeWidth}
+      strokeLinecap="round" strokeLinejoin="round" className={className}
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} {...rest}>
+      {shape}
+    </svg>
+  );
+}
+
+/* Named wrappers so the rest of the app code below is unchanged from the original lucide-react imports */
+const ShieldCheck = (p) => <Icon name="shieldCheck" {...p} />;
+const CheckCircle2 = (p) => <Icon name="checkCircle2" {...p} />;
+const XCircle = (p) => <Icon name="xCircle" {...p} />;
+const Users = (p) => <Icon name="users" {...p} />;
+const Clock = (p) => <Icon name="clock" {...p} />;
+const Activity = (p) => <Icon name="activity" {...p} />;
+const Star = (p) => <Icon name="star" {...p} />;
+const MapPin = (p) => <Icon name="mapPin" {...p} />;
+const ImageIcon = (p) => <Icon name="image" {...p} />;
+const AlertTriangle = (p) => <Icon name="alertTriangle" {...p} />;
+const Award = (p) => <Icon name="award" {...p} />;
+const ArrowLeft = (p) => <Icon name="arrowLeft" {...p} />;
+
+/* ============ ORIGINAL APP CODE (unchanged below) ============ */
+
+const initialPending = [
+  { id: "p1", name: "Yusuf Adebayo", trade: "Electrician", area: "Odo-Ado", bio: "6 years doing residential wiring, generator installs and repairs around town. Reference from two lodge landlords.", photos: 3, submittedAgo: "2 hours ago" },
+  { id: "p2", name: "Grace Okon", trade: "Tailor", area: "Fanuyi", bio: "Fashion school graduate, specializes in native wear and quick alterations for students.", photos: 4, submittedAgo: "yesterday" },
+  { id: "p3", name: "Femi Adaramola", trade: "Phone Repair", area: "Main Gate", bio: "Runs a small repair kiosk near main gate, does screen and battery replacements.", photos: 2, submittedAgo: "2 days ago" },
+];
+
+const initialActive = [
+  { id: "a1", name: "Tunde Bakare", trade: "Electrician", area: "Fanuyi", rating: 4.9, jobs: 34, badge: "Top Rated", flagged: false },
+  { id: "a2", name: "Blessing Uche", trade: "Tailor", area: "Main Gate", rating: 5.0, jobs: 51, badge: "Top Rated", flagged: false },
+  { id: "a3", name: "Emeka Obi", trade: "Plumber", area: "Odo-Ado", rating: 4.7, jobs: 21, badge: "Vetted", flagged: false },
+  { id: "a4", name: "Kabiru Sani", trade: "Phone Repair", area: "Fanuyi", rating: 4.8, jobs: 67, badge: "Top Rated", flagged: false },
+  { id: "a5", name: "Chidinma Eze", trade: "Tailor", area: "Ureju", rating: 4.6, jobs: 18, badge: "Vetted", flagged: true },
+];
+
+const activityFeed = [
+  { id: "f1", text: "Bisola A. requested Tunde Bakare (Electrician)", time: "10 min ago" },
+  { id: "f2", text: "Wale O. requested Tunde Bakare (Electrician)", time: "35 min ago" },
+  { id: "f3", text: "Chidinma Eze marked a job complete for Nkechi P.", time: "1 hr ago" },
+  { id: "f4", text: "Kabiru Sani accepted a request from Deji A.", time: "2 hrs ago" },
+  { id: "f5", text: "A student reported Chidinma Eze — poor quality of work", time: "3 hrs ago" },
+];
+
+function initials(name) { return name.split(" ").map((p) => p[0]).slice(0, 2).join(""); }
+
+function App() {
+  const [tab, setTab] = useState("pending");
+  const [pending, setPending] = useState(initialPending);
+  const [active, setActive] = useState(initialActive);
+  const [selectedApp, setSelectedApp] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2200); }
+
+  function approve(app) {
+    setPending((p) => p.filter((x) => x.id !== app.id));
+    setActive((a) => [{ id: app.id, name: app.name, trade: app.trade, area: app.area, rating: 0, jobs: 0, badge: "Vetted", flagged: false }, ...a]);
+    setSelectedApp(null);
+    flash(`${app.name} approved and now live`);
+  }
+  function reject(app) {
+    setPending((p) => p.filter((x) => x.id !== app.id));
+    setSelectedApp(null);
+    flash(`${app.name}'s application rejected`);
+  }
+  function setBadge(id, badge) {
+    setActive((a) => a.map((x) => x.id === id ? { ...x, badge } : x));
+    flash("Badge updated");
+  }
+  function delist(id) {
+    const target = active.find((x) => x.id === id);
+    setActive((a) => a.filter((x) => x.id !== id));
+    flash(`${target.name} delisted`);
+  }
+
+  const flaggedCount = active.filter((a) => a.flagged).length;
+
+  return (
+    <div className="app">
+      <Style />
+      <div className="phone">
+        <div className="content">
+          <div className="topbar">
+            <div className="brand"><span className="brand-mark"><ShieldCheck size={16} /></span><span className="brand-name">VettedHands</span><span className="brand-sub">Admin</span></div>
+          </div>
+
+          <div className="stats-grid">
+            <div className="stat-box"><div className="stat-num">{pending.length}</div><div className="stat-label">Pending</div></div>
+            <div className="stat-box"><div className="stat-num">{active.length}</div><div className="stat-label">Active</div></div>
+            <div className="stat-box"><div className="stat-num">{activityFeed.length}</div><div className="stat-label">Events</div></div>
+            <div className="stat-box stat-box--warn"><div className="stat-num">{flaggedCount}</div><div className="stat-label">Flagged</div></div>
+          </div>
+
+          <div className="tabs">
+            <button className={"tab" + (tab === "pending" ? " tab--active" : "")} onClick={() => setTab("pending")}>Pending {pending.length > 0 && <span className="tab-count">{pending.length}</span>}</button>
+            <button className={"tab" + (tab === "active" ? " tab--active" : "")} onClick={() => setTab("active")}>Active</button>
+            <button className={"tab" + (tab === "activity" ? " tab--active" : "")} onClick={() => setTab("activity")}>Activity</button>
+          </div>
+
+          {tab === "pending" && (
+            <div className="feed feed--scroll">
+              {pending.length === 0 && <div className="empty"><div className="empty-title">Nothing waiting</div><div className="empty-sub">All applications have been reviewed.</div></div>}
+              {pending.map((app) => (
+                <button key={app.id} className="app-card" onClick={() => setSelectedApp(app)}>
+                  <div className="app-top">
+                    <div className="avatar">{initials(app.name)}</div>
+                    <div className="app-top-text">
+                      <div className="app-name">{app.name}</div>
+                      <div className="app-trade"><MapPin size={11} /> {app.trade} · {app.area}</div>
+                    </div>
+                  </div>
+                  <div className="app-bio">{app.bio}</div>
+                  <div className="app-meta"><ImageIcon size={12} /> {app.photos} photos · {app.submittedAgo}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tab === "active" && (
+            <div className="feed feed--scroll">
+              {active.map((a) => (
+                <div key={a.id} className={"artisan-row" + (a.flagged ? " artisan-row--flagged" : "")}>
+                  <div className="app-top">
+                    <div className="avatar">{initials(a.name)}</div>
+                    <div className="app-top-text">
+                      <div className="app-name">{a.name} {a.flagged && <AlertTriangle size={12} className="flag-icon" />}</div>
+                      <div className="app-trade"><MapPin size={11} /> {a.trade} · {a.area}</div>
+                    </div>
+                  </div>
+                  <div className="artisan-meta">
+                    <span><Star size={12} fill="#B5651D" stroke="none" /> {a.rating.toFixed(1)}</span>
+                    <span className="dot-sep">·</span>
+                    <span>{a.jobs} jobs</span>
+                  </div>
+                  <div className="artisan-actions">
+                    <select value={a.badge} onChange={(e) => setBadge(a.id, e.target.value)} className="badge-select">
+                      <option>Vetted</option>
+                      <option>Top Rated</option>
+                    </select>
+                    <button className="delist-btn" onClick={() => delist(a.id)}>Delist</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === "activity" && (
+            <div className="feed feed--scroll">
+              {activityFeed.map((f) => (
+                <div key={f.id} className="activity-wrap">
+                  <div className="activity-row"><Activity size={13} /><span>{f.text}</span></div>
+                  <span className="activity-time">{f.time}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {selectedApp && (
+          <div className="modal-backdrop" onClick={() => setSelectedApp(null)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-back" onClick={() => setSelectedApp(null)}><ArrowLeft size={16} /> Back</button>
+              <div className="modal-top">
+                <div className="avatar avatar--lg">{initials(selectedApp.name)}</div>
+                <div>
+                  <div className="modal-name">{selectedApp.name}</div>
+                  <div className="app-trade"><MapPin size={12} /> {selectedApp.trade} · {selectedApp.area}</div>
+                </div>
+              </div>
+              <p className="modal-bio">{selectedApp.bio}</p>
+              <div className="modal-photos">{Array.from({ length: selectedApp.photos }).map((_, i) => <div key={i} className="modal-photo" />)}</div>
+              <div className="modal-note"><AlertTriangle size={13} /> Vetting checklist (manual, off-app for now): confirm identity, call a listed reference, review sample work in person before approving.</div>
+              <div className="modal-actions">
+                <button className="reject-btn" onClick={() => reject(selectedApp)}><XCircle size={15} /> Reject</button>
+                <button className="approve-btn" onClick={() => approve(selectedApp)}><CheckCircle2 size={15} /> Approve &amp; list</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {toast && <div className="toast">{toast}</div>}
+      </div>
+    </div>
+  );
+}
+
+function Style() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+      :root { --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1B16; --ink-soft:#6B6357; --line:#E1DACB; --primary:#1F3A34; --accent:#B5651D; --accent-bg:#F0DFC8; --success:#2E7D4F; --danger:#A8402D; }
+      * { box-sizing:border-box; }
+      body { margin:0; }
+      .app { min-height:100vh; background:#EDE7D8; display:flex; justify-content:center; padding:24px 12px; font-family:'Inter',sans-serif; color:var(--ink); }
+      .phone { width:100%; max-width:420px; min-height:760px; background:var(--bg); border-radius:22px; box-shadow:0 1px 0 rgba(30,27,22,0.06),0 20px 40px -24px rgba(30,27,22,0.4); overflow:hidden; border:1px solid var(--line); display:flex; flex-direction:column; position:relative; }
+      .content { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+
+      .topbar { padding:18px 16px 4px; }
+      .brand { display:flex; align-items:center; gap:7px; }
+      .brand-mark { width:24px; height:24px; border-radius:7px; background:var(--primary); color:var(--accent-bg); display:flex; align-items:center; justify-content:center; }
+      .brand-name { font-family:'Fraunces',serif; font-weight:700; font-size:16.5px; color:var(--primary); }
+      .brand-sub { font-size:11px; font-weight:600; color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); padding:2px 8px; border-radius:8px; margin-left:2px; }
+
+      .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:14px 16px 0; }
+      .stat-box { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px 6px; text-align:center; }
+      .stat-box--warn { border-color:#E7C9BE; }
+      .stat-num { font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--primary); }
+      .stat-label { font-size:9.5px; color:var(--ink-soft); margin-top:1px; }
+
+      .tabs { display:flex; gap:6px; margin:14px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:4px; }
+      .tab { flex:1; border:none; background:transparent; padding:9px 4px; border-radius:8px; font-weight:700; font-size:12px; color:var(--ink-soft); cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:5px; }
+      .tab--active { background:var(--primary); color:#fff; }
+      .tab-count { background:var(--accent); color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:8px; }
+
+      .feed--scroll { padding:14px 16px 24px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:10px; }
+      .empty { padding:40px 20px; text-align:center; }
+      .empty-title { font-weight:700; font-size:14px; margin-bottom:4px; }
+      .empty-sub { font-size:12.5px; color:var(--ink-soft); }
+
+      .app-card { text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; cursor:pointer; font-family:inherit; }
+      .app-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+      .app-top-text { flex:1; min-width:0; }
+      .avatar { width:38px; height:38px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; font-family:'Fraunces',serif; flex-shrink:0; }
+      .avatar--lg { width:54px; height:54px; font-size:18px; }
+      .app-name { font-weight:700; font-size:14px; display:flex; align-items:center; gap:5px; }
+      .app-trade { font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; margin-top:2px; }
+      .app-bio { font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin-bottom:8px; }
+      .app-meta { font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; opacity:0.8; }
+
+      .artisan-row { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; }
+      .artisan-row--flagged { border-color:#E7C9BE; background:#FBF3EF; }
+      .flag-icon { color:var(--danger); }
+      .artisan-meta { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); margin-top:4px; margin-left:48px; }
+      .dot-sep { color:var(--line); }
+      .artisan-actions { display:flex; gap:8px; margin-top:10px; }
+      .badge-select { flex:1; border:1px solid var(--line); border-radius:8px; padding:8px; font-size:12.5px; font-family:inherit; background:var(--bg); }
+      .delist-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+
+      .activity-wrap { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:11px 4px; border-bottom:1px solid var(--line); }
+      .activity-row { display:flex; align-items:flex-start; gap:9px; font-size:13px; color:var(--ink); flex:1; }
+      .activity-row svg { color:var(--accent); flex-shrink:0; margin-top:2px; }
+      .activity-time { font-size:11px; color:var(--ink-soft); flex-shrink:0; white-space:nowrap; }
+
+      .modal-backdrop { position:absolute; inset:0; background:rgba(30,27,22,0.45); display:flex; align-items:flex-end; z-index:20; }
+      .modal { background:var(--surface); border-radius:20px 20px 0 0; padding:20px; width:100%; max-height:85%; overflow-y:auto; }
+      .modal-back { background:none; border:none; display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; padding:0; margin-bottom:12px; }
+      .modal-top { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+      .modal-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
+      .modal-bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 14px; }
+      .modal-photos { display:flex; gap:8px; margin-bottom:14px; }
+      .modal-photo { width:60px; height:60px; border-radius:10px; background:var(--accent-bg); }
+      .modal-note { font-size:11.5px; color:var(--ink-soft); background:var(--bg); border-radius:10px; padding:10px 12px; display:flex; gap:7px; line-height:1.5; margin-bottom:16px; }
+      .modal-actions { display:flex; gap:10px; }
+      .reject-btn, .approve-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; padding:12px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; border:none; }
+      .reject-btn { background:#F3E1DC; color:var(--danger); }
+      .approve-btn { background:var(--primary); color:#fff; }
+
+      .toast { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
+
+      /* ===================== RESPONSIVE: TABLET & DESKTOP ===================== */
+      @media (min-width: 760px) {
+        .app { padding: 40px 24px; align-items: flex-start; }
+        .phone { max-width: 900px; min-height: 680px; border-radius: 20px; }
+        .topbar, .stats-grid, .tabs, .feed--scroll { max-width: 760px; margin-left: auto; margin-right: auto; width: 100%; }
+        .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        .tabs { max-width: 380px; }
+        .feed--scroll { display: block; column-count: 2; column-gap: 14px; padding-bottom: 24px; }
+        .feed--scroll > * { break-inside: avoid; margin-bottom: 10px; }
+        .modal-backdrop { align-items: center; justify-content: center; }
+        .modal { border-radius: 20px; max-width: 480px; max-height: 80vh; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.35); }
+      }
+      @media (min-width: 1180px) {
+        .app { padding: 48px 24px; }
+        .phone { max-width: 1100px; }
+        .topbar, .stats-grid, .tabs, .feed--scroll { max-width: 980px; }
+        .feed--scroll { column-count: 3; }
+      }
+    `}</style>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
