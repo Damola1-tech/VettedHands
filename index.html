@@ -14,7 +14,28 @@
 <script type="text/babel" data-presets="react">
 const { useState, useMemo, useRef, useEffect } = React;
 
-/* ============ SVG ICON SYSTEM (replaces lucide-react) ============ */
+/* ============ CONFIG ============ */
+const API_BASE = "https://vettedhands-backend.onrender.com";
+
+/* ============ API HELPER ============ */
+// Talks to the real backend. Throws an Error with a readable message on failure.
+async function api(path, { method = "GET", body, token } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* no body */ }
+  if (!res.ok) {
+    throw new Error((data && data.error) || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+/* ============ SVG ICON SYSTEM ============ */
 const ICON_PATHS = {
   search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
@@ -37,15 +58,10 @@ const ICON_PATHS = {
   user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
   logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
   shieldCheck: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>,
-  helpCircle: <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
   hammer: <><path d="M15 12l-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9"/><path d="M17.64 15L22 10.64"/><path d="M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.44 2.44"/></>,
-  camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
   x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
   award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
-  pencil: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
-  trash2: <><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
 };
-
 function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, ...rest }) {
   const shape = ICON_PATHS[name];
   if (!shape) return null;
@@ -58,8 +74,6 @@ function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke =
     </svg>
   );
 }
-
-/* Named wrappers so the rest of the app code below is unchanged from the original lucide-react imports */
 const Search = (p) => <Icon name="search" {...p} />;
 const Bell = (p) => <Icon name="bell" {...p} />;
 const MapPin = (p) => <Icon name="mapPin" {...p} />;
@@ -81,242 +95,347 @@ const MessageCircle = (p) => <Icon name="messageCircle" {...p} />;
 const UserIcon = (p) => <Icon name="user" {...p} />;
 const LogOut = (p) => <Icon name="logOut" {...p} />;
 const ShieldCheck = (p) => <Icon name="shieldCheck" {...p} />;
-const HelpCircle = (p) => <Icon name="helpCircle" {...p} />;
 const Hammer = (p) => <Icon name="hammer" {...p} />;
-const Camera = (p) => <Icon name="camera" {...p} />;
 const X = (p) => <Icon name="x" {...p} />;
 const Award = (p) => <Icon name="award" {...p} />;
-const Pencil = (p) => <Icon name="pencil" {...p} />;
-const Trash2 = (p) => <Icon name="trash2" {...p} />;
-
-/* ============ ORIGINAL APP CODE (unchanged below) ============ */
 
 const trades = [
-  { id: "electrician", label: "Electrician", icon: Zap },
-  { id: "plumber", label: "Plumber", icon: Droplet },
-  { id: "tailor", label: "Tailor", icon: Scissors },
-  { id: "phone-repair", label: "Phone Repair", icon: Smartphone },
+  { id: "ELECTRICIAN", label: "Electrician", icon: Zap },
+  { id: "PLUMBER", label: "Plumber", icon: Droplet },
+  { id: "TAILOR", label: "Tailor", icon: Scissors },
+  { id: "PHONE_REPAIR", label: "Phone Repair", icon: Smartphone },
 ];
 const areas = ["All areas", "Main Gate", "Fanuyi", "Odo-Ado", "Ureju"];
-
-const artisans = [
-  { id: "a1", name: "Tunde Bakare", trade: "electrician", tradeLabel: "Electrician", area: "Fanuyi", online: true, rating: 4.9, jobs: 34, responseTime: "~12 min", bio: "Wiring, sockets, fan and inverter installs. 5 years fixing lodges around campus.", initials: "TB", color: "#1F3A34" },
-  { id: "a2", name: "Blessing Uche", trade: "tailor", tradeLabel: "Tailor", area: "Main Gate", online: true, rating: 5.0, jobs: 51, responseTime: "~30 min", bio: "Asoebi, corper wear, alterations. Keeps your measurements on file so you never repeat yourself.", initials: "BU", color: "#B5651D" },
-  { id: "a3", name: "Emeka Obi", trade: "plumber", tradeLabel: "Plumber", area: "Odo-Ado", online: false, rating: 4.7, jobs: 21, responseTime: "~1 hr", bio: "Leaking pipes, blocked drains, tank installs. Comes with his own tools, no delays.", initials: "EO", color: "#2E534B" },
-  { id: "a4", name: "Kabiru Sani", trade: "phone-repair", tradeLabel: "Phone Repair", area: "Fanuyi", online: true, rating: 4.8, jobs: 67, responseTime: "~10 min", bio: "Screen, battery, charging port. Fixes while you wait if it's a quick job.", initials: "KS", color: "#1F3A34" },
-  { id: "a5", name: "Chidinma Eze", trade: "tailor", tradeLabel: "Tailor", area: "Ureju", online: false, rating: 4.6, jobs: 18, responseTime: "~2 hrs", bio: "Native wears and quick fixes. Affordable rates for students.", initials: "CE", color: "#B5651D" },
-  { id: "a6", name: "Ibrahim Musa", trade: "electrician", tradeLabel: "Electrician", area: "Main Gate", online: true, rating: 4.9, jobs: 40, responseTime: "~15 min", bio: "Generator servicing and rewiring. Vetted after three checked jobs on campus.", initials: "IM", color: "#2E534B" },
-];
-
-const artisanReplies = ["Sure, I can be there. Let's get it sorted!", "Noted — I'll head over shortly.", "Okay, on it. Will update you once I'm close.", "Got it, thanks for the details."];
 const reportReasons = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
 
-function fmtStars(n) { return n.toFixed(1); }
-function timeNow() { return new Date().toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" }); }
-function findArtisan(id) { return artisans.find((a) => a.id === id); }
-function sysMsg(text) { return { id: "m" + Date.now() + Math.random(), from: "system", text, time: timeNow() }; }
+function initials(name = "") { return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(); }
+function colorFor(id = "") { const palette = ["#1F3A34", "#B5651D", "#2E534B"]; let h = 0; for (const c of id) h += c.charCodeAt(0); return palette[h % palette.length]; }
+function tradeLabel(t) { const found = trades.find((x) => x.id === t); return found ? found.label : t; }
+function fmtStars(n) { return Number(n || 0).toFixed(1); }
 
-function App() {
-  const [view, setView] = useState("home");
-  const [navTab, setNavTab] = useState("home");
-  const [selectedId, setSelectedId] = useState(null);
-  const [area, setArea] = useState("All areas");
-  const [query, setQuery] = useState("");
-  const [tradeFilter, setTradeFilter] = useState(null);
-  const [activeRequestId, setActiveRequestId] = useState(null);
+/* ============ AUTH ============ */
+function useAuth() {
+  const [token, setToken] = useState(() => localStorage.getItem("vh_token") || null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(!!token);
+  const [error, setError] = useState(null);
 
-  const [profile, setProfile] = useState({ name: "Damola", area: "Main Gate" });
-  const [artisanApp, setArtisanApp] = useState(null); // {trade,bio,photos,status,online,verified}
-  const [incomingJobs, setIncomingJobs] = useState([
-    { id: "ij1", studentName: "Bisola A.", job: "Bathroom light not working, need it fixed today", when: "Today", status: "new" },
-    { id: "ij2", studentName: "Wale O.", job: "Extension socket sparking near my desk", when: "Tomorrow", status: "new" },
-  ]);
+  useEffect(() => {
+    if (!token) { setLoading(false); return; }
+    api("/api/auth/me", { token })
+      .then((d) => setUser(d.user))
+      .catch(() => { localStorage.removeItem("vh_token"); setToken(null); })
+      .finally(() => setLoading(false));
+  }, [token]);
 
-  const [requests, setRequests] = useState([]); // {id, artisanId, job, when, status, jobGroupId, createdAt, messages, rating, reviewText}
-  const [reports, setReports] = useState([]);
-  const timers = useRef([]);
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
-
-  const selected = findArtisan(selectedId);
-  const activeRequest = requests.find((r) => r.id === activeRequestId);
-
-  const filtered = useMemo(() => {
-    let list = artisans;
-    if (area !== "All areas") list = list.filter((a) => a.area === area);
-    if (tradeFilter) list = list.filter((a) => a.trade === tradeFilter);
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
-      list = list.filter((a) => a.name.toLowerCase().includes(q) || a.tradeLabel.toLowerCase().includes(q));
-    }
-    return [...list].sort((a, b) => (b.online === a.online ? b.rating - a.rating : b.online - a.online));
-  }, [area, tradeFilter, query]);
-
-  const onlineNow = artisans.filter((a) => a.online);
-
-  // open job groups a student can attach a new inquiry to (still comparing)
-  const openJobGroups = useMemo(() => {
-    const map = new Map();
-    requests.forEach((r) => {
-      if (["pending", "accepted"].includes(r.status) && !map.has(r.jobGroupId)) {
-        map.set(r.jobGroupId, { jobGroupId: r.jobGroupId, job: r.job, when: r.when });
-      }
-    });
-    return [...map.values()];
-  }, [requests]);
-
-  function openArtisanProfile(id) { setSelectedId(id); setView("artisanProfile"); }
-
-  function goNav(tab) {
-    setNavTab(tab);
-    if (tab === "home") setView("home");
-    else if (tab === "browse") { setTradeFilter(null); setView("browse"); }
-    else if (tab === "requests") setView("requestsList");
-    else if (tab === "messages") setView("messagesList");
-    else setView("userProfile");
+  async function login(email, password) {
+    setError(null);
+    const d = await api("/api/auth/login", { method: "POST", body: { email, password } });
+    localStorage.setItem("vh_token", d.token);
+    setToken(d.token);
+    setUser(d.user);
   }
-
-  function sendRequest(artisanId, job, when, jobGroupId) {
-    const id = "r" + Date.now();
-    const gId = jobGroupId || "g" + Date.now();
-    const newReq = { id, artisanId, job, when, status: "pending", jobGroupId: gId, createdAt: timeNow(),
-      messages: [{ id: "m" + Date.now(), from: "me", text: job, time: timeNow() }] };
-    setRequests((prev) => [newReq, ...prev]);
-    setActiveRequestId(id);
-
-    const t = setTimeout(() => {
-      setRequests((prev) => prev.map((r) => r.id !== id ? r : {
-        ...r, status: "accepted",
-        messages: [...r.messages, sysMsg(`${findArtisan(artisanId).name.split(" ")[0]} accepted your request.`),
-          { id: "m" + Date.now() + 2, from: "artisan", text: artisanReplies[Math.floor(Math.random() * artisanReplies.length)], time: timeNow() }],
-      }));
-    }, 2600);
-    timers.current.push(t);
-    setView("requestSent");
+  async function register(name, email, password, area) {
+    setError(null);
+    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area } });
+    localStorage.setItem("vh_token", d.token);
+    setToken(d.token);
+    setUser(d.user);
   }
-
-  function sendMessage(requestId, text) {
-    setRequests((prev) => prev.map((r) => r.id !== requestId ? r : { ...r, messages: [...r.messages, { id: "m" + Date.now(), from: "me", text, time: timeNow() }] }));
-    const t = setTimeout(() => {
-      setRequests((prev) => prev.map((r) => r.id !== requestId ? r : { ...r, messages: [...r.messages, { id: "m" + Date.now() + 1, from: "artisan", text: artisanReplies[Math.floor(Math.random() * artisanReplies.length)], time: timeNow() }] }));
-    }, 1300);
-    timers.current.push(t);
+  function logout() {
+    localStorage.removeItem("vh_token");
+    setToken(null);
+    setUser(null);
   }
+  return { token, user, setUser, loading, error, login, register, logout };
+}
 
-  function confirmRequest(requestId) {
-    setRequests((prev) => {
-      const target = prev.find((r) => r.id === requestId);
-      const gId = target.jobGroupId;
-      return prev.map((r) => {
-        if (r.id === requestId) return { ...r, status: "confirmed", messages: [...r.messages, sysMsg("Booking confirmed.")] };
-        if (r.jobGroupId === gId && r.id !== requestId && !["completed", "declined", "closed"].includes(r.status)) {
-          return { ...r, status: "closed", messages: [...r.messages, sysMsg("The student confirmed with another artisan for this job.")] };
-        }
-        return r;
-      });
-    });
+function AuthScreen({ onLogin, onRegister }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [area, setArea] = useState(areas[1]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr(null); setBusy(true);
+    try {
+      if (mode === "login") await onLogin(email.trim(), password);
+      else await onRegister(name.trim(), email.trim(), password, area);
+    } catch (ex) {
+      setErr(ex.message);
+    } finally { setBusy(false); }
   }
-
-  function completeRequest(requestId, rating, reviewText, hasPhotos) {
-    setRequests((prev) => prev.map((r) => r.id !== requestId ? r : {
-      ...r, status: "completed", rating, reviewText, hasPhotos,
-      messages: [...r.messages, sysMsg(`Job marked complete · rated ${rating}★`)],
-    }));
-  }
-
-  function reportRequest(requestId, reason, note) {
-    const r = requests.find((x) => x.id === requestId);
-    setReports((prev) => [...prev, { id: "rep" + Date.now(), requestId, artisanId: r.artisanId, reason, note, time: timeNow() }]);
-    setRequests((prev) => prev.map((x) => x.id !== requestId ? x : { ...x, messages: [...x.messages, sysMsg(`Reported to VettedHands: ${reason}. Our team will review.`)] }));
-  }
-
-  function openConversation(requestId) { setActiveRequestId(requestId); setView("conversation"); }
 
   return (
-    <div className="app">
+    <div className="screen screen--center">
       <Style />
-      <div className="phone">
-        <div className="content">
-          {view === "home" && (
-            <HomeView area={area} setArea={setArea} query={query} setQuery={setQuery}
-              onlineNow={onlineNow} filtered={filtered} onOpenProfile={openArtisanProfile}
-              onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
-              onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }} />
-          )}
-          {view === "browse" && (
-            <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
-              area={area} setArea={setArea} filtered={filtered}
-              onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
-          )}
-          {view === "artisanProfile" && selected && (
-            <ArtisanProfileView artisan={selected} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
-          )}
-          {view === "request" && selected && (
-            <RequestView artisan={selected} openJobGroups={openJobGroups} onBack={() => setView("artisanProfile")}
-              onSend={(job, when, gId) => sendRequest(selected.id, job, when, gId)} />
-          )}
-          {view === "requestSent" && activeRequest && (
-            <RequestSentView artisan={findArtisan(activeRequest.artisanId)} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => setView("conversation")} />
-          )}
-          {view === "requestsList" && <RequestsListView requests={requests} onOpen={openConversation} />}
-          {view === "messagesList" && <MessagesListView requests={requests} onOpen={openConversation} />}
-          {view === "conversation" && activeRequest && (
-            <ConversationView request={activeRequest} artisan={findArtisan(activeRequest.artisanId)}
-              onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
-              onSend={(text) => sendMessage(activeRequest.id, text)}
-              onConfirm={() => confirmRequest(activeRequest.id)}
-              onComplete={(rating, review, photos) => completeRequest(activeRequest.id, rating, review, photos)}
-              onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)} />
-          )}
-          {view === "userProfile" && (
-            <UserProfileView profile={profile} setProfile={setProfile} requests={requests}
-              artisanApp={artisanApp} setArtisanApp={setArtisanApp} incomingJobs={incomingJobs}
-              onViewJobs={() => setView("artisanJobs")} onBrowse={() => goNav("browse")} />
-          )}
-          {view === "artisanJobs" && (
-            <ArtisanJobsView jobs={incomingJobs}
-              onRespond={(id, status) => setIncomingJobs((prev) => prev.map((j) => j.id === id ? { ...j, status } : j))}
-              onBack={() => setView("userProfile")} />
-          )}
-        </div>
-        <BottomNav active={navTab} onChange={goNav} requestCount={requests.filter((r) => r.status === "pending" || r.status === "accepted").length} />
+      <div className="brand-mark" style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 14 }}><CheckCircle2 size={22} /></div>
+      <div className="sent-title">{mode === "login" ? "Log in to VettedHands" : "Create your account"}</div>
+      <form className="form" style={{ width: "100%", maxWidth: 320 }} onSubmit={submit}>
+        {mode === "register" && (
+          <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} className="text-input" placeholder="Your name" /></label>
+        )}
+        <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="text-input" placeholder="you@example.com" /></label>
+        <label>Password<input required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="text-input" placeholder="At least 6 characters" /></label>
+        {mode === "register" && (
+          <label>Area<select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
+        )}
+        {err && <div className="info-note" style={{ background: "#F3E1DC", color: "#A8402D" }}>{err}</div>}
+        <button className="primary-btn" style={{ margin: 0 }} disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}</button>
+      </form>
+      <button className="browse-link" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+        {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
+      </button>
+      <div className="form-note" style={{ marginTop: 14, fontSize: 11, color: "var(--ink-soft)", textAlign: "center" }}>
+        New accounts start as students. To offer services, log in and apply as an artisan from your Profile tab.
       </div>
     </div>
   );
 }
 
+/* ============ APP ============ */
+function App() {
+  const auth = useAuth();
+
+  if (auth.loading) return <div className="app"><Style /><div className="phone"><div className="screen screen--center">Loading…</div></div></div>;
+  if (!auth.token || !auth.user) return <div className="app"><AuthScreen onLogin={auth.login} onRegister={auth.register} /></div>;
+
+  return (
+    <div className="app">
+      <Style />
+      <div className="phone">
+        <MainApp auth={auth} />
+      </div>
+    </div>
+  );
+}
+
+function MainApp({ auth }) {
+  const { user, token, logout, setUser } = auth;
+  const isArtisan = user.role === "ARTISAN";
+  const isAdmin = user.role === "ADMIN";
+
+  const [view, setView] = useState("home");
+  const [navTab, setNavTab] = useState("home");
+  const [selectedArtisan, setSelectedArtisan] = useState(null);
+  const [area, setArea] = useState("All areas");
+  const [query, setQuery] = useState("");
+  const [tradeFilter, setTradeFilter] = useState(null);
+  const [activeRequestId, setActiveRequestId] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const [artisans, setArtisans] = useState([]);
+  const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
+  const [openGroups, setOpenGroups] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [application, setApplication] = useState(null);
+
+  function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
+  function fail(err) { flash(err.message || "Something went wrong"); }
+
+  async function loadArtisans() {
+    try {
+      const qs = new URLSearchParams();
+      if (tradeFilter) qs.set("trade", tradeFilter);
+      if (area !== "All areas") qs.set("area", area);
+      if (query.trim()) qs.set("q", query.trim());
+      const d = await api(`/api/artisans?${qs.toString()}`);
+      setArtisans(d.artisans);
+    } catch (e) { fail(e); }
+  }
+  async function loadRequests() {
+    try {
+      const d = isArtisan ? await api("/api/requests/incoming", { token }) : await api("/api/requests/mine", { token });
+      setRequests(d.requests);
+    } catch (e) { fail(e); }
+  }
+  async function loadOpenGroups() {
+    if (isArtisan) return;
+    try { const d = await api("/api/requests/open-groups", { token }); setOpenGroups(d.groups); } catch (e) { /* ignore */ }
+  }
+  async function loadApplication() {
+    if (isArtisan || isAdmin) return;
+    try { const d = await api("/api/applications/me", { token }); setApplication(d.application); }
+    catch (e) { setApplication(null); }
+  }
+
+  useEffect(() => { loadArtisans(); }, [tradeFilter, area, query]);
+  useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); }, []);
+
+  const onlineNow = artisans.filter((a) => a.online);
+  const activeRequest = requests.find((r) => r.id === activeRequestId);
+
+  function openArtisanProfile(a) { setSelectedArtisan(a); setView("artisanProfile"); }
+  function goNav(tab) {
+    setNavTab(tab);
+    if (tab === "home") setView("home");
+    else if (tab === "browse") { setTradeFilter(null); setView("browse"); }
+    else if (tab === "requests") { loadRequests(); setView("requestsList"); }
+    else if (tab === "messages") { loadRequests(); setView("messagesList"); }
+    else setView("userProfile");
+  }
+
+  async function sendRequest(artisanProfileId, job, when, jobGroupId) {
+    try {
+      const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined } });
+      setRequests((prev) => [d.request, ...prev]);
+      setActiveRequestId(d.request.id);
+      setView("requestSent");
+    } catch (e) { fail(e); }
+  }
+  async function openConversation(requestId) {
+    setActiveRequestId(requestId);
+    setView("conversation");
+    try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); } catch (e) { fail(e); }
+  }
+  async function sendMessage(requestId, text) {
+    try {
+      const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
+      setMessages((prev) => [...prev, d.message]);
+    } catch (e) { fail(e); }
+  }
+  async function respondToRequest(requestId, status) {
+    try {
+      const d = await api(`/api/requests/${requestId}/status`, { method: "PATCH", token, body: { status } });
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
+    } catch (e) { fail(e); }
+  }
+  async function confirmRequest(requestId) {
+    try {
+      const d = await api(`/api/requests/${requestId}/confirm`, { method: "PATCH", token });
+      await loadRequests();
+      setMessages((prev) => [...prev]);
+      flash("Booking confirmed");
+      return d;
+    } catch (e) { fail(e); }
+  }
+  async function completeRequest(requestId, rating, reviewText) {
+    try {
+      const d = await api(`/api/requests/${requestId}/complete`, { method: "PATCH", token, body: { rating, reviewText } });
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
+      flash("Job marked complete");
+    } catch (e) { fail(e); }
+  }
+  async function reportRequest(requestId, reason, note) {
+    try {
+      await api(`/api/requests/${requestId}/report`, { method: "POST", token, body: { reason, note } });
+      flash("Reported to VettedHands");
+    } catch (e) { fail(e); }
+  }
+  async function toggleOnline(next) {
+    try {
+      const d = await api("/api/artisans/me/online", { method: "PATCH", token, body: { online: next } });
+      flash(next ? "You're online" : "You're offline");
+      return d.artisan;
+    } catch (e) { fail(e); }
+  }
+  async function applyAsArtisan(trade, bio) {
+    try {
+      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: [] } });
+      setApplication(d.application);
+      flash("Application submitted for review");
+    } catch (e) { fail(e); }
+  }
+
+  return (
+    <>
+      <div className="content">
+        {view === "home" && (
+          <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
+            onlineNow={onlineNow} filtered={artisans} onOpenProfile={openArtisanProfile}
+            onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
+            onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
+            onLogout={logout} />
+        )}
+        {view === "browse" && (
+          <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
+            area={area} setArea={setArea} filtered={artisans}
+            onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
+        )}
+        {view === "artisanProfile" && selectedArtisan && (
+          <ArtisanProfileView artisan={selectedArtisan} canRequest={!isArtisan} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
+        )}
+        {view === "request" && selectedArtisan && (
+          <RequestView artisan={selectedArtisan} openJobGroups={openGroups} onBack={() => setView("artisanProfile")}
+            onSend={(job, when, gId) => sendRequest(selectedArtisan.id, job, when, gId)} />
+        )}
+        {view === "requestSent" && activeRequest && (
+          <RequestSentView artisan={activeRequest.artisanProfile} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => openConversation(activeRequest.id)} />
+        )}
+        {view === "requestsList" && (
+          <RequestsListView requests={requests} isArtisan={isArtisan} onOpen={openConversation}
+            onRespond={respondToRequest} />
+        )}
+        {view === "messagesList" && <MessagesListView requests={requests} onOpen={openConversation} />}
+        {view === "conversation" && activeRequest && (
+          <ConversationView request={activeRequest} messages={messages} isArtisan={isArtisan}
+            onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
+            onSend={(text) => sendMessage(activeRequest.id, text)}
+            onConfirm={() => confirmRequest(activeRequest.id)}
+            onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
+            onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)}
+            onRespond={(status) => respondToRequest(activeRequest.id, status)} />
+        )}
+        {view === "userProfile" && (
+          <UserProfileView user={user} isArtisan={isArtisan} application={application}
+            onApply={applyAsArtisan} onToggleOnline={toggleOnline} onLogout={logout} onBrowse={() => goNav("browse")} />
+        )}
+      </div>
+      <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} />
+      {toast && <div className="toast">{toast}</div>}
+    </>
+  );
+}
+
 /* ---------------- Home ---------------- */
-function HomeView({ area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll }) {
+function HomeView({ user, isArtisan, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onLogout }) {
   return (
     <div className="screen">
       <div className="topbar">
         <div className="brand"><span className="brand-mark"><CheckCircle2 size={16} /></span><span className="brand-name">VettedHands</span></div>
-        <div className="topbar-icons"><button className="iconbtn"><Bell size={18} /></button><div className="avatar avatar--sm">D</div></div>
-      </div>
-      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-      <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
-      <div className="section">
-        <div className="section-head"><span>Online now</span></div>
-        <div className="status-row">
-          {onlineNow.map((a) => (
-            <button key={a.id} className="status-item" onClick={() => onOpenProfile(a.id)}>
-              <div className="status-ring"><div className="avatar avatar--md" style={{ background: a.color }}>{a.initials}</div></div>
-              <div className="status-name">{a.name.split(" ")[0]}</div>
-            </button>
-          ))}
+        <div className="topbar-icons">
+          <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>Hi, {user.name.split(" ")[0]}</span>
+          <button className="iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
         </div>
       </div>
-      <div className="section">
-        <div className="section-head"><span>Browse a trade</span></div>
-        <div className="trade-grid">
-          {trades.map((t) => { const Icon2 = t.icon; return (
-            <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><Icon2 size={18} /></span>{t.label}</button>
-          ); })}
-        </div>
-      </div>
-      <div className="section section--flush">
-        <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
-        <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a.id)} />)}</div>
-      </div>
+      {!isArtisan && (
+        <>
+          <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+          <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+          <div className="section">
+            <div className="section-head"><span>Online now</span></div>
+            <div className="status-row">
+              {onlineNow.map((a) => (
+                <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
+                  <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
+                  <div className="status-name">{a.user.name.split(" ")[0]}</div>
+                </button>
+              ))}
+              {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
+            </div>
+          </div>
+          <div className="section">
+            <div className="section-head"><span>Browse a trade</span></div>
+            <div className="trade-grid">
+              {trades.map((t) => { const I = t.icon; return (
+                <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
+              ); })}
+            </div>
+          </div>
+          <div className="section section--flush">
+            <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
+            <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
+          </div>
+        </>
+      )}
+      {isArtisan && (
+        <div className="section"><div className="info-note">You're logged in as an artisan. Use the Requests tab to see incoming jobs, and Profile to go online/offline.</div></div>
+      )}
     </div>
   );
 }
@@ -334,7 +453,7 @@ function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setAre
       <div className="area-row area-row--pad"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
       <div className="feed feed--scroll">
         {filtered.length === 0 && <div className="empty"><div className="empty-title">No one matches yet</div><div className="empty-sub">Try a different area or trade.</div></div>}
-        {filtered.map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a.id)} />)}
+        {filtered.map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}
       </div>
     </div>
   );
@@ -343,44 +462,41 @@ function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setAre
 function ArtisanCard({ artisan, onOpen }) {
   return (
     <button className="acard" onClick={onOpen}>
-      <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: artisan.color }}>{artisan.initials}</div><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} /></div>
+      <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: colorFor(artisan.id) }}>{initials(artisan.user.name)}</div><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} /></div>
       <div className="acard-main">
-        <div className="acard-top"><span className="acard-name">{artisan.name}</span><span className="badge"><CheckCircle2 size={11} /> Vetted</span></div>
-        <div className="acard-trade">{artisan.tradeLabel} · {artisan.area}</div>
-        <div className="acard-meta"><span><Star size={12} fill="#B5651D" stroke="none" /> {fmtStars(artisan.rating)}</span><span className="dot-sep">·</span><span>{artisan.jobs} jobs</span><span className="dot-sep">·</span><span><Clock size={11} /> {artisan.responseTime}</span></div>
+        <div className="acard-top"><span className="acard-name">{artisan.user.name}</span><span className="badge"><CheckCircle2 size={11} /> {artisan.badge === "TOP_RATED" ? "Top Rated" : "Vetted"}</span></div>
+        <div className="acard-trade">{tradeLabel(artisan.trade)} · {artisan.area}</div>
+        <div className="acard-meta"><span><Star size={12} fill="#B5651D" stroke="none" /> {fmtStars(artisan.rating)}</span><span className="dot-sep">·</span><span>{artisan.jobsCompleted} jobs</span></div>
       </div>
     </button>
   );
 }
 
 /* ---------------- Artisan profile ---------------- */
-function ArtisanProfileView({ artisan, onBack, onRequest }) {
+function ArtisanProfileView({ artisan, canRequest, onBack, onRequest }) {
   return (
     <div className="screen">
       <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Profile</div><div style={{ width: 34 }} /></div>
       <div className="profile-hero">
-        <div className="avatar avatar--lg" style={{ background: artisan.color }}>{artisan.initials}</div>
-        <div className="profile-name">{artisan.name}</div>
-        <div className="profile-trade">{artisan.tradeLabel} · {artisan.area}</div>
+        <div className="avatar avatar--lg" style={{ background: colorFor(artisan.id) }}>{initials(artisan.user.name)}</div>
+        <div className="profile-name">{artisan.user.name}</div>
+        <div className="profile-trade">{tradeLabel(artisan.trade)} · {artisan.area}</div>
         <div className="profile-status"><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} />{artisan.online ? "Online now" : "Offline"}</div>
-        <div className="badge badge--lg"><CheckCircle2 size={13} /> Vetted by VettedHands</div>
+        <div className="badge badge--lg"><CheckCircle2 size={13} /> {artisan.badge === "TOP_RATED" ? "Top Rated" : "Vetted"} by VettedHands</div>
       </div>
       <div className="stat-row">
         <div className="stat"><div className="stat-num">{fmtStars(artisan.rating)}</div><div className="stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
-        <div className="stat"><div className="stat-num">{artisan.jobs}</div><div className="stat-label">Completed jobs</div></div>
-        <div className="stat"><div className="stat-num">{artisan.responseTime}</div><div className="stat-label">Avg. response</div></div>
+        <div className="stat"><div className="stat-num">{artisan.jobsCompleted}</div><div className="stat-label">Completed jobs</div></div>
       </div>
       <div className="section"><div className="section-head"><span>About</span></div><p className="bio">{artisan.bio}</p></div>
-      <div className="section"><div className="section-head"><span>Recent work</span></div><div className="work-row">{[0, 1, 2].map((i) => <div key={i} className="work-tile" style={{ background: shade(artisan.color, i) }} />)}</div></div>
-      <button className="primary-btn primary-btn--fixed" onClick={onRequest}>Request {artisan.name.split(" ")[0]}</button>
+      {canRequest && <button className="primary-btn primary-btn--fixed" onClick={onRequest}>Request {artisan.user.name.split(" ")[0]}</button>}
     </div>
   );
 }
-function shade(hex, i) { return hex + ["", "22", "44"][i % 3]; }
 
-/* ---------------- Request (with job-group attach) ---------------- */
+/* ---------------- Request ---------------- */
 function RequestView({ artisan, openJobGroups, onBack, onSend }) {
-  const [mode, setMode] = useState("new"); // "new" | jobGroupId
+  const [mode, setMode] = useState("new");
   const [job, setJob] = useState("");
   const [when, setWhen] = useState("");
   const attaching = mode !== "new";
@@ -389,7 +505,7 @@ function RequestView({ artisan, openJobGroups, onBack, onSend }) {
 
   return (
     <div className="screen">
-      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Request · {artisan.name.split(" ")[0]}</div><div style={{ width: 34 }} /></div>
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Request · {artisan.user.name.split(" ")[0]}</div><div style={{ width: 34 }} /></div>
       <div className="form">
         {openJobGroups.length > 0 && (
           <label>Is this for a job you're already comparing quotes on?
@@ -399,16 +515,14 @@ function RequestView({ artisan, openJobGroups, onBack, onSend }) {
             </select>
           </label>
         )}
-
         {attaching ? (
-          <div className="info-note">Comparing {artisan.name.split(" ")[0]} against your other request for: <strong>"{attachedGroup.job}"</strong> ({attachedGroup.when}). The moment you confirm one artisan, the others for this same job close automatically.</div>
+          <div className="info-note">Comparing {artisan.user.name.split(" ")[0]} against your other request for: <strong>"{attachedGroup.job}"</strong> ({attachedGroup.when}). Confirming one closes the others automatically.</div>
         ) : (
           <>
             <label>What do you need done?<textarea rows={3} value={job} onChange={(e) => setJob(e.target.value)} placeholder="e.g. Fan not turning on, socket in room sparking" /></label>
-            <label>When<select value={when} onChange={(e) => setWhen(e.target.value)}><option value="">Select a time</option><option value="As soon as possible">As soon as possible</option><option value="Later today">Later today</option><option value="Tomorrow">Tomorrow</option><option value="This week">This week</option></select></label>
+            <label>When<select value={when} onChange={(e) => setWhen(e.target.value)}><option value="">Select a time</option><option>As soon as possible</option><option>Later today</option><option>Tomorrow</option><option>This week</option></select></label>
           </>
         )}
-        <div className="info-note">{artisan.name.split(" ")[0]} will accept or decline this request. Nothing is booked until you confirm — you're free to also check other online artisans in the meantime.</div>
       </div>
       <button className="primary-btn primary-btn--fixed" disabled={!valid}
         onClick={() => valid && onSend(attaching ? attachedGroup.job : job.trim(), attaching ? attachedGroup.when : when, attaching ? attachedGroup.jobGroupId : null)}>
@@ -422,8 +536,8 @@ function RequestSentView({ artisan, onDone, onMessage }) {
   return (
     <div className="screen screen--center">
       <div className="sent-icon"><CheckCircle2 size={40} /></div>
-      <div className="sent-title">Request sent to {artisan.name}</div>
-      <div className="sent-sub">You'll be notified as soon as they accept. If you confirm with someone else for this job, this request closes automatically.</div>
+      <div className="sent-title">Request sent to {artisan.user.name}</div>
+      <div className="sent-sub">You'll be notified once they respond.</div>
       <button className="primary-btn" onClick={onMessage}>Open conversation</button>
       <button className="ghost-btn ghost-btn--wide" onClick={onDone}>Back to home</button>
     </div>
@@ -432,32 +546,43 @@ function RequestSentView({ artisan, onDone, onMessage }) {
 
 /* ---------------- Requests tab ---------------- */
 function statusMeta(status) {
-  if (status === "pending") return { label: "Pending", cls: "badge--pending" };
-  if (status === "accepted") return { label: "Accepted", cls: "badge--accepted" };
-  if (status === "confirmed") return { label: "Confirmed", cls: "badge--confirmed" };
-  if (status === "completed") return { label: "Completed", cls: "badge--completed" };
-  if (status === "closed") return { label: "Closed", cls: "badge--closed" };
-  return { label: "Declined", cls: "badge--declined" };
+  const map = {
+    PENDING: { label: "Pending", cls: "badge--pending" },
+    ACCEPTED: { label: "Accepted", cls: "badge--accepted" },
+    CONFIRMED: { label: "Confirmed", cls: "badge--confirmed" },
+    COMPLETED: { label: "Completed", cls: "badge--completed" },
+    CLOSED: { label: "Closed", cls: "badge--closed" },
+    DECLINED: { label: "Declined", cls: "badge--declined" },
+  };
+  return map[status] || { label: status, cls: "" };
 }
 
-function RequestsListView({ requests, onOpen }) {
+function RequestsListView({ requests, isArtisan, onOpen, onRespond }) {
   return (
     <div className="screen">
-      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Your requests</div></div>
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>{isArtisan ? "Incoming requests" : "Your requests"}</div></div>
       <div className="feed feed--scroll">
-        {requests.length === 0 && <div className="empty"><div className="empty-title">No requests yet</div><div className="empty-sub">When you request an artisan, it'll show up here.</div></div>}
+        {requests.length === 0 && <div className="empty"><div className="empty-title">Nothing yet</div><div className="empty-sub">{isArtisan ? "New requests from students show up here." : "When you request an artisan, it'll show up here."}</div></div>}
         {requests.map((r) => {
-          const a = findArtisan(r.artisanId);
+          const other = isArtisan ? r.student : r.artisanProfile.user;
           const meta = statusMeta(r.status);
           return (
-            <button key={r.id} className="req-card" onClick={() => onOpen(r.id)}>
-              <div className="avatar avatar--md" style={{ background: a.color }}>{a.initials}</div>
-              <div className="req-main">
-                <div className="req-top"><span className="req-name">{a.name}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
-                <div className="req-job">{r.job}</div>
-                <div className="req-when">{r.when} · {r.createdAt}</div>
-              </div>
-            </button>
+            <div key={r.id} className="req-card" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+              <button className="req-card" style={{ border: "none", padding: 0 }} onClick={() => onOpen(r.id)}>
+                <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(other.name)}</div>
+                <div className="req-main">
+                  <div className="req-top"><span className="req-name">{other.name}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
+                  <div className="req-job">{r.job}</div>
+                  <div className="req-when">{r.when}</div>
+                </div>
+              </button>
+              {isArtisan && r.status === "PENDING" && (
+                <div className="settle-actions">
+                  <button className="ghost-btn" onClick={() => onRespond(r.id, "DECLINED")}>Decline</button>
+                  <button className="settle-btn" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -471,16 +596,16 @@ function MessagesListView({ requests, onOpen }) {
     <div className="screen">
       <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Messages</div></div>
       <div className="feed feed--scroll">
-        {requests.length === 0 && <div className="empty"><div className="empty-title">No conversations yet</div><div className="empty-sub">Message threads open once you request an artisan.</div></div>}
+        {requests.length === 0 && <div className="empty"><div className="empty-title">No conversations yet</div></div>}
         {requests.map((r) => {
-          const a = findArtisan(r.artisanId);
-          const last = r.messages[r.messages.length - 1];
+          const other = r.student ? (r.artisanProfile ? r.artisanProfile.user : null) : null;
+          const name = r.artisanProfile ? r.artisanProfile.user.name : (r.student ? r.student.name : "Unknown");
           return (
             <button key={r.id} className="msg-row" onClick={() => onOpen(r.id)}>
-              <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: a.color }}>{a.initials}</div><span className={"dot " + (a.online ? "dot--online" : "dot--offline")} /></div>
+              <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(name)}</div>
               <div className="msg-main">
-                <div className="msg-top"><span className="msg-name">{a.name}</span><span className="msg-time">{last.time}</span></div>
-                <div className="msg-preview">{last.from === "me" ? "You: " : ""}{last.text}</div>
+                <div className="msg-top"><span className="msg-name">{name}</span></div>
+                <div className="msg-preview">{r.job}</div>
               </div>
             </button>
           );
@@ -490,44 +615,54 @@ function MessagesListView({ requests, onOpen }) {
   );
 }
 
-/* ---------------- Conversation (confirm / complete / report) ---------------- */
-function ConversationView({ request, artisan, onBack, onSend, onConfirm, onComplete, onReport }) {
+/* ---------------- Conversation ---------------- */
+function ConversationView({ request, messages, isArtisan, onBack, onSend, onConfirm, onComplete, onReport, onRespond }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const bottomRef = useRef(null);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [request.messages.length]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
   const meta = statusMeta(request.status);
-  const canAct = !["completed", "declined", "closed"].includes(request.status);
+  const other = isArtisan ? request.student : request.artisanProfile.user;
+  const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
 
   return (
     <div className="screen">
       <div className="topbar">
         <button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button>
-        <div className="topbar-title">{artisan.name}</div>
-        <div className="avatar avatar--sm" style={{ background: artisan.color }}>{artisan.initials}</div>
+        <div className="topbar-title">{other.name}</div>
+        <div className="avatar avatar--sm" style={{ background: colorFor(request.id) }}>{initials(other.name)}</div>
       </div>
       <div className="convo-status"><span className={"status-badge " + meta.cls}>{meta.label}</span><span className="convo-job">{request.job}</span></div>
 
       <div className="convo-messages">
-        {request.messages.map((m) => (
-          <div key={m.id} className={"bubble-row " + (m.from === "me" ? "bubble-row--me" : m.from === "system" ? "bubble-row--sys" : "bubble-row--them")}>
-            {m.from === "system" ? <div className="bubble-sys">{m.text}</div> : <div className={"bubble " + (m.from === "me" ? "bubble--me" : "bubble--them")}>{m.text}<span className="bubble-time">{m.time}</span></div>}
+        {messages.map((m) => (
+          <div key={m.id} className={"bubble-row " + (m.senderType === "SYSTEM" ? "bubble-row--sys" : (isArtisan ? m.senderType === "ARTISAN" : m.senderType === "STUDENT") ? "bubble-row--me" : "bubble-row--them")}>
+            {m.senderType === "SYSTEM"
+              ? <div className="bubble-sys">{m.text}</div>
+              : <div className={"bubble " + ((isArtisan ? m.senderType === "ARTISAN" : m.senderType === "STUDENT") ? "bubble--me" : "bubble--them")}>{m.text}</div>}
           </div>
         ))}
-        {request.status === "completed" && request.rating && (
-          <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> You rated this job {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
+        {request.status === "COMPLETED" && request.rating && (
+          <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> Rated {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {canAct && request.status === "accepted" && !confirming && (
-        <button className="action-btn" onClick={() => setConfirming(true)}>Confirm booking with {artisan.name.split(" ")[0]}</button>
+      {isArtisan && canAct && request.status === "PENDING" && (
+        <div className="settle-actions" style={{ margin: "10px 16px 0" }}>
+          <button className="ghost-btn" onClick={() => onRespond("DECLINED")}>Decline</button>
+          <button className="settle-btn" onClick={() => onRespond("ACCEPTED")}>Accept</button>
+        </div>
+      )}
+
+      {!isArtisan && canAct && request.status === "ACCEPTED" && !confirming && (
+        <button className="action-btn" onClick={() => setConfirming(true)}>Confirm booking with {other.name.split(" ")[0]}</button>
       )}
       {confirming && (
         <div className="inline-confirm">
-          <div className="inline-confirm-text">This closes any other pending requests you sent for this same job. Confirm?</div>
+          <div className="inline-confirm-text">This closes any other pending requests for this same job. Confirm?</div>
           <div className="settle-actions">
             <button className="ghost-btn" onClick={() => setConfirming(false)}>Cancel</button>
             <button className="settle-btn" onClick={() => { onConfirm(); setConfirming(false); }}>Yes, confirm</button>
@@ -535,17 +670,15 @@ function ConversationView({ request, artisan, onBack, onSend, onConfirm, onCompl
         </div>
       )}
 
-      {canAct && request.status === "confirmed" && !showComplete && (
-        <button className="action-btn" onClick={() => setShowComplete(true)}>Mark job complete &amp; rate</button>
+      {!isArtisan && canAct && request.status === "CONFIRMED" && !showComplete && (
+        <button className="action-btn" onClick={() => setShowComplete(true)}>Mark job complete & rate</button>
       )}
-      {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t, p) => { onComplete(r, t, p); setShowComplete(false); }} />}
+      {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t) => { onComplete(r, t); setShowComplete(false); }} />}
 
-      {canAct && !showReport && (
+      {!isArtisan && canAct && !showReport && (
         <button className="report-link" onClick={() => setShowReport(true)}><Flag size={13} /> Report a problem</button>
       )}
       {showReport && <ReportForm onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
-
-      {request.status === "closed" && <div className="info-note" style={{ margin: "0 16px 10px" }}>This request closed because you confirmed a different artisan for this job.</div>}
 
       <form className="convo-input" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { onSend(text.trim()); setText(""); } }}>
         <input placeholder="Type a message…" value={text} onChange={(e) => setText(e.target.value)} />
@@ -558,23 +691,16 @@ function ConversationView({ request, artisan, onBack, onSend, onConfirm, onCompl
 function CompletionForm({ onCancel, onSubmit }) {
   const [rating, setRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
-  const [photos, setPhotos] = useState(0);
   return (
     <div className="inline-panel">
       <div className="quickadd-label">Rate the job</div>
       <div className="star-row">{[1, 2, 3, 4, 5].map((n) => (
         <button key={n} className="star-btn" onClick={() => setRating(n)}><Star size={22} fill={n <= rating ? "#B5651D" : "none"} stroke={n <= rating ? "#B5651D" : "#C9BFAB"} /></button>
       ))}</div>
-      <div className="quickadd-label">Leave a quick review (optional)</div>
-      <textarea rows={2} value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="How did it go?" className="review-textarea" />
-      <div className="quickadd-label">Before/after photo proof</div>
-      <div className="photo-picker">
-        {Array.from({ length: photos }).map((_, i) => <div key={i} className="photo-thumb" style={{ background: ["#1F3A34", "#B5651D"][i % 2] }} />)}
-        {photos < 2 && <button className="photo-add" onClick={() => setPhotos((p) => p + 1)}><Camera size={16} /> Add</button>}
-      </div>
+      <textarea rows={2} value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="How did it go? (optional)" className="review-textarea" />
       <div className="settle-actions">
         <button className="ghost-btn" onClick={onCancel}>Cancel</button>
-        <button className="settle-btn" onClick={() => onSubmit(rating, reviewText.trim(), photos)}>Submit</button>
+        <button className="settle-btn" onClick={() => onSubmit(rating, reviewText.trim())}>Submit</button>
       </div>
     </div>
   );
@@ -598,40 +724,22 @@ function ReportForm({ onCancel, onSubmit }) {
   );
 }
 
-/* ---------------- Profile tab (pivots once approved) ---------------- */
-function UserProfileView({ profile, setProfile, requests, artisanApp, setArtisanApp, incomingJobs, onViewJobs, onBrowse }) {
-  const completed = requests.filter((r) => r.status === "completed").length;
+/* ---------------- Profile ---------------- */
+function UserProfileView({ user, isArtisan, application, onApply, onToggleOnline, onLogout, onBrowse }) {
   const [showForm, setShowForm] = useState(false);
-  const [confirmingVerify, setConfirmingVerify] = useState(false);
-  const newJobs = incomingJobs.filter((j) => j.status === "new").length;
-  const jobsCompletedAsArtisan = incomingJobs.filter((j) => j.status === "completed").length;
-  const isArtisan = artisanApp && artisanApp.status === "approved";
+  const [trade, setTrade] = useState(trades[0].id);
+  const [bio, setBio] = useState("");
+  const [online, setOnline] = useState(true);
 
   return (
     <div className="screen">
       <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Profile</div></div>
-
       <div className="profile-hero">
-        <div className="avatar avatar--lg" style={{ background: "#1F3A34" }}>{profile.name.charAt(0).toUpperCase()}</div>
-        <input className="profile-name-input" value={profile.name} onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
-        <select className="profile-area-input" value={profile.area} onChange={(e) => setProfile((p) => ({ ...p, area: e.target.value }))}>
-          {areas.filter((a) => a !== "All areas").map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-        {isArtisan && <div className="badge badge--lg" style={{ marginTop: 8 }}>{artisanApp.verified ? <><Award size={13} /> Top Rated artisan</> : <><CheckCircle2 size={13} /> Vetted artisan</>} · {artisanApp.trade}</div>}
+        <div className="avatar avatar--lg" style={{ background: "#1F3A34" }}>{initials(user.name)}</div>
+        <div className="profile-name">{user.name}</div>
+        <div className="profile-trade">{user.email}{user.area ? ` · ${user.area}` : ""}</div>
+        <div className="badge badge--lg" style={{ marginTop: 8 }}>{user.role}</div>
       </div>
-
-      {isArtisan ? (
-        <div className="stat-row">
-          <div className="stat"><div className="stat-num">{newJobs}</div><div className="stat-label">New requests</div></div>
-          <div className="stat"><div className="stat-num">{jobsCompletedAsArtisan}</div><div className="stat-label">Jobs completed</div></div>
-          <div className="stat"><div className="stat-num">{requests.length}</div><div className="stat-label">Requests you've sent</div></div>
-        </div>
-      ) : (
-        <div className="stat-row">
-          <div className="stat"><div className="stat-num">{requests.length}</div><div className="stat-label">Requests sent</div></div>
-          <div className="stat"><div className="stat-num">{completed}</div><div className="stat-label">Completed</div></div>
-        </div>
-      )}
 
       {isArtisan && (
         <div className="section">
@@ -639,121 +747,69 @@ function UserProfileView({ profile, setProfile, requests, artisanApp, setArtisan
           <div className="pending-card pending-card--approved">
             <div className="avail-row">
               <span>Available for jobs</span>
-              <button className={"toggle" + (artisanApp.online ? " toggle--on" : "")} onClick={() => setArtisanApp((a) => ({ ...a, online: !a.online }))}><span className="toggle-knob" /></button>
+              <button className={"toggle" + (online ? " toggle--on" : "")} onClick={async () => { const updated = await onToggleOnline(!online); if (updated) setOnline(updated.online); }}><span className="toggle-knob" /></button>
             </div>
-            <button className="jobs-btn" onClick={onViewJobs}>
-              <ClipboardList size={15} /> View incoming requests
-              {newJobs > 0 && <span className="nav-badge nav-badge--static">{newJobs}</span>}
-            </button>
-
-            {!artisanApp.verified && !confirmingVerify && (
-              <button className="verify-btn" onClick={() => setConfirmingVerify(true)}><Award size={15} /> Get Verified — ₦1,500/month</button>
-            )}
-            {!artisanApp.verified && confirmingVerify && (
-              <div className="inline-confirm">
-                <div className="inline-confirm-text">Top Rated verification puts you first in Browse and Online Now, plus a gold badge on your profile. Subscribe?</div>
-                <div className="settle-actions">
-                  <button className="ghost-btn" onClick={() => setConfirmingVerify(false)}>Cancel</button>
-                  <button className="settle-btn" onClick={() => { setArtisanApp((a) => ({ ...a, verified: true })); setConfirmingVerify(false); }}>Simulate: subscribe</button>
-                </div>
-              </div>
-            )}
-            {artisanApp.verified && <div className="verified-note"><Award size={14} /> You're a Top Rated verified artisan</div>}
           </div>
-          <button className="browse-link" onClick={onBrowse}>Need a service yourself? Browse artisans <ChevronRight size={14} /></button>
         </div>
       )}
 
       {!isArtisan && (
         <div className="section">
           <div className="section-head"><span>Offer your services</span></div>
-          {!artisanApp && !showForm && <button className="artisan-cta" onClick={() => setShowForm(true)}><Hammer size={17} /> Become a vetted artisan on VettedHands</button>}
-          {!artisanApp && showForm && <ArtisanApplyForm onCancel={() => setShowForm(false)} onSubmit={(data) => { setArtisanApp({ ...data, status: "pending", online: true, verified: false }); setShowForm(false); }} />}
-          {artisanApp && artisanApp.status === "pending" && (
+          {!application && !showForm && <button className="artisan-cta" onClick={() => setShowForm(true)}><Hammer size={17} /> Become a vetted artisan on VettedHands</button>}
+          {!application && showForm && (
+            <div className="form form--card">
+              <label>Trade<select value={trade} onChange={(e) => setTrade(e.target.value)}>{trades.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
+              <label>Tell students about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="At least 10 characters…" /></label>
+              <div className="settle-actions">
+                <button className="ghost-btn" onClick={() => setShowForm(false)}><X size={14} /> Cancel</button>
+                <button className="settle-btn" disabled={bio.trim().length < 10} onClick={() => { onApply(trade, bio.trim()); setShowForm(false); }}>Submit for review</button>
+              </div>
+            </div>
+          )}
+          {application && application.status === "PENDING" && (
             <div className="pending-card">
               <div className="pending-title">Application under review</div>
-              <div className="pending-sub">We're checking your details before your profile goes live to students. You'll be notified once approved.</div>
-              <div className="pending-meta">{artisanApp.trade} · {artisanApp.photos.length} photo{artisanApp.photos.length === 1 ? "" : "s"} added</div>
-              <button className="demo-btn" onClick={() => setArtisanApp((a) => ({ ...a, status: "approved" }))}>Simulate: get approved <span className="demo-tag">prototype only</span></button>
+              <div className="pending-sub">We're checking your details. You'll become an artisan once approved by an admin.</div>
             </div>
+          )}
+          {application && application.status === "REJECTED" && (
+            <div className="pending-card"><div className="pending-title" style={{ color: "var(--danger)" }}>Application not approved</div></div>
           )}
         </div>
       )}
 
       <div className="section">
         <div className="settings-list">
-          <div className="settings-row"><ShieldCheck size={17} /> Notification preferences <ChevronRight size={15} className="chev" /></div>
-          <div className="settings-row"><HelpCircle size={17} /> Help &amp; support <ChevronRight size={15} className="chev" /></div>
-          <div className="settings-row settings-row--danger"><LogOut size={17} /> Log out</div>
+          <div className="settings-row settings-row--danger" onClick={onLogout} style={{ cursor: "pointer" }}><LogOut size={17} /> Log out</div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function ArtisanApplyForm({ onCancel, onSubmit }) {
-  const [trade, setTrade] = useState(trades[0].label);
-  const [bio, setBio] = useState("");
-  const [photos, setPhotos] = useState([]);
-  const valid = trade && bio.trim().length > 10;
-  return (
-    <div className="form form--card">
-      <label>Trade<select value={trade} onChange={(e) => setTrade(e.target.value)}>{trades.map((t) => <option key={t.id} value={t.label}>{t.label}</option>)}</select></label>
-      <label>Tell students about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="What you do, how long you've been doing it, what makes you reliable…" /></label>
-      <label>Photos of past work
-        <div className="photo-picker">
-          {photos.map((p, i) => <div key={i} className="photo-thumb" style={{ background: p }} />)}
-          {photos.length < 4 && <button type="button" className="photo-add" onClick={() => setPhotos((p) => [...p, ["#1F3A34", "#B5651D", "#2E534B", "#8C6A4E"][p.length % 4]])}><Camera size={16} /> Add</button>}
-        </div>
-        <span className="optional">Demo only — tap "Add" to simulate attaching a photo.</span>
-      </label>
-      <div className="info-note">Your profile won't be visible to students until it's vetted and approved.</div>
-      <div className="settle-actions">
-        <button className="ghost-btn" onClick={onCancel}><X size={14} /> Cancel</button>
-        <button className="settle-btn" disabled={!valid} onClick={() => valid && onSubmit({ trade, bio: bio.trim(), photos })}>Submit for review</button>
-      </div>
-    </div>
-  );
-}
-
-function ArtisanJobsView({ jobs, onRespond, onBack }) {
-  return (
-    <div className="screen">
-      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Incoming requests</div><div style={{ width: 34 }} /></div>
-      <div className="feed feed--scroll">
-        {jobs.length === 0 && <div className="empty"><div className="empty-title">Nothing yet</div><div className="empty-sub">Requests from students will show up here.</div></div>}
-        {jobs.map((j) => (
-          <div key={j.id} className="job-card">
-            <div className="job-top"><span className="job-student">{j.studentName}</span>
-              <span className={"status-badge " + (j.status === "new" ? "badge--pending" : j.status === "accepted" ? "badge--accepted" : j.status === "completed" ? "badge--completed" : "badge--declined")}>
-                {j.status === "new" ? "New" : j.status === "accepted" ? "Accepted" : j.status === "completed" ? "Completed" : "Declined"}
-              </span>
-            </div>
-            <div className="job-desc">{j.job}</div>
-            <div className="job-when">{j.when}</div>
-            {j.status === "new" && <div className="settle-actions" style={{ marginTop: 8 }}><button className="ghost-btn" onClick={() => onRespond(j.id, "declined")}>Decline</button><button className="settle-btn" onClick={() => onRespond(j.id, "accepted")}>Accept</button></div>}
-            {j.status === "accepted" && <button className="action-btn action-btn--sm" onClick={() => onRespond(j.id, "completed")}>Mark complete</button>}
-          </div>
-        ))}
-      </div>
+      {!isArtisan && <button className="browse-link" onClick={onBrowse}>Browse artisans <ChevronRight size={14} /></button>}
     </div>
   );
 }
 
 /* ---------------- Bottom nav ---------------- */
-function BottomNav({ active, onChange, requestCount }) {
-  const items = [
-    { id: "home", label: "Home", icon: Home },
-    { id: "browse", label: "Browse", icon: Compass },
-    { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
-    { id: "messages", label: "Messages", icon: MessageCircle },
-    { id: "profile", label: "Profile", icon: UserIcon },
-  ];
+function BottomNav({ active, onChange, isArtisan, requestCount }) {
+  const items = isArtisan
+    ? [
+        { id: "home", label: "Home", icon: Home },
+        { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
+        { id: "messages", label: "Messages", icon: MessageCircle },
+        { id: "profile", label: "Profile", icon: UserIcon },
+      ]
+    : [
+        { id: "home", label: "Home", icon: Home },
+        { id: "browse", label: "Browse", icon: Compass },
+        { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
+        { id: "messages", label: "Messages", icon: MessageCircle },
+        { id: "profile", label: "Profile", icon: UserIcon },
+      ];
   return (
     <div className="bottomnav">
-      {items.map((it) => { const Icon2 = it.icon; const isActive = active === it.id; return (
+      {items.map((it) => { const I = it.icon; const isActive = active === it.id; return (
         <button key={it.id} className={"nav-item" + (isActive ? " nav-item--active" : "")} onClick={() => onChange(it.id)}>
-          <span className="nav-icon-wrap"><Icon2 size={19} strokeWidth={isActive ? 2.4 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
+          <span className="nav-icon-wrap"><I size={19} strokeWidth={isActive ? 2.4 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
           <span>{it.label}</span>
         </button>
       ); })}
@@ -773,7 +829,7 @@ function Style() {
       .phone { width:100%; max-width:420px; min-height:760px; background:var(--bg); border-radius:22px; box-shadow:0 1px 0 rgba(30,27,22,0.06),0 20px 40px -24px rgba(30,27,22,0.4); overflow:hidden; border:1px solid var(--line); display:flex; flex-direction:column; }
       .content { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
       .screen { display:flex; flex-direction:column; flex:1; padding-bottom:8px; }
-      .screen--center { align-items:center; justify-content:center; text-align:center; padding:40px 28px; gap:6px; }
+      .screen--center { align-items:center; justify-content:center; text-align:center; padding:40px 28px; gap:6px; width:100%; }
       .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 16px 8px; }
       .brand { display:flex; align-items:center; gap:7px; }
       .brand-mark { width:24px; height:24px; border-radius:7px; background:var(--primary); color:var(--accent-bg); display:flex; align-items:center; justify-content:center; }
@@ -824,19 +880,14 @@ function Style() {
       .profile-trade { font-size:13px; color:var(--ink-soft); margin-top:2px; }
       .profile-status { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); margin-top:8px; }
       .profile-status .dot { position:static; border:none; }
-      .profile-name-input { font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin-top:10px; border:none; background:transparent; text-align:center; color:var(--ink); width:100%; }
-      .profile-name-input:focus { outline:none; border-bottom:1px solid var(--line); }
-      .profile-area-input { font-size:13px; color:var(--ink-soft); margin-top:4px; border:none; background:transparent; text-align:center; font-family:inherit; }
       .stat-row { display:flex; justify-content:space-around; padding:16px; border-bottom:1px solid var(--line); }
       .stat { text-align:center; }
       .stat-num { font-family:'Fraunces',serif; font-weight:600; font-size:18px; color:var(--primary); }
       .stat-label { font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:3px; justify-content:center; margin-top:2px; }
       .bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0; }
-      .work-row { display:flex; gap:8px; }
-      .work-tile { flex:1; height:76px; border-radius:10px; }
       .form { padding:16px; display:flex; flex-direction:column; gap:16px; flex:1; }
       .form label { font-size:13px; font-weight:600; color:var(--ink-soft); display:flex; flex-direction:column; gap:6px; }
-      .form textarea, .form select { border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px; font-family:inherit; color:var(--ink); resize:none; background:var(--surface); }
+      .form textarea, .form select, .text-input { border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px; font-family:inherit; color:var(--ink); resize:none; background:var(--surface); }
       .info-note { font-size:12px; color:var(--ink-soft); background:var(--accent-bg); border-radius:10px; padding:10px 12px; line-height:1.5; }
       .primary-btn { margin:8px 16px 10px; background:var(--primary); color:#fff; border:none; border-radius:12px; padding:14px; font-size:14.5px; font-weight:600; cursor:pointer; font-family:inherit; }
       .primary-btn:disabled { opacity:0.4; cursor:not-allowed; }
@@ -853,8 +904,7 @@ function Style() {
       .nav-item--active { color:var(--primary); }
       .nav-icon-wrap { position:relative; }
       .nav-badge { position:absolute; top:-5px; right:-8px; background:var(--accent); color:#fff; font-size:9px; font-weight:700; border-radius:8px; padding:1px 5px; }
-      .nav-badge--static { position:static; margin-left:2px; }
-      .req-card { display:flex; gap:12px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; text-align:left; cursor:pointer; font-family:inherit; }
+      .req-card { display:flex; gap:12px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; text-align:left; cursor:pointer; font-family:inherit; width:100%; }
       .req-main { flex:1; min-width:0; }
       .req-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
       .req-name { font-weight:600; font-size:14px; }
@@ -867,11 +917,10 @@ function Style() {
       .badge--completed { background:var(--accent-bg); color:var(--accent); }
       .badge--closed { background:#E7E2D5; color:var(--ink-soft); }
       .badge--declined { background:#F3E1DC; color:var(--danger); }
-      .msg-row { display:flex; gap:12px; padding:12px 4px; background:transparent; border:none; border-bottom:1px solid var(--line); text-align:left; cursor:pointer; font-family:inherit; }
+      .msg-row { display:flex; gap:12px; padding:12px 4px; background:transparent; border:none; border-bottom:1px solid var(--line); text-align:left; cursor:pointer; font-family:inherit; width:100%; }
       .msg-main { flex:1; min-width:0; }
       .msg-top { display:flex; align-items:center; justify-content:space-between; }
       .msg-name { font-weight:600; font-size:14px; }
-      .msg-time { font-size:11px; color:var(--ink-soft); }
       .msg-preview { font-size:12.5px; color:var(--ink-soft); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .convo-status { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); }
       .convo-job { font-size:12px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -880,17 +929,15 @@ function Style() {
       .bubble-row--me { justify-content:flex-end; }
       .bubble-row--them { justify-content:flex-start; }
       .bubble-row--sys { justify-content:center; }
-      .bubble { max-width:78%; padding:10px 13px; border-radius:14px; font-size:13.5px; line-height:1.4; position:relative; }
+      .bubble { max-width:78%; padding:10px 13px; border-radius:14px; font-size:13.5px; line-height:1.4; }
       .bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:4px; }
       .bubble--them { background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
-      .bubble-time { display:block; font-size:9.5px; opacity:0.65; margin-top:4px; }
       .bubble-sys { font-size:11px; color:var(--ink-soft); background:var(--accent-bg); padding:5px 12px; border-radius:20px; }
       .review-recap { text-align:center; font-size:12px; color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:8px 12px; }
       .convo-input { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line); background:var(--surface); }
       .convo-input input { flex:1; border:1px solid var(--line); border-radius:20px; padding:10px 14px; font-size:13.5px; font-family:inherit; outline:none; }
       .send-btn { width:38px; height:38px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
       .action-btn { margin:10px 16px 0; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:12px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; }
-      .action-btn--sm { margin:10px 0 0; width:100%; padding:9px; font-size:12.5px; }
       .report-link { margin:8px 16px 0; background:none; border:none; color:var(--danger); font-size:12px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer; font-family:inherit; align-self:center; }
       .inline-confirm, .inline-panel { margin:10px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; }
       .inline-confirm-text { font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
@@ -898,9 +945,6 @@ function Style() {
       .star-btn { background:none; border:none; padding:0; cursor:pointer; }
       .review-textarea { border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:13px; font-family:inherit; resize:none; width:100%; }
       .quickadd-label { font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; }
-      .photo-picker { display:flex; gap:8px; flex-wrap:wrap; }
-      .photo-thumb { width:56px; height:56px; border-radius:10px; }
-      .photo-add { width:56px; height:56px; border-radius:10px; border:1px dashed var(--line); background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:9px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
       .settle-actions { display:flex; gap:8px; }
       .ghost-btn { background:transparent; border:1px solid var(--line); color:var(--ink-soft); border-radius:10px; padding:11px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; justify-content:center; }
       .settle-btn { background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; flex:1; }
@@ -912,53 +956,27 @@ function Style() {
       .pending-card--approved { border-color:var(--success); background:#EAF4EC; }
       .pending-title { font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px; color:var(--accent); }
       .pending-sub { font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5; }
-      .pending-meta { font-size:11.5px; color:var(--ink-soft); margin-top:8px; opacity:0.85; }
-      .demo-btn { margin-top:12px; width:100%; background:var(--bg); border:1px dashed var(--line); color:var(--ink-soft); border-radius:10px; padding:9px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
-      .demo-tag { font-size:9px; text-transform:uppercase; letter-spacing:0.04em; background:var(--accent-bg); color:var(--accent); padding:2px 6px; border-radius:8px; }
       .avail-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; }
       .toggle { width:42px; height:24px; border-radius:20px; background:#D7D0BE; border:none; position:relative; cursor:pointer; padding:2px; }
       .toggle--on { background:var(--success); }
       .toggle-knob { display:block; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform 0.15s; }
       .toggle--on .toggle-knob { transform:translateX(18px); }
-      .jobs-btn { margin-top:12px; width:100%; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
-      .verify-btn { margin-top:10px; width:100%; background:none; border:1px dashed var(--accent); color:var(--accent); border-radius:10px; padding:10px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
-      .verified-note { margin-top:10px; text-align:center; font-size:12px; font-weight:700; color:var(--accent); display:flex; align-items:center; justify-content:center; gap:5px; }
-      .browse-link { margin-top:10px; width:100%; background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
-      .job-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px; margin-bottom:8px; }
-      .job-top { display:flex; align-items:center; justify-content:space-between; }
-      .job-student { font-weight:700; font-size:13.5px; }
-      .job-desc { font-size:13px; color:var(--ink); margin-top:6px; line-height:1.4; }
-      .job-when { font-size:11.5px; color:var(--ink-soft); margin-top:5px; }
+      .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
       .settings-list { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
       .settings-row { display:flex; align-items:center; gap:10px; padding:14px 16px; font-size:13.5px; font-weight:500; border-bottom:1px solid var(--line); color:var(--ink); }
       .settings-row:last-child { border-bottom:none; }
       .settings-row--danger { color:var(--danger); }
-      .chev { margin-left:auto; color:var(--ink-soft); }
+      .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
 
-      /* ===================== RESPONSIVE: TABLET & DESKTOP ===================== */
       @media (min-width: 760px) {
         .app { padding: 40px 24px; align-items: flex-start; }
         .phone { max-width: 880px; min-height: 680px; border-radius: 20px; flex-direction: row; }
         .content { order: 1; min-width: 0; }
-        .bottomnav {
-          order: 2; flex-direction: column; width: 220px; flex-shrink: 0;
-          border-top: none; border-left: 1px solid var(--line);
-          padding: 22px 12px; gap: 4px; justify-content: flex-start;
-        }
+        .bottomnav { order: 2; flex-direction: column; width: 220px; flex-shrink: 0; border-top: none; border-left: 1px solid var(--line); padding: 22px 12px; gap: 4px; justify-content: flex-start; }
         .nav-item { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 11px 12px; border-radius: 10px; font-size: 13px; }
         .nav-item--active { background: var(--accent-bg); }
-        .screen { padding-left: 8px; padding-right: 8px; }
-        .topbar, .searchbar, .area-row, .area-row--pad, .chip-row, .section, .form, .feed--scroll, .convo-status, .convo-messages, .convo-input { max-width: 640px; margin-left: auto; margin-right: auto; width: 100%; }
         .feed--scroll { display: block; column-count: 2; column-gap: 14px; padding-bottom: 24px; }
         .feed--scroll > * { break-inside: avoid; margin-bottom: 10px; }
-        .trade-grid { grid-template-columns: repeat(4, 1fr); }
-      }
-      @media (min-width: 1180px) {
-        .app { padding: 48px 24px; }
-        .phone { max-width: 1140px; }
-        .bottomnav { width: 240px; }
-        .topbar, .searchbar, .area-row, .area-row--pad, .chip-row, .section, .form, .feed--scroll, .convo-status, .convo-messages, .convo-input { max-width: 860px; }
-        .feed--scroll { column-count: 3; }
       }
     `}</style>
   );
