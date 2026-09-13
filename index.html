@@ -329,13 +329,21 @@ function MainApp({ auth }) {
   async function toggleOnline(next) {
     try {
       const d = await api("/api/artisans/me/online", { method: "PATCH", token, body: { online: next } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: d.artisan.online } }));
       flash(next ? "You're online" : "You're offline");
       return d.artisan;
     } catch (e) { fail(e); }
   }
-  async function applyAsArtisan(trade, bio) {
+  async function setBadge(badge) {
     try {
-      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: [] } });
+      const d = await api("/api/artisans/me/badge", { method: "PATCH", token, body: { badge } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, badge: d.artisan.badge } }));
+      flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
+    } catch (e) { fail(e); }
+  }
+  async function applyAsArtisan(trade, bio, photos) {
+    try {
+      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [] } });
       setApplication(d.application);
       flash("Application submitted for review");
     } catch (e) { fail(e); }
@@ -357,7 +365,7 @@ function MainApp({ auth }) {
             onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
         )}
         {view === "artisanProfile" && selectedArtisan && (
-          <ArtisanProfileView artisan={selectedArtisan} canRequest={!isArtisan} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
+          <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
         )}
         {view === "request" && selectedArtisan && (
           <RequestView artisan={selectedArtisan} openJobGroups={openGroups} onBack={() => setView("artisanProfile")}
@@ -382,7 +390,9 @@ function MainApp({ auth }) {
         )}
         {view === "userProfile" && (
           <UserProfileView user={user} isArtisan={isArtisan} application={application}
-            onApply={applyAsArtisan} onToggleOnline={toggleOnline} onLogout={logout} onBrowse={() => goNav("browse")} />
+            incomingCount={requests.filter((r) => r.status === "PENDING").length}
+            onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge} onLogout={logout}
+            onBrowse={() => goNav("browse")} onViewRequests={() => goNav("requests")} />
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
@@ -403,39 +413,51 @@ function HomeView({ user, isArtisan, area, setArea, query, setQuery, onlineNow, 
           <button className="iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
         </div>
       </div>
-      {!isArtisan && (
-        <>
-          <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-          <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
-          <div className="section">
-            <div className="section-head"><span>Online now</span></div>
-            <div className="status-row">
-              {onlineNow.map((a) => (
-                <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
-                  <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
-                  <div className="status-name">{a.user.name.split(" ")[0]}</div>
-                </button>
-              ))}
-              {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
+      {isArtisan && user.artisanProfile && (
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="pending-card pending-card--approved">
+            <div className="app-top" style={{ marginBottom: 10 }}>
+              <div className="avatar" style={{ background: "#1F3A34" }}>{initials(user.name)}</div>
+              <div className="app-top-text">
+                <div className="app-name">{user.name}</div>
+                <div className="app-trade">{tradeLabel(user.artisanProfile.trade)} · {user.artisanProfile.area}</div>
+              </div>
+              <span className="badge">{user.artisanProfile.badge === "TOP_RATED" ? <><Award size={11} /> Top Rated</> : <><CheckCircle2 size={11} /> Vetted</>}</span>
+            </div>
+            <div className="stat-row" style={{ padding: "6px 0", borderBottom: "none" }}>
+              <div className="stat"><div className="stat-num">{fmtStars(user.artisanProfile.rating)}</div><div className="stat-label">Rating</div></div>
+              <div className="stat"><div className="stat-num">{user.artisanProfile.jobsCompleted}</div><div className="stat-label">Jobs done</div></div>
+              <div className="stat"><div className="stat-num">{requests.filter((r) => r.status === "PENDING").length}</div><div className="stat-label">New requests</div></div>
             </div>
           </div>
-          <div className="section">
-            <div className="section-head"><span>Browse a trade</span></div>
-            <div className="trade-grid">
-              {trades.map((t) => { const I = t.icon; return (
-                <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
-              ); })}
-            </div>
-          </div>
-          <div className="section section--flush">
-            <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
-            <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
-          </div>
-        </>
+        </div>
       )}
-      {isArtisan && (
-        <div className="section"><div className="info-note">You're logged in as an artisan. Use the Requests tab to see incoming jobs, and Profile to go online/offline.</div></div>
-      )}
+      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+      <div className="section">
+        <div className="section-head"><span>Online now</span></div>
+        <div className="status-row">
+          {onlineNow.map((a) => (
+            <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
+              <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
+              <div className="status-name">{a.user.name.split(" ")[0]}</div>
+            </button>
+          ))}
+          {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
+        </div>
+      </div>
+      <div className="section">
+        <div className="section-head"><span>Browse a trade</span></div>
+        <div className="trade-grid">
+          {trades.map((t) => { const I = t.icon; return (
+            <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
+          ); })}
+        </div>
+      </div>
+      <div className="section section--flush">
+        <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
+        <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
+      </div>
     </div>
   );
 }
