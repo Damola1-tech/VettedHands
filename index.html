@@ -61,6 +61,7 @@ const ICON_PATHS = {
   hammer: <><path d="M15 12l-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9"/><path d="M17.64 15L22 10.64"/><path d="M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.44 2.44"/></>,
   x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
   award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+  camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
 };
 function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, ...rest }) {
   const shape = ICON_PATHS[name];
@@ -98,6 +99,7 @@ const ShieldCheck = (p) => <Icon name="shieldCheck" {...p} />;
 const Hammer = (p) => <Icon name="hammer" {...p} />;
 const X = (p) => <Icon name="x" {...p} />;
 const Award = (p) => <Icon name="award" {...p} />;
+const Camera = (p) => <Icon name="camera" {...p} />;
 
 const trades = [
   { id: "ELECTRICIAN", label: "Electrician", icon: Zap },
@@ -191,7 +193,7 @@ function AuthScreen({ onLogin, onRegister }) {
         {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
       </button>
       <div className="form-note" style={{ marginTop: 14, fontSize: 11, color: "var(--ink-soft)", textAlign: "center" }}>
-        New accounts start as students. To offer services, log in and apply as an artisan from your Profile tab.
+        New accounts start as customers. To offer services, log in and apply as an artisan from your Profile tab.
       </div>
     </div>
   );
@@ -249,12 +251,22 @@ function MainApp({ auth }) {
   }
   async function loadRequests() {
     try {
-      const d = isArtisan ? await api("/api/requests/incoming", { token }) : await api("/api/requests/mine", { token });
-      setRequests(d.requests);
+      if (isArtisan) {
+        const [incomingRes, mineRes] = await Promise.all([
+          api("/api/requests/incoming", { token }),
+          api("/api/requests/mine", { token }),
+        ]);
+        const merged = [...incomingRes.requests, ...mineRes.requests]
+          .filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setRequests(merged);
+      } else {
+        const d = await api("/api/requests/mine", { token });
+        setRequests(d.requests);
+      }
     } catch (e) { fail(e); }
   }
   async function loadOpenGroups() {
-    if (isArtisan) return;
     try { const d = await api("/api/requests/open-groups", { token }); setOpenGroups(d.groups); } catch (e) { /* ignore */ }
   }
   async function loadApplication() {
@@ -329,15 +341,35 @@ function MainApp({ auth }) {
   async function toggleOnline(next) {
     try {
       const d = await api("/api/artisans/me/online", { method: "PATCH", token, body: { online: next } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: d.artisan.online } }));
       flash(next ? "You're online" : "You're offline");
       return d.artisan;
     } catch (e) { fail(e); }
   }
-  async function applyAsArtisan(trade, bio) {
+  async function setBadge(badge) {
     try {
-      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: [] } });
+      const d = await api("/api/artisans/me/badge", { method: "PATCH", token, body: { badge } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, badge: d.artisan.badge } }));
+      flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
+    } catch (e) { fail(e); }
+  }
+  async function applyAsArtisan(trade, bio, photos) {
+    try {
+      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [] } });
       setApplication(d.application);
       flash("Application submitted for review");
+    } catch (e) { fail(e); }
+  }
+  async function addArtisanPhoto(url) {
+    try {
+      const d = await api("/api/artisans/me/photos", { method: "POST", token, body: { url } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, photos: [...(u.artisanProfile.photos || []), d.photo] } }));
+    } catch (e) { fail(e); }
+  }
+  async function removeArtisanPhoto(photoId) {
+    try {
+      await api(`/api/artisans/me/photos/${photoId}`, { method: "DELETE", token });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, photos: u.artisanProfile.photos.filter((p) => p.id !== photoId) } }));
     } catch (e) { fail(e); }
   }
 
@@ -346,6 +378,7 @@ function MainApp({ auth }) {
       <div className="content">
         {view === "home" && (
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
+            requests={requests}
             onlineNow={onlineNow} filtered={artisans} onOpenProfile={openArtisanProfile}
             onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
             onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
@@ -357,7 +390,7 @@ function MainApp({ auth }) {
             onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
         )}
         {view === "artisanProfile" && selectedArtisan && (
-          <ArtisanProfileView artisan={selectedArtisan} canRequest={!isArtisan} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
+          <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
         )}
         {view === "request" && selectedArtisan && (
           <RequestView artisan={selectedArtisan} openJobGroups={openGroups} onBack={() => setView("artisanProfile")}
@@ -367,12 +400,12 @@ function MainApp({ auth }) {
           <RequestSentView artisan={activeRequest.artisanProfile} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => openConversation(activeRequest.id)} />
         )}
         {view === "requestsList" && (
-          <RequestsListView requests={requests} isArtisan={isArtisan} onOpen={openConversation}
+          <RequestsListView requests={requests} user={user} onOpen={openConversation}
             onRespond={respondToRequest} />
         )}
-        {view === "messagesList" && <MessagesListView requests={requests} onOpen={openConversation} />}
+        {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={openConversation} />}
         {view === "conversation" && activeRequest && (
-          <ConversationView request={activeRequest} messages={messages} isArtisan={isArtisan}
+          <ConversationView request={activeRequest} messages={messages} user={user}
             onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
             onSend={(text) => sendMessage(activeRequest.id, text)}
             onConfirm={() => confirmRequest(activeRequest.id)}
@@ -382,7 +415,10 @@ function MainApp({ auth }) {
         )}
         {view === "userProfile" && (
           <UserProfileView user={user} isArtisan={isArtisan} application={application}
-            onApply={applyAsArtisan} onToggleOnline={toggleOnline} onLogout={logout} onBrowse={() => goNav("browse")} />
+            incomingCount={requests.filter((r) => r.status === "PENDING").length}
+            onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge}
+            onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
+            onLogout={logout} onBrowse={() => goNav("browse")} onViewRequests={() => goNav("requests")} />
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
@@ -393,7 +429,7 @@ function MainApp({ auth }) {
 }
 
 /* ---------------- Home ---------------- */
-function HomeView({ user, isArtisan, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onLogout }) {
+function HomeView({ user, isArtisan, requests, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onLogout }) {
   return (
     <div className="screen">
       <div className="topbar">
@@ -403,39 +439,51 @@ function HomeView({ user, isArtisan, area, setArea, query, setQuery, onlineNow, 
           <button className="iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
         </div>
       </div>
-      {!isArtisan && (
-        <>
-          <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-          <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
-          <div className="section">
-            <div className="section-head"><span>Online now</span></div>
-            <div className="status-row">
-              {onlineNow.map((a) => (
-                <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
-                  <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
-                  <div className="status-name">{a.user.name.split(" ")[0]}</div>
-                </button>
-              ))}
-              {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
+      {isArtisan && user.artisanProfile && (
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="dash-card">
+            <div className="dash-header">
+              <div className="avatar avatar--lg" style={{ background: colorFor(user.id) }}>{initials(user.name)}</div>
+              <div className="dash-header-text">
+                <div className="dash-name">{user.name}</div>
+                <div className="app-trade">{tradeLabel(user.artisanProfile.trade)} · {user.artisanProfile.area}</div>
+                <span className="badge" style={{ marginTop: 6 }}>{user.artisanProfile.badge === "TOP_RATED" ? <><Award size={11} /> Top Rated</> : <><CheckCircle2 size={11} /> Vetted</>}</span>
+              </div>
+            </div>
+            <div className="dash-stats">
+              <div className="dash-stat"><div className="dash-stat-num">{fmtStars(user.artisanProfile.rating)}</div><div className="dash-stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
+              <div className="dash-stat"><div className="dash-stat-num">{user.artisanProfile.jobsCompleted}</div><div className="dash-stat-label">Jobs done</div></div>
+              <div className="dash-stat"><div className="dash-stat-num">{requests.filter((r) => r.status === "PENDING").length}</div><div className="dash-stat-label">New requests</div></div>
             </div>
           </div>
-          <div className="section">
-            <div className="section-head"><span>Browse a trade</span></div>
-            <div className="trade-grid">
-              {trades.map((t) => { const I = t.icon; return (
-                <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
-              ); })}
-            </div>
-          </div>
-          <div className="section section--flush">
-            <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
-            <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
-          </div>
-        </>
+        </div>
       )}
-      {isArtisan && (
-        <div className="section"><div className="info-note">You're logged in as an artisan. Use the Requests tab to see incoming jobs, and Profile to go online/offline.</div></div>
-      )}
+      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+      <div className="section">
+        <div className="section-head"><span>Online now</span></div>
+        <div className="status-row">
+          {onlineNow.map((a) => (
+            <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
+              <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
+              <div className="status-name">{a.user.name.split(" ")[0]}</div>
+            </button>
+          ))}
+          {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
+        </div>
+      </div>
+      <div className="section">
+        <div className="section-head"><span>Browse a trade</span></div>
+        <div className="trade-grid">
+          {trades.map((t) => { const I = t.icon; return (
+            <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
+          ); })}
+        </div>
+      </div>
+      <div className="section section--flush">
+        <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
+        <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
+      </div>
     </div>
   );
 }
@@ -489,6 +537,12 @@ function ArtisanProfileView({ artisan, canRequest, onBack, onRequest }) {
         <div className="stat"><div className="stat-num">{artisan.jobsCompleted}</div><div className="stat-label">Completed jobs</div></div>
       </div>
       <div className="section"><div className="section-head"><span>About</span></div><p className="bio">{artisan.bio}</p></div>
+      {artisan.photos && artisan.photos.length > 0 && (
+        <div className="section">
+          <div className="section-head"><span>Recent work</span></div>
+          <div className="work-row">{artisan.photos.map((p) => <img key={p.id} src={p.url} className="work-tile" style={{ objectFit: "cover" }} />)}</div>
+        </div>
+      )}
       {canRequest && <button className="primary-btn primary-btn--fixed" onClick={onRequest}>Request {artisan.user.name.split(" ")[0]}</button>}
     </div>
   );
@@ -557,26 +611,27 @@ function statusMeta(status) {
   return map[status] || { label: status, cls: "" };
 }
 
-function RequestsListView({ requests, isArtisan, onOpen, onRespond }) {
+function RequestsListView({ requests, user, onOpen, onRespond }) {
   return (
     <div className="screen">
-      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>{isArtisan ? "Incoming requests" : "Your requests"}</div></div>
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Your requests</div></div>
       <div className="feed feed--scroll">
-        {requests.length === 0 && <div className="empty"><div className="empty-title">Nothing yet</div><div className="empty-sub">{isArtisan ? "New requests from students show up here." : "When you request an artisan, it'll show up here."}</div></div>}
+        {requests.length === 0 && <div className="empty"><div className="empty-title">Nothing yet</div><div className="empty-sub">Requests you send or receive show up here.</div></div>}
         {requests.map((r) => {
-          const other = isArtisan ? r.student : r.artisanProfile.user;
+          const iAmArtisanSide = r.artisanProfile.user.id === user.id;
+          const other = iAmArtisanSide ? r.student : r.artisanProfile.user;
           const meta = statusMeta(r.status);
           return (
             <div key={r.id} className="req-card" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}>
               <button className="req-card" style={{ border: "none", padding: 0 }} onClick={() => onOpen(r.id)}>
                 <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(other.name)}</div>
                 <div className="req-main">
-                  <div className="req-top"><span className="req-name">{other.name}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
+                  <div className="req-top"><span className="req-name">{other.name}{iAmArtisanSide ? " (incoming)" : ""}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
                   <div className="req-job">{r.job}</div>
                   <div className="req-when">{r.when}</div>
                 </div>
               </button>
-              {isArtisan && r.status === "PENDING" && (
+              {iAmArtisanSide && r.status === "PENDING" && (
                 <div className="settle-actions">
                   <button className="ghost-btn" onClick={() => onRespond(r.id, "DECLINED")}>Decline</button>
                   <button className="settle-btn" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
@@ -591,15 +646,15 @@ function RequestsListView({ requests, isArtisan, onOpen, onRespond }) {
 }
 
 /* ---------------- Messages tab ---------------- */
-function MessagesListView({ requests, onOpen }) {
+function MessagesListView({ requests, user, onOpen }) {
   return (
     <div className="screen">
       <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Messages</div></div>
       <div className="feed feed--scroll">
         {requests.length === 0 && <div className="empty"><div className="empty-title">No conversations yet</div></div>}
         {requests.map((r) => {
-          const other = r.student ? (r.artisanProfile ? r.artisanProfile.user : null) : null;
-          const name = r.artisanProfile ? r.artisanProfile.user.name : (r.student ? r.student.name : "Unknown");
+          const iAmArtisanSide = r.artisanProfile.user.id === user.id;
+          const name = iAmArtisanSide ? r.student.name : r.artisanProfile.user.name;
           return (
             <button key={r.id} className="msg-row" onClick={() => onOpen(r.id)}>
               <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(name)}</div>
@@ -616,7 +671,7 @@ function MessagesListView({ requests, onOpen }) {
 }
 
 /* ---------------- Conversation ---------------- */
-function ConversationView({ request, messages, isArtisan, onBack, onSend, onConfirm, onComplete, onReport, onRespond }) {
+function ConversationView({ request, messages, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
@@ -624,7 +679,8 @@ function ConversationView({ request, messages, isArtisan, onBack, onSend, onConf
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
   const meta = statusMeta(request.status);
-  const other = isArtisan ? request.student : request.artisanProfile.user;
+  const iAmArtisanSide = request.artisanProfile.user.id === user.id;
+  const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
   const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
 
   return (
@@ -638,10 +694,10 @@ function ConversationView({ request, messages, isArtisan, onBack, onSend, onConf
 
       <div className="convo-messages">
         {messages.map((m) => (
-          <div key={m.id} className={"bubble-row " + (m.senderType === "SYSTEM" ? "bubble-row--sys" : (isArtisan ? m.senderType === "ARTISAN" : m.senderType === "STUDENT") ? "bubble-row--me" : "bubble-row--them")}>
+          <div key={m.id} className={"bubble-row " + (m.senderType === "SYSTEM" ? "bubble-row--sys" : m.senderId === user.id ? "bubble-row--me" : "bubble-row--them")}>
             {m.senderType === "SYSTEM"
               ? <div className="bubble-sys">{m.text}</div>
-              : <div className={"bubble " + ((isArtisan ? m.senderType === "ARTISAN" : m.senderType === "STUDENT") ? "bubble--me" : "bubble--them")}>{m.text}</div>}
+              : <div className={"bubble " + (m.senderId === user.id ? "bubble--me" : "bubble--them")}>{m.text}</div>}
           </div>
         ))}
         {request.status === "COMPLETED" && request.rating && (
@@ -650,14 +706,14 @@ function ConversationView({ request, messages, isArtisan, onBack, onSend, onConf
         <div ref={bottomRef} />
       </div>
 
-      {isArtisan && canAct && request.status === "PENDING" && (
+      {iAmArtisanSide && canAct && request.status === "PENDING" && (
         <div className="settle-actions" style={{ margin: "10px 16px 0" }}>
           <button className="ghost-btn" onClick={() => onRespond("DECLINED")}>Decline</button>
           <button className="settle-btn" onClick={() => onRespond("ACCEPTED")}>Accept</button>
         </div>
       )}
 
-      {!isArtisan && canAct && request.status === "ACCEPTED" && !confirming && (
+      {!iAmArtisanSide && canAct && request.status === "ACCEPTED" && !confirming && (
         <button className="action-btn" onClick={() => setConfirming(true)}>Confirm booking with {other.name.split(" ")[0]}</button>
       )}
       {confirming && (
@@ -670,12 +726,12 @@ function ConversationView({ request, messages, isArtisan, onBack, onSend, onConf
         </div>
       )}
 
-      {!isArtisan && canAct && request.status === "CONFIRMED" && !showComplete && (
+      {!iAmArtisanSide && canAct && request.status === "CONFIRMED" && !showComplete && (
         <button className="action-btn" onClick={() => setShowComplete(true)}>Mark job complete & rate</button>
       )}
       {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t) => { onComplete(r, t); setShowComplete(false); }} />}
 
-      {!isArtisan && canAct && !showReport && (
+      {!iAmArtisanSide && canAct && !showReport && (
         <button className="report-link" onClick={() => setShowReport(true)}><Flag size={13} /> Report a problem</button>
       )}
       {showReport && <ReportForm onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
@@ -725,11 +781,35 @@ function ReportForm({ onCancel, onSubmit }) {
 }
 
 /* ---------------- Profile ---------------- */
-function UserProfileView({ user, isArtisan, application, onApply, onToggleOnline, onLogout, onBrowse }) {
+// Converts a picked image file into a base64 data URL so it can be sent straight to the
+// backend as a plain string — no separate image hosting service needed for now.
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function UserProfileView({ user, isArtisan, application, incomingCount, onApply, onToggleOnline, onSetBadge, onAddPhoto, onRemovePhoto, onLogout, onBrowse, onViewRequests }) {
   const [showForm, setShowForm] = useState(false);
   const [trade, setTrade] = useState(trades[0].id);
   const [bio, setBio] = useState("");
-  const [online, setOnline] = useState(true);
+  const [photos, setPhotos] = useState([]); // data URLs
+  const [uploading, setUploading] = useState(false);
+  const [online, setOnline] = useState(user.artisanProfile ? user.artisanProfile.online : true);
+  const [confirmingVerify, setConfirmingVerify] = useState(false);
+
+  async function handlePhotoPick(e) {
+    const files = Array.from(e.target.files || []).slice(0, 4 - photos.length);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const dataUrls = await Promise.all(files.map(fileToDataUrl));
+      setPhotos((p) => [...p, ...dataUrls]);
+    } finally { setUploading(false); e.target.value = ""; }
+  }
 
   return (
     <div className="screen">
@@ -741,7 +821,7 @@ function UserProfileView({ user, isArtisan, application, onApply, onToggleOnline
         <div className="badge badge--lg" style={{ marginTop: 8 }}>{user.role}</div>
       </div>
 
-      {isArtisan && (
+      {isArtisan && user.artisanProfile && (
         <div className="section">
           <div className="section-head"><span>Your artisan tools</span></div>
           <div className="pending-card pending-card--approved">
@@ -749,7 +829,41 @@ function UserProfileView({ user, isArtisan, application, onApply, onToggleOnline
               <span>Available for jobs</span>
               <button className={"toggle" + (online ? " toggle--on" : "")} onClick={async () => { const updated = await onToggleOnline(!online); if (updated) setOnline(updated.online); }}><span className="toggle-knob" /></button>
             </div>
+            <button className="jobs-btn" onClick={onViewRequests}>
+              <ClipboardList size={15} /> View incoming requests
+              {incomingCount > 0 && <span className="nav-badge nav-badge--static">{incomingCount}</span>}
+            </button>
+            {user.artisanProfile.badge !== "TOP_RATED" && !confirmingVerify && (
+              <button className="verify-btn" onClick={() => setConfirmingVerify(true)}><Award size={15} /> Get Verified — Top Rated badge</button>
+            )}
+            {user.artisanProfile.badge !== "TOP_RATED" && confirmingVerify && (
+              <div className="inline-confirm">
+                <div className="inline-confirm-text">Top Rated puts you first in Browse and Online Now, plus a gold badge on your profile.</div>
+                <div className="settle-actions">
+                  <button className="ghost-btn" onClick={() => setConfirmingVerify(false)}>Cancel</button>
+                  <button className="settle-btn" onClick={() => { onSetBadge("TOP_RATED"); setConfirmingVerify(false); }}>Confirm</button>
+                </div>
+              </div>
+            )}
+            {user.artisanProfile.badge === "TOP_RATED" && <div className="verified-note"><Award size={14} /> You're a Top Rated verified artisan</div>}
           </div>
+          {user.artisanProfile.photos && (
+            <div className="photo-picker" style={{ marginTop: 10 }}>
+              {user.artisanProfile.photos.map((p) => (
+                <div key={p.id} style={{ position: "relative" }}>
+                  <img src={p.url} className="photo-thumb" style={{ objectFit: "cover" }} />
+                  <button onClick={() => onRemovePhoto(p.id)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "var(--danger)", color: "#fff", border: "2px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={11} /></button>
+                </div>
+              ))}
+              {user.artisanProfile.photos.length < 6 && (
+                <label className="photo-add" style={{ cursor: "pointer" }}>
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; if (f) onAddPhoto(await fileToDataUrl(f)); e.target.value = ""; }} />
+                  <Camera size={16} /> Add
+                </label>
+              )}
+            </div>
+          )}
+          <button className="browse-link" onClick={onBrowse}>Need a service yourself? Browse artisans <ChevronRight size={14} /></button>
         </div>
       )}
 
@@ -760,10 +874,21 @@ function UserProfileView({ user, isArtisan, application, onApply, onToggleOnline
           {!application && showForm && (
             <div className="form form--card">
               <label>Trade<select value={trade} onChange={(e) => setTrade(e.target.value)}>{trades.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
-              <label>Tell students about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="At least 10 characters…" /></label>
+              <label>Tell customers about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="At least 10 characters…" /></label>
+              <label>Photos of past work
+                <div className="photo-picker">
+                  {photos.map((p, i) => <img key={i} src={p} className="photo-thumb" style={{ objectFit: "cover" }} />)}
+                  {photos.length < 4 && (
+                    <label className="photo-add" style={{ cursor: uploading ? "wait" : "pointer" }}>
+                      <input type="file" accept="image/*" multiple onChange={handlePhotoPick} style={{ display: "none" }} disabled={uploading} />
+                      <Camera size={16} /> {uploading ? "…" : "Add"}
+                    </label>
+                  )}
+                </div>
+              </label>
               <div className="settle-actions">
                 <button className="ghost-btn" onClick={() => setShowForm(false)}><X size={14} /> Cancel</button>
-                <button className="settle-btn" disabled={bio.trim().length < 10} onClick={() => { onApply(trade, bio.trim()); setShowForm(false); }}>Submit for review</button>
+                <button className="settle-btn" disabled={bio.trim().length < 10} onClick={() => { onApply(trade, bio.trim(), photos); setShowForm(false); }}>Submit for review</button>
               </div>
             </div>
           )}
@@ -791,20 +916,13 @@ function UserProfileView({ user, isArtisan, application, onApply, onToggleOnline
 
 /* ---------------- Bottom nav ---------------- */
 function BottomNav({ active, onChange, isArtisan, requestCount }) {
-  const items = isArtisan
-    ? [
-        { id: "home", label: "Home", icon: Home },
-        { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
-        { id: "messages", label: "Messages", icon: MessageCircle },
-        { id: "profile", label: "Profile", icon: UserIcon },
-      ]
-    : [
-        { id: "home", label: "Home", icon: Home },
-        { id: "browse", label: "Browse", icon: Compass },
-        { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
-        { id: "messages", label: "Messages", icon: MessageCircle },
-        { id: "profile", label: "Profile", icon: UserIcon },
-      ];
+  const items = [
+    { id: "home", label: "Home", icon: Home },
+    { id: "browse", label: "Browse", icon: Compass },
+    { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
+    { id: "messages", label: "Messages", icon: MessageCircle },
+    { id: "profile", label: "Profile", icon: UserIcon },
+  ];
   return (
     <div className="bottomnav">
       {items.map((it) => { const I = it.icon; const isActive = active === it.id; return (
@@ -885,6 +1003,8 @@ function Style() {
       .stat-num { font-family:'Fraunces',serif; font-weight:600; font-size:18px; color:var(--primary); }
       .stat-label { font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:3px; justify-content:center; margin-top:2px; }
       .bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0; }
+      .work-row { display:flex; gap:8px; overflow-x:auto; }
+      .work-tile { flex:0 0 auto; width:88px; height:88px; border-radius:12px; background:var(--accent-bg); }
       .form { padding:16px; display:flex; flex-direction:column; gap:16px; flex:1; }
       .form label { font-size:13px; font-weight:600; color:var(--ink-soft); display:flex; flex-direction:column; gap:6px; }
       .form textarea, .form select, .text-input { border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px; font-family:inherit; color:var(--ink); resize:none; background:var(--surface); }
@@ -961,7 +1081,23 @@ function Style() {
       .toggle--on { background:var(--success); }
       .toggle-knob { display:block; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform 0.15s; }
       .toggle--on .toggle-knob { transform:translateX(18px); }
+      .jobs-btn { margin-top:12px; width:100%; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .verify-btn { margin-top:10px; width:100%; background:none; border:1px dashed var(--accent); color:var(--accent); border-radius:10px; padding:10px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .verified-note { margin-top:10px; text-align:center; font-size:12px; font-weight:700; color:var(--accent); display:flex; align-items:center; justify-content:center; gap:5px; }
+      .nav-badge--static { position:static; margin-left:2px; }
+      .photo-picker { display:flex; gap:8px; flex-wrap:wrap; }
+      .photo-thumb { width:56px; height:56px; border-radius:10px; background:var(--accent-bg); }
+      .photo-add { width:56px; height:56px; border-radius:10px; border:1px dashed var(--line); background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:9px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
       .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
+      .dash-card { background:linear-gradient(155deg, var(--surface) 0%, #FBF8F0 100%); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 10px 24px -18px rgba(30,27,22,0.35); }
+      .dash-header { display:flex; align-items:center; gap:14px; }
+      .dash-header-text { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; }
+      .dash-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; color:var(--ink); }
+      .dash-stats { display:flex; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+      .dash-stat { flex:1; text-align:center; position:relative; }
+      .dash-stat:not(:last-child)::after { content:""; position:absolute; right:0; top:2px; bottom:2px; width:1px; background:var(--line); }
+      .dash-stat-num { font-family:'Fraunces',serif; font-weight:700; font-size:19px; color:var(--primary); }
+      .dash-stat-label { font-size:10.5px; color:var(--ink-soft); margin-top:3px; display:flex; align-items:center; justify-content:center; gap:3px; }
       .settings-list { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
       .settings-row { display:flex; align-items:center; gap:10px; padding:14px 16px; font-size:13.5px; font-weight:500; border-bottom:1px solid var(--line); color:var(--ink); }
       .settings-row:last-child { border-bottom:none; }
