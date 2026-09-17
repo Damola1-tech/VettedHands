@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VettedHands</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useRef, useEffect } = React;
+
+/* ============ CONFIG ============ */
+const API_BASE = "https://vettedhands-backend.onrender.com";
+
+/* ============ API HELPER ============ */
+// Talks to the real backend. Throws an Error with a readable message on failure.
+async function api(path, { method = "GET", body, token } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* no body */ }
+  if (!res.ok) {
+    throw new Error((data && data.error) || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+/* ============ SVG ICON SYSTEM ============ */
+const ICON_PATHS = {
+  search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
+  mapPin: <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>,
+  star: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>,
+  checkCircle2: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
+  arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+  zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+  droplet: <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>,
+  scissors: <><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></>,
+  smartphone: <><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>,
+  clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+  chevronRight: <polyline points="9 18 15 12 9 6"/>,
+  send: <polygon points="22 2 15 22 11 13 2 9 22 2"/>,
+  flag: <><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></>,
+  home: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
+  compass: <><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></>,
+  clipboardList: <><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-5"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>,
+  messageCircle: <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>,
+  user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+  logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+  shieldCheck: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>,
+  hammer: <><path d="M15 12l-8.5 8.5a2.12 2.12 0 1 1-3-3L12 9"/><path d="M17.64 15L22 10.64"/><path d="M20.91 11.7l-1.25-1.25c-.6-.6-.93-1.4-.93-2.25v-.86L16.01 4.6a5.56 5.56 0 0 0-3.94-1.64H9l.92.82A6.18 6.18 0 0 1 12 8.4v1.56l2 2h2.47l2.44 2.44"/></>,
+  x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+  award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+  camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+};
+function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, ...rest }) {
+  const shape = ICON_PATHS[name];
+  if (!shape) return null;
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill={fill} stroke={color || stroke} strokeWidth={strokeWidth}
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} {...rest}>
+      {shape}
+    </svg>
+  );
+}
+const Search = (p) => <Icon name="search" {...p} />;
+const Bell = (p) => <Icon name="bell" {...p} />;
+const MapPin = (p) => <Icon name="mapPin" {...p} />;
+const Star = (p) => <Icon name="star" {...p} />;
+const CheckCircle2 = (p) => <Icon name="checkCircle2" {...p} />;
+const ArrowLeft = (p) => <Icon name="arrowLeft" {...p} />;
+const Zap = (p) => <Icon name="zap" {...p} />;
+const Droplet = (p) => <Icon name="droplet" {...p} />;
+const Scissors = (p) => <Icon name="scissors" {...p} />;
+const Smartphone = (p) => <Icon name="smartphone" {...p} />;
+const Clock = (p) => <Icon name="clock" {...p} />;
+const ChevronRight = (p) => <Icon name="chevronRight" {...p} />;
+const Send = (p) => <Icon name="send" {...p} />;
+const Flag = (p) => <Icon name="flag" {...p} />;
+const Home = (p) => <Icon name="home" {...p} />;
+const Compass = (p) => <Icon name="compass" {...p} />;
+const ClipboardList = (p) => <Icon name="clipboardList" {...p} />;
+const MessageCircle = (p) => <Icon name="messageCircle" {...p} />;
+const UserIcon = (p) => <Icon name="user" {...p} />;
+const LogOut = (p) => <Icon name="logOut" {...p} />;
+const ShieldCheck = (p) => <Icon name="shieldCheck" {...p} />;
+const Hammer = (p) => <Icon name="hammer" {...p} />;
+const X = (p) => <Icon name="x" {...p} />;
+const Award = (p) => <Icon name="award" {...p} />;
+const Camera = (p) => <Icon name="camera" {...p} />;
+
+const trades = [
+  { id: "ELECTRICIAN", label: "Electrician", icon: Zap },
+  { id: "PLUMBER", label: "Plumber", icon: Droplet },
+  { id: "TAILOR", label: "Tailor", icon: Scissors },
+  { id: "PHONE_REPAIR", label: "Phone Repair", icon: Smartphone },
+];
+const areas = ["All areas", "Main Gate", "Fanuyi", "Odo-Ado", "Ureju"];
+const reportReasons = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
+
+function initials(name = "") { return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(); }
+function colorFor(id = "") { const palette = ["#1F3A34", "#B5651D", "#2E534B"]; let h = 0; for (const c of id) h += c.charCodeAt(0); return palette[h % palette.length]; }
+function tradeLabel(t) { const found = trades.find((x) => x.id === t); return found ? found.label : t; }
+function fmtStars(n) { return Number(n || 0).toFixed(1); }
+
+/* ============ AUTH ============ */
+function useAuth() {
+  const [token, setToken] = useState(() => localStorage.getItem("vh_token") || null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(!!token);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!token) { setLoading(false); return; }
+    api("/api/auth/me", { token })
+      .then((d) => setUser(d.user))
+      .catch(() => { localStorage.removeItem("vh_token"); setToken(null); })
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  async function login(email, password) {
+    setError(null);
+    const d = await api("/api/auth/login", { method: "POST", body: { email, password } });
+    localStorage.setItem("vh_token", d.token);
+    setToken(d.token);
+    setUser(d.user);
+  }
+  async function register(name, email, password, area) {
+    setError(null);
+    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area } });
+    localStorage.setItem("vh_token", d.token);
+    setToken(d.token);
+    setUser(d.user);
+  }
+  function logout() {
+    localStorage.removeItem("vh_token");
+    setToken(null);
+    setUser(null);
+  }
+  return { token, user, setUser, loading, error, login, register, logout };
+}
+
+function AuthScreen({ onLogin, onRegister }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [area, setArea] = useState(areas[1]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr(null); setBusy(true);
+    try {
+      if (mode === "login") await onLogin(email.trim(), password);
+      else await onRegister(name.trim(), email.trim(), password, area);
+    } catch (ex) {
+      setErr(ex.message);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="screen screen--center">
+      <Style />
+      <div className="brand-mark" style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 14 }}><CheckCircle2 size={22} /></div>
+      <div className="sent-title">{mode === "login" ? "Log in to VettedHands" : "Create your account"}</div>
+      <form className="form" style={{ width: "100%", maxWidth: 320 }} onSubmit={submit}>
+        {mode === "register" && (
+          <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} className="text-input" placeholder="Your name" /></label>
+        )}
+        <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="text-input" placeholder="you@example.com" /></label>
+        <label>Password<input required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="text-input" placeholder="At least 6 characters" /></label>
+        {mode === "register" && (
+          <label>Area<select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
+        )}
+        {err && <div className="info-note" style={{ background: "#F3E1DC", color: "#A8402D" }}>{err}</div>}
+        <button className="primary-btn" style={{ margin: 0 }} disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}</button>
+      </form>
+      <button className="browse-link" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+        {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
+      </button>
+      <div className="form-note" style={{ marginTop: 14, fontSize: 11, color: "var(--ink-soft)", textAlign: "center" }}>
+        New accounts start as customers. To offer services, log in and apply as an artisan from your Profile tab.
+      </div>
+    </div>
+  );
+}
+
+/* ============ APP ============ */
+function App() {
+  const auth = useAuth();
+
+  if (auth.loading) return <div className="app"><Style /><div className="phone"><div className="screen screen--center">Loading…</div></div></div>;
+  if (!auth.token || !auth.user) return <div className="app"><AuthScreen onLogin={auth.login} onRegister={auth.register} /></div>;
+
+  return (
+    <div className="app">
+      <Style />
+      <div className="phone">
+        <MainApp auth={auth} />
+      </div>
+    </div>
+  );
+}
+
+function MainApp({ auth }) {
+  const { user, token, logout, setUser } = auth;
+  const isArtisan = user.role === "ARTISAN";
+  const isAdmin = user.role === "ADMIN";
+
+  const [view, setView] = useState("home");
+  const [navTab, setNavTab] = useState("home");
+  const [selectedArtisan, setSelectedArtisan] = useState(null);
+  const [area, setArea] = useState("All areas");
+  const [query, setQuery] = useState("");
+  const [tradeFilter, setTradeFilter] = useState(null);
+  const [activeRequestId, setActiveRequestId] = useState(null);
+  const [prefillJob, setPrefillJob] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const [artisans, setArtisans] = useState([]);
+  const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
+  const [openGroups, setOpenGroups] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [application, setApplication] = useState(null);
+
+  function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
+  function fail(err) { flash(err.message || "Something went wrong"); }
+
+  async function loadArtisans() {
+    try {
+      const qs = new URLSearchParams();
+      if (tradeFilter) qs.set("trade", tradeFilter);
+      if (area !== "All areas") qs.set("area", area);
+      if (query.trim()) qs.set("q", query.trim());
+      const d = await api(`/api/artisans?${qs.toString()}`);
+      setArtisans(d.artisans);
+    } catch (e) { fail(e); }
+  }
+  async function loadRequests() {
+    try {
+      if (isArtisan) {
+        const [incomingRes, mineRes] = await Promise.all([
+          api("/api/requests/incoming", { token }),
+          api("/api/requests/mine", { token }),
+        ]);
+        const merged = [...incomingRes.requests, ...mineRes.requests]
+          .filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setRequests(merged);
+      } else {
+        const d = await api("/api/requests/mine", { token });
+        setRequests(d.requests);
+      }
+    } catch (e) { fail(e); }
+  }
+  async function loadOpenGroups() {
+    try { const d = await api("/api/requests/open-groups", { token }); setOpenGroups(d.groups); } catch (e) { /* ignore */ }
+  }
+  async function loadApplication() {
+    if (isArtisan || isAdmin) return;
+    try { const d = await api("/api/applications/me", { token }); setApplication(d.application); }
+    catch (e) { setApplication(null); }
+  }
+
+  useEffect(() => { loadArtisans(); }, [tradeFilter, area, query]);
+  useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); }, []);
+
+  const onlineNow = artisans.filter((a) => a.online);
+  const activeRequest = requests.find((r) => r.id === activeRequestId);
+
+  function openArtisanProfile(a) { setSelectedArtisan(a); setView("artisanProfile"); }
+  function goNav(tab) {
+    setNavTab(tab);
+    if (tab === "home") setView("home");
+    else if (tab === "browse") { setTradeFilter(null); setView("browse"); }
+    else if (tab === "requests") { loadRequests(); setView("requestsList"); }
+    else if (tab === "messages") { loadRequests(); setView("messagesList"); }
+    else setView("userProfile");
+  }
+
+  async function sendRequest(artisanProfileId, job, when, jobGroupId) {
+    try {
+      const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined } });
+      setRequests((prev) => [d.request, ...prev]);
+      setActiveRequestId(d.request.id);
+      setView("requestSent");
+    } catch (e) { fail(e); }
+  }
+  async function openConversation(requestId) {
+    setActiveRequestId(requestId);
+    setView("conversation");
+    try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); } catch (e) { fail(e); }
+  }
+  async function sendMessage(requestId, text) {
+    try {
+      const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
+      setMessages((prev) => [...prev, d.message]);
+    } catch (e) { fail(e); }
+  }
+  async function respondToRequest(requestId, status) {
+    try {
+      const d = await api(`/api/requests/${requestId}/status`, { method: "PATCH", token, body: { status } });
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
+    } catch (e) { fail(e); }
+  }
+  async function confirmRequest(requestId) {
+    try {
+      const d = await api(`/api/requests/${requestId}/confirm`, { method: "PATCH", token });
+      await loadRequests();
+      setMessages((prev) => [...prev]);
+      flash("Booking confirmed");
+      return d;
+    } catch (e) { fail(e); }
+  }
+  async function completeRequest(requestId, rating, reviewText) {
+    try {
+      const d = await api(`/api/requests/${requestId}/complete`, { method: "PATCH", token, body: { rating, reviewText } });
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
+      flash("Job marked complete");
+    } catch (e) { fail(e); }
+  }
+  async function reportRequest(requestId, reason, note) {
+    try {
+      await api(`/api/requests/${requestId}/report`, { method: "POST", token, body: { reason, note } });
+      flash("Reported to VettedHands");
+    } catch (e) { fail(e); }
+  }
+  async function toggleOnline(next) {
+    try {
+      const d = await api("/api/artisans/me/online", { method: "PATCH", token, body: { online: next } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: d.artisan.online } }));
+      flash(next ? "You're online" : "You're offline");
+      return d.artisan;
+    } catch (e) { fail(e); }
+  }
+  async function setBadge(badge) {
+    try {
+      const d = await api("/api/artisans/me/badge", { method: "PATCH", token, body: { badge } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, badge: d.artisan.badge } }));
+      flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
+    } catch (e) { fail(e); }
+  }
+  async function applyAsArtisan(trade, bio, photos, phone, socialHandle) {
+    try {
+      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined } });
+      setApplication(d.application);
+      flash("Application submitted for review");
+    } catch (e) { fail(e); }
+  }
+  async function addArtisanPhoto(url) {
+    try {
+      const d = await api("/api/artisans/me/photos", { method: "POST", token, body: { url } });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, photos: [...(u.artisanProfile.photos || []), d.photo] } }));
+    } catch (e) { fail(e); }
+  }
+  async function removeArtisanPhoto(photoId) {
+    try {
+      await api(`/api/artisans/me/photos/${photoId}`, { method: "DELETE", token });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, photos: u.artisanProfile.photos.filter((p) => p.id !== photoId) } }));
+    } catch (e) { fail(e); }
+  }
+
+  return (
+    <>
+      <div className="content">
+        {view === "home" && (
+          <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
+            requests={requests}
+            onlineNow={onlineNow} filtered={artisans} onOpenProfile={openArtisanProfile}
+            onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
+            onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
+            onOpenWizard={() => setView("wizard")}
+            onLogout={logout} />
+        )}
+        {view === "wizard" && (
+          <RequestWizardView onBack={() => { setView("home"); setNavTab("home"); }}
+            onSelectArtisan={(a, problem) => { setPrefillJob(problem); openArtisanProfile(a); }} />
+        )}
+        {view === "browse" && (
+          <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
+            area={area} setArea={setArea} filtered={artisans}
+            onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
+        )}
+        {view === "artisanProfile" && selectedArtisan && (
+          <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
+        )}
+        {view === "request" && selectedArtisan && (
+          <RequestView artisan={selectedArtisan} openJobGroups={openGroups} initialJob={prefillJob} onBack={() => setView("artisanProfile")}
+            onSend={(job, when, gId) => { sendRequest(selectedArtisan.id, job, when, gId); setPrefillJob(""); }} />
+        )}
+        {view === "requestSent" && activeRequest && (
+          <RequestSentView artisan={activeRequest.artisanProfile} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => openConversation(activeRequest.id)} />
+        )}
+        {view === "requestsList" && (
+          <RequestsListView requests={requests} user={user} onOpen={openConversation}
+            onRespond={respondToRequest} />
+        )}
+        {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={openConversation} />}
+        {view === "conversation" && activeRequest && (
+          <ConversationView request={activeRequest} messages={messages} user={user}
+            onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
+            onSend={(text) => sendMessage(activeRequest.id, text)}
+            onConfirm={() => confirmRequest(activeRequest.id)}
+            onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
+            onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)}
+            onRespond={(status) => respondToRequest(activeRequest.id, status)} />
+        )}
+        {view === "userProfile" && (
+          <UserProfileView user={user} isArtisan={isArtisan} application={application}
+            incomingCount={requests.filter((r) => r.status === "PENDING").length}
+            onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge}
+            onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
+            onLogout={logout} onBrowse={() => goNav("browse")} onViewRequests={() => goNav("requests")} />
+        )}
+      </div>
+      <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} />
+      {toast && <div className="toast">{toast}</div>}
+    </>
+  );
+}
+
+/* ---------------- Home ---------------- */
+function HomeView({ user, isArtisan, requests, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onLogout }) {
+  return (
+    <div className="screen">
+      <div className="topbar">
+        <div className="brand"><span className="brand-mark"><CheckCircle2 size={16} /></span><span className="brand-name">VettedHands</span></div>
+        <div className="topbar-icons">
+          <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>Hi, {user.name.split(" ")[0]}</span>
+          <button className="iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
+        </div>
+      </div>
+      <button className="wizard-cta" onClick={onOpenWizard}>
+        <span className="wizard-cta-q">What do you need help with?</span>
+        <span className="wizard-cta-sub">Tell us the problem, we'll match you with a vetted artisan nearby</span>
+      </button>
+      {isArtisan && user.artisanProfile && (
+        <div className="section" style={{ marginTop: 12 }}>
+          <div className="dash-card">
+            <div className="dash-header">
+              <div className="avatar avatar--lg" style={{ background: colorFor(user.id) }}>{initials(user.name)}</div>
+              <div className="dash-header-text">
+                <div className="dash-name">{user.name}</div>
+                <div className="app-trade">{tradeLabel(user.artisanProfile.trade)} · {user.artisanProfile.area}</div>
+                <span className="badge" style={{ marginTop: 6 }}>{user.artisanProfile.badge === "TOP_RATED" ? <><Award size={11} /> Top Rated</> : <><CheckCircle2 size={11} /> Vetted</>}</span>
+              </div>
+            </div>
+            <div className="dash-stats">
+              <div className="dash-stat"><div className="dash-stat-num">{fmtStars(user.artisanProfile.rating)}</div><div className="dash-stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
+              <div className="dash-stat"><div className="dash-stat-num">{user.artisanProfile.jobsCompleted}</div><div className="dash-stat-label">Jobs done</div></div>
+              <div className="dash-stat"><div className="dash-stat-num">{requests.filter((r) => r.status === "PENDING").length}</div><div className="dash-stat-label">New requests</div></div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+      <div className="section">
+        <div className="section-head"><span>Online now</span></div>
+        <div className="status-row">
+          {onlineNow.map((a) => (
+            <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
+              <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
+              <div className="status-name">{a.user.name.split(" ")[0]}</div>
+            </button>
+          ))}
+          {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
+        </div>
+      </div>
+      <div className="section">
+        <div className="section-head"><span>Browse a trade</span></div>
+        <div className="trade-grid">
+          {trades.map((t) => { const I = t.icon; return (
+            <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
+          ); })}
+        </div>
+      </div>
+      <div className="section section--flush">
+        <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
+        <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Browse ---------------- */
+function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setArea, filtered, onBack, onOpenProfile }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Browse artisans</div><div style={{ width: 34 }} /></div>
+      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+      <div className="chip-row">
+        <button className={"chip" + (!tradeFilter ? " chip--active" : "")} onClick={() => setTradeFilter(null)}>All trades</button>
+        {trades.map((t) => <button key={t.id} className={"chip" + (tradeFilter === t.id ? " chip--active" : "")} onClick={() => setTradeFilter(t.id)}>{t.label}</button>)}
+      </div>
+      <div className="area-row area-row--pad"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
+      <div className="feed feed--scroll">
+        {filtered.length === 0 && <div className="empty"><div className="empty-title">No one matches yet</div><div className="empty-sub">Try a different area or trade.</div></div>}
+        {filtered.map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}
+      </div>
+    </div>
+  );
+}
+
+function ArtisanCard({ artisan, onOpen }) {
+  return (
+    <button className="acard" onClick={onOpen}>
+      <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: colorFor(artisan.id) }}>{initials(artisan.user.name)}</div><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} /></div>
+      <div className="acard-main">
+        <div className="acard-top"><span className="acard-name">{artisan.user.name}</span><span className="badge"><CheckCircle2 size={11} /> {artisan.badge === "TOP_RATED" ? "Top Rated" : "Vetted"}</span></div>
+        <div className="acard-trade">{tradeLabel(artisan.trade)} · {artisan.area}</div>
+        <div className="acard-meta"><span><Star size={12} fill="#B5651D" stroke="none" /> {fmtStars(artisan.rating)}</span><span className="dot-sep">·</span><span>{artisan.jobsCompleted} jobs</span></div>
+      </div>
+    </button>
+  );
+}
+
+/* ---------------- Artisan profile ---------------- */
+function ArtisanProfileView({ artisan, canRequest, onBack, onRequest }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Profile</div><div style={{ width: 34 }} /></div>
+      <div className="profile-hero">
+        <div className="avatar avatar--lg" style={{ background: colorFor(artisan.id) }}>{initials(artisan.user.name)}</div>
+        <div className="profile-name">{artisan.user.name}</div>
+        <div className="profile-trade">{tradeLabel(artisan.trade)} · {artisan.area}</div>
+        <div className="profile-status"><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} />{artisan.online ? "Online now" : "Offline"}</div>
+        <div className="badge badge--lg"><CheckCircle2 size={13} /> {artisan.badge === "TOP_RATED" ? "Top Rated" : "Vetted"} by VettedHands</div>
+      </div>
+      <div className="stat-row">
+        <div className="stat"><div className="stat-num">{fmtStars(artisan.rating)}</div><div className="stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
+        <div className="stat"><div className="stat-num">{artisan.jobsCompleted}</div><div className="stat-label">Completed jobs</div></div>
+      </div>
+      <div className="section"><div className="section-head"><span>About</span></div><p className="bio">{artisan.bio}</p></div>
+      {artisan.photos && artisan.photos.length > 0 && (
+        <div className="section">
+          <div className="section-head"><span>Recent work</span></div>
+          <div className="work-row">{artisan.photos.map((p) => <img key={p.id} src={p.url} className="work-tile" style={{ objectFit: "cover" }} />)}</div>
+        </div>
+      )}
+      {canRequest && <button className="primary-btn primary-btn--fixed" onClick={onRequest}>Request {artisan.user.name.split(" ")[0]}</button>}
+    </div>
+  );
+}
+
+/* ---------------- Request wizard ---------------- */
+function RequestWizardView({ onBack, onSelectArtisan }) {
+  const [step, setStep] = useState(1); // 1 trade, 2 problem, 3 area, 4 results
+  const [trade, setTrade] = useState(null);
+  const [problem, setProblem] = useState("");
+  const [area, setArea] = useState(areas[1]);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  async function runSearch() {
+    setLoading(true);
+    try {
+      const qs = new URLSearchParams({ trade, area });
+      const d = await api(`/api/artisans?${qs.toString()}`);
+      setResults(d.artisans);
+    } catch (e) { setResults([]); }
+    finally { setLoading(false); setSearched(true); }
+  }
+
+  function back() { if (step === 1) onBack(); else setStep(step - 1); }
+
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={back}><ArrowLeft size={18} /></button><div className="topbar-title">Get help</div><div style={{ width: 34 }} /></div>
+
+      {step === 1 && (
+        <div className="section" style={{ marginTop: 10 }}>
+          <div className="wizard-question">What do you need help with?</div>
+          <div className="trade-grid" style={{ marginTop: 14 }}>
+            {trades.map((t) => { const I = t.icon; return (
+              <button key={t.id} className="trade-tile" onClick={() => { setTrade(t.id); setStep(2); }}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
+            ); })}
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="form">
+          <div className="wizard-question">What's the problem?</div>
+          <textarea rows={4} value={problem} onChange={(e) => setProblem(e.target.value)} placeholder="e.g. My phone isn't charging" />
+          <button className="primary-btn" style={{ margin: 0 }} disabled={problem.trim().length < 3} onClick={() => setStep(3)}>Next</button>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="form">
+          <div className="wizard-question">Where are you?</div>
+          <select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select>
+          <button className="primary-btn" style={{ margin: 0 }} onClick={() => { setStep(4); runSearch(); }}>Find artisans</button>
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="feed feed--scroll">
+          <div className="wizard-question" style={{ marginBottom: 10 }}>Available {tradeLabel(trade).toLowerCase()}s near {area}</div>
+          {loading && <div className="empty"><div className="empty-title">Searching…</div></div>}
+          {!loading && searched && results.length === 0 && <div className="empty"><div className="empty-title">No one matches yet</div><div className="empty-sub">Try a different area.</div></div>}
+          {!loading && results.map((a) => (
+            <div key={a.id} className="acard" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+              <div style={{ display: "flex", gap: 12 }}>
+                <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div><span className={"dot " + (a.online ? "dot--online" : "dot--offline")} /></div>
+                <div className="acard-main">
+                  <div className="acard-top"><span className="acard-name">{a.user.name}</span><span className="badge"><CheckCircle2 size={11} /> {a.badge === "TOP_RATED" ? "Top Rated" : "Vetted"}</span></div>
+                  <div className="acard-trade">{a.online ? "Online now" : "Offline"} · {a.area}</div>
+                  <div className="acard-meta"><span><Star size={12} fill="#B5651D" stroke="none" /> {fmtStars(a.rating)}</span><span className="dot-sep">·</span><span>{a.jobsCompleted} jobs</span></div>
+                </div>
+              </div>
+              <button className="settle-btn" onClick={() => onSelectArtisan(a, problem.trim())}>Request {a.user.name.split(" ")[0]}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Request ---------------- */
+function RequestView({ artisan, openJobGroups, initialJob, onBack, onSend }) {
+  const [mode, setMode] = useState("new");
+  const [job, setJob] = useState(initialJob || "");
+  const [when, setWhen] = useState("");
+  const attaching = mode !== "new";
+  const attachedGroup = attaching ? openJobGroups.find((g) => g.jobGroupId === mode) : null;
+  const valid = attaching ? true : job.trim() && when;
+
+  return (
+    <div className="screen">
+      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Request · {artisan.user.name.split(" ")[0]}</div><div style={{ width: 34 }} /></div>
+      <div className="form">
+        {openJobGroups.length > 0 && (
+          <label>Is this for a job you're already comparing quotes on?
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="new">No, this is a new job</option>
+              {openJobGroups.map((g) => <option key={g.jobGroupId} value={g.jobGroupId}>Same as: "{g.job.slice(0, 34)}{g.job.length > 34 ? "…" : ""}"</option>)}
+            </select>
+          </label>
+        )}
+        {attaching ? (
+          <div className="info-note">Comparing {artisan.user.name.split(" ")[0]} against your other request for: <strong>"{attachedGroup.job}"</strong> ({attachedGroup.when}). Confirming one closes the others automatically.</div>
+        ) : (
+          <>
+            <label>What do you need done?<textarea rows={3} value={job} onChange={(e) => setJob(e.target.value)} placeholder="e.g. Fan not turning on, socket in room sparking" /></label>
+            <label>When<select value={when} onChange={(e) => setWhen(e.target.value)}><option value="">Select a time</option><option>As soon as possible</option><option>Later today</option><option>Tomorrow</option><option>This week</option></select></label>
+          </>
+        )}
+      </div>
+      <button className="primary-btn primary-btn--fixed" disabled={!valid}
+        onClick={() => valid && onSend(attaching ? attachedGroup.job : job.trim(), attaching ? attachedGroup.when : when, attaching ? attachedGroup.jobGroupId : null)}>
+        Send request
+      </button>
+    </div>
+  );
+}
+
+function RequestSentView({ artisan, onDone, onMessage }) {
+  return (
+    <div className="screen screen--center">
+      <div className="sent-icon"><CheckCircle2 size={40} /></div>
+      <div className="sent-title">Request sent to {artisan.user.name}</div>
+      <div className="sent-sub">You'll be notified once they respond.</div>
+      <button className="primary-btn" onClick={onMessage}>Open conversation</button>
+      <button className="ghost-btn ghost-btn--wide" onClick={onDone}>Back to home</button>
+    </div>
+  );
+}
+
+/* ---------------- Requests tab ---------------- */
+function statusMeta(status) {
+  const map = {
+    PENDING: { label: "Pending", cls: "badge--pending" },
+    ACCEPTED: { label: "Accepted", cls: "badge--accepted" },
+    CONFIRMED: { label: "Confirmed", cls: "badge--confirmed" },
+    COMPLETED: { label: "Completed", cls: "badge--completed" },
+    CLOSED: { label: "Closed", cls: "badge--closed" },
+    DECLINED: { label: "Declined", cls: "badge--declined" },
+  };
+  return map[status] || { label: status, cls: "" };
+}
+
+function RequestsListView({ requests, user, onOpen, onRespond }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Your requests</div></div>
+      <div className="feed feed--scroll">
+        {requests.length === 0 && <div className="empty"><div className="empty-title">Nothing yet</div><div className="empty-sub">Requests you send or receive show up here.</div></div>}
+        {requests.map((r) => {
+          const iAmArtisanSide = r.artisanProfile.user.id === user.id;
+          const other = iAmArtisanSide ? r.student : r.artisanProfile.user;
+          const meta = statusMeta(r.status);
+          return (
+            <div key={r.id} className="req-card" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+              <button className="req-card" style={{ border: "none", padding: 0 }} onClick={() => onOpen(r.id)}>
+                <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(other.name)}</div>
+                <div className="req-main">
+                  <div className="req-top"><span className="req-name">{other.name}{iAmArtisanSide ? " (incoming)" : ""}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
+                  <div className="req-job">{r.job}</div>
+                  <div className="req-when">{r.when}</div>
+                </div>
+              </button>
+              {iAmArtisanSide && r.status === "PENDING" && (
+                <div className="settle-actions">
+                  <button className="ghost-btn" onClick={() => onRespond(r.id, "DECLINED")}>Decline</button>
+                  <button className="settle-btn" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Messages tab ---------------- */
+function MessagesListView({ requests, user, onOpen }) {
+  return (
+    <div className="screen">
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Messages</div></div>
+      <div className="feed feed--scroll">
+        {requests.length === 0 && <div className="empty"><div className="empty-title">No conversations yet</div></div>}
+        {requests.map((r) => {
+          const iAmArtisanSide = r.artisanProfile.user.id === user.id;
+          const name = iAmArtisanSide ? r.student.name : r.artisanProfile.user.name;
+          return (
+            <button key={r.id} className="msg-row" onClick={() => onOpen(r.id)}>
+              <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(name)}</div>
+              <div className="msg-main">
+                <div className="msg-top"><span className="msg-name">{name}</span></div>
+                <div className="msg-preview">{r.job}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Conversation ---------------- */
+function ConversationView({ request, messages, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond }) {
+  const [text, setText] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [showComplete, setShowComplete] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
+  const meta = statusMeta(request.status);
+  const iAmArtisanSide = request.artisanProfile.user.id === user.id;
+  const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
+  const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
+
+  return (
+    <div className="screen">
+      <div className="topbar">
+        <button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button>
+        <div className="topbar-title">{other.name}</div>
+        <div className="avatar avatar--sm" style={{ background: colorFor(request.id) }}>{initials(other.name)}</div>
+      </div>
+      <div className="convo-status"><span className={"status-badge " + meta.cls}>{meta.label}</span><span className="convo-job">{request.job}</span></div>
+
+      <div className="convo-messages">
+        {messages.map((m) => (
+          <div key={m.id} className={"bubble-row " + (m.senderType === "SYSTEM" ? "bubble-row--sys" : m.senderId === user.id ? "bubble-row--me" : "bubble-row--them")}>
+            {m.senderType === "SYSTEM"
+              ? <div className="bubble-sys">{m.text}</div>
+              : <div className={"bubble " + (m.senderId === user.id ? "bubble--me" : "bubble--them")}>{m.text}</div>}
+          </div>
+        ))}
+        {request.status === "COMPLETED" && request.rating && (
+          <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> Rated {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {iAmArtisanSide && canAct && request.status === "PENDING" && (
+        <div className="settle-actions" style={{ margin: "10px 16px 0" }}>
+          <button className="ghost-btn" onClick={() => onRespond("DECLINED")}>Decline</button>
+          <button className="settle-btn" onClick={() => onRespond("ACCEPTED")}>Accept</button>
+        </div>
+      )}
+
+      {!iAmArtisanSide && canAct && request.status === "ACCEPTED" && !confirming && (
+        <button className="action-btn" onClick={() => setConfirming(true)}>Confirm booking with {other.name.split(" ")[0]}</button>
+      )}
+      {confirming && (
+        <div className="inline-confirm">
+          <div className="inline-confirm-text">This closes any other pending requests for this same job. Confirm?</div>
+          <div className="settle-actions">
+            <button className="ghost-btn" onClick={() => setConfirming(false)}>Cancel</button>
+            <button className="settle-btn" onClick={() => { onConfirm(); setConfirming(false); }}>Yes, confirm</button>
+          </div>
+        </div>
+      )}
+
+      {!iAmArtisanSide && canAct && request.status === "CONFIRMED" && !showComplete && (
+        <button className="action-btn" onClick={() => setShowComplete(true)}>Mark job complete & rate</button>
+      )}
+      {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t) => { onComplete(r, t); setShowComplete(false); }} />}
+
+      {!iAmArtisanSide && canAct && !showReport && (
+        <button className="report-link" onClick={() => setShowReport(true)}><Flag size={13} /> Report a problem</button>
+      )}
+      {showReport && <ReportForm onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
+
+      <form className="convo-input" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { onSend(text.trim()); setText(""); } }}>
+        <input placeholder="Type a message…" value={text} onChange={(e) => setText(e.target.value)} />
+        <button type="submit" className="send-btn"><Send size={16} /></button>
+      </form>
+    </div>
+  );
+}
+
+function CompletionForm({ onCancel, onSubmit }) {
+  const [rating, setRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  return (
+    <div className="inline-panel">
+      <div className="quickadd-label">Rate the job</div>
+      <div className="star-row">{[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} className="star-btn" onClick={() => setRating(n)}><Star size={22} fill={n <= rating ? "#B5651D" : "none"} stroke={n <= rating ? "#B5651D" : "#C9BFAB"} /></button>
+      ))}</div>
+      <textarea rows={2} value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="How did it go? (optional)" className="review-textarea" />
+      <div className="settle-actions">
+        <button className="ghost-btn" onClick={onCancel}>Cancel</button>
+        <button className="settle-btn" onClick={() => onSubmit(rating, reviewText.trim())}>Submit</button>
+      </div>
+    </div>
+  );
+}
+
+function ReportForm({ onCancel, onSubmit }) {
+  const [reason, setReason] = useState(reportReasons[0]);
+  const [note, setNote] = useState("");
+  return (
+    <div className="inline-panel">
+      <div className="quickadd-label">What went wrong?</div>
+      <select className="review-textarea" value={reason} onChange={(e) => setReason(e.target.value)}>
+        {reportReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+      </select>
+      <textarea rows={2} className="review-textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add any details (optional)" />
+      <div className="settle-actions">
+        <button className="ghost-btn" onClick={onCancel}>Cancel</button>
+        <button className="settle-btn settle-btn--danger" onClick={() => onSubmit(reason, note.trim())}>Submit report</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Profile ---------------- */
+// Converts a picked image file into a base64 data URL so it can be sent straight to the
+// backend as a plain string — no separate image hosting service needed for now.
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function UserProfileView({ user, isArtisan, application, incomingCount, onApply, onToggleOnline, onSetBadge, onAddPhoto, onRemovePhoto, onLogout, onBrowse, onViewRequests }) {
+  const [showForm, setShowForm] = useState(false);
+  const [trade, setTrade] = useState(trades[0].id);
+  const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+  const [socialHandle, setSocialHandle] = useState("");
+  const [photos, setPhotos] = useState([]); // data URLs
+  const [uploading, setUploading] = useState(false);
+  const [online, setOnline] = useState(user.artisanProfile ? user.artisanProfile.online : true);
+  const [confirmingVerify, setConfirmingVerify] = useState(false);
+
+  async function handlePhotoPick(e) {
+    const files = Array.from(e.target.files || []).slice(0, 4 - photos.length);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const dataUrls = await Promise.all(files.map(fileToDataUrl));
+      setPhotos((p) => [...p, ...dataUrls]);
+    } finally { setUploading(false); e.target.value = ""; }
+  }
+
+  return (
+    <div className="screen">
+      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Profile</div></div>
+      <div className="profile-hero">
+        <div className="avatar avatar--lg" style={{ background: "#1F3A34" }}>{initials(user.name)}</div>
+        <div className="profile-name">{user.name}</div>
+        <div className="profile-trade">{user.email}{user.area ? ` · ${user.area}` : ""}</div>
+        <div className="badge badge--lg" style={{ marginTop: 8 }}>{user.role}</div>
+      </div>
+
+      {isArtisan && user.artisanProfile && (
+        <div className="section">
+          <div className="section-head"><span>Your artisan tools</span></div>
+          <div className="pending-card pending-card--approved">
+            <div className="avail-row">
+              <span>Available for jobs</span>
+              <button className={"toggle" + (online ? " toggle--on" : "")} onClick={async () => { const updated = await onToggleOnline(!online); if (updated) setOnline(updated.online); }}><span className="toggle-knob" /></button>
+            </div>
+            <button className="jobs-btn" onClick={onViewRequests}>
+              <ClipboardList size={15} /> View incoming requests
+              {incomingCount > 0 && <span className="nav-badge nav-badge--static">{incomingCount}</span>}
+            </button>
+            {user.artisanProfile.badge !== "TOP_RATED" && !confirmingVerify && (
+              <button className="verify-btn" onClick={() => setConfirmingVerify(true)}><Award size={15} /> Get Verified - Top Rated badge</button>
+            )}
+            {user.artisanProfile.badge !== "TOP_RATED" && (
+              <div className="badge-progress">{user.artisanProfile.jobsCompleted}/15 jobs · {fmtStars(user.artisanProfile.rating)}/4.5 rating needed for Top Rated</div>
+            )}
+            {user.artisanProfile.badge !== "TOP_RATED" && confirmingVerify && (
+              <div className="inline-confirm">
+                <div className="inline-confirm-text">Top Rated puts you first in Browse and Online Now, plus a gold badge on your profile.</div>
+                <div className="settle-actions">
+                  <button className="ghost-btn" onClick={() => setConfirmingVerify(false)}>Cancel</button>
+                  <button className="settle-btn" onClick={() => { onSetBadge("TOP_RATED"); setConfirmingVerify(false); }}>Confirm</button>
+                </div>
+              </div>
+            )}
+            {user.artisanProfile.badge === "TOP_RATED" && <div className="verified-note"><Award size={14} /> You're a Top Rated verified artisan</div>}
+          </div>
+          {user.artisanProfile.photos && (
+            <div className="photo-picker" style={{ marginTop: 10 }}>
+              {user.artisanProfile.photos.map((p) => (
+                <div key={p.id} style={{ position: "relative" }}>
+                  <img src={p.url} className="photo-thumb" style={{ objectFit: "cover" }} />
+                  <button onClick={() => onRemovePhoto(p.id)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "var(--danger)", color: "#fff", border: "2px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={11} /></button>
+                </div>
+              ))}
+              {user.artisanProfile.photos.length < 6 && (
+                <label className="photo-add" style={{ cursor: "pointer" }}>
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; if (f) onAddPhoto(await fileToDataUrl(f)); e.target.value = ""; }} />
+                  <Camera size={16} /> Add
+                </label>
+              )}
+            </div>
+          )}
+          <button className="browse-link" onClick={onBrowse}>Need a service yourself? Browse artisans <ChevronRight size={14} /></button>
+        </div>
+      )}
+
+      {!isArtisan && (
+        <div className="section">
+          <div className="section-head"><span>Offer your services</span></div>
+          {!application && !showForm && <button className="artisan-cta" onClick={() => setShowForm(true)}><Hammer size={17} /> Become a vetted artisan on VettedHands</button>}
+          {!application && showForm && (
+            <div className="form form--card">
+              <label>Trade<select value={trade} onChange={(e) => setTrade(e.target.value)}>{trades.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
+              <label>Tell customers about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="At least 10 characters…" /></label>
+              <label>Phone / WhatsApp number<input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="text-input" placeholder="e.g. 0803xxxxxxx" /></label>
+              <label>Social media username (Instagram, Facebook, or Twitter/X)<input value={socialHandle} onChange={(e) => setSocialHandle(e.target.value)} className="text-input" placeholder="e.g. @tunde_electrics" /></label>
+              <label>Photos of past work
+                <div className="photo-picker">
+                  {photos.map((p, i) => <img key={i} src={p} className="photo-thumb" style={{ objectFit: "cover" }} />)}
+                  {photos.length < 4 && (
+                    <label className="photo-add" style={{ cursor: uploading ? "wait" : "pointer" }}>
+                      <input type="file" accept="image/*" multiple onChange={handlePhotoPick} style={{ display: "none" }} disabled={uploading} />
+                      <Camera size={16} /> {uploading ? "…" : "Add"}
+                    </label>
+                  )}
+                </div>
+              </label>
+              <div className="settle-actions">
+                <button className="ghost-btn" onClick={() => setShowForm(false)}><X size={14} /> Cancel</button>
+                <button className="settle-btn" disabled={bio.trim().length < 10 || !phone.trim()} onClick={() => { onApply(trade, bio.trim(), photos, phone.trim(), socialHandle.trim()); setShowForm(false); }}>Submit for review</button>
+              </div>
+            </div>
+          )}
+          {application && application.status === "PENDING" && (
+            <div className="pending-card">
+              <div className="pending-title">Application under review</div>
+              <div className="pending-sub">We're checking your details. You'll become an artisan once approved by an admin.</div>
+            </div>
+          )}
+          {application && application.status === "REJECTED" && (
+            <div className="pending-card"><div className="pending-title" style={{ color: "var(--danger)" }}>Application not approved</div></div>
+          )}
+        </div>
+      )}
+
+      <div className="section">
+        <div className="settings-list">
+          <div className="settings-row settings-row--danger" onClick={onLogout} style={{ cursor: "pointer" }}><LogOut size={17} /> Log out</div>
+        </div>
+      </div>
+      {!isArtisan && <button className="browse-link" onClick={onBrowse}>Browse artisans <ChevronRight size={14} /></button>}
+    </div>
+  );
+}
+
+/* ---------------- Bottom nav ---------------- */
+function BottomNav({ active, onChange, isArtisan, requestCount }) {
+  const items = [
+    { id: "home", label: "Home", icon: Home },
+    { id: "browse", label: "Browse", icon: Compass },
+    { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
+    { id: "messages", label: "Messages", icon: MessageCircle },
+    { id: "profile", label: "Profile", icon: UserIcon },
+  ];
+  return (
+    <div className="bottomnav">
+      {items.map((it) => { const I = it.icon; const isActive = active === it.id; return (
+        <button key={it.id} className={"nav-item" + (isActive ? " nav-item--active" : "")} onClick={() => onChange(it.id)}>
+          <span className="nav-icon-wrap"><I size={19} strokeWidth={isActive ? 2.4 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
+          <span>{it.label}</span>
+        </button>
+      ); })}
+    </div>
+  );
+}
+
+/* ---------------- Styles ---------------- */
+function Style() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+      :root { --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1B16; --ink-soft:#6B6357; --line:#E1DACB; --primary:#1F3A34; --primary-light:#2E534B; --accent:#B5651D; --accent-bg:#F0DFC8; --success:#2E7D4F; --warn:#B4790F; --warn-bg:#F7EAC9; --danger:#A8402D; }
+      * { box-sizing:border-box; }
+      body { margin:0; }
+      .app { min-height:100vh; background:#EDE7D8; display:flex; justify-content:center; padding:24px 12px; font-family:'Inter',sans-serif; color:var(--ink); }
+      .phone { width:100%; max-width:420px; min-height:760px; background:var(--bg); border-radius:22px; box-shadow:0 1px 0 rgba(30,27,22,0.06),0 20px 40px -24px rgba(30,27,22,0.4); overflow:hidden; border:1px solid var(--line); display:flex; flex-direction:column; }
+      .content { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+      .screen { display:flex; flex-direction:column; flex:1; padding-bottom:8px; }
+      .screen--center { align-items:center; justify-content:center; text-align:center; padding:40px 28px; gap:6px; width:100%; }
+      .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 16px 8px; }
+      .brand { display:flex; align-items:center; gap:7px; }
+      .brand-mark { width:24px; height:24px; border-radius:7px; background:var(--primary); color:var(--accent-bg); display:flex; align-items:center; justify-content:center; }
+      .brand-name { font-family:'Fraunces',serif; font-weight:700; font-size:16.5px; color:var(--primary); }
+      .topbar-icons { display:flex; align-items:center; gap:10px; }
+      .topbar-title { font-weight:600; font-size:15px; flex:1; text-align:center; }
+      .iconbtn { width:34px; height:34px; border-radius:9px; background:var(--surface); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink); }
+      .avatar { border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; font-family:'Fraunces',serif; flex-shrink:0; }
+      .avatar--sm { width:30px; height:30px; font-size:12px; background:var(--primary); }
+      .avatar--md { width:46px; height:46px; font-size:15px; }
+      .avatar--lg { width:72px; height:72px; font-size:22px; }
+      .searchbar { margin:8px 16px 0; display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--ink-soft); }
+      .searchbar input { border:none; outline:none; background:transparent; font-size:14px; width:100%; color:var(--ink); font-family:inherit; }
+      .area-row { margin:10px 16px 0; display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:12.5px; width:fit-content; }
+      .area-row--pad { margin-top:12px; }
+      .area-row select { border:none; background:transparent; font-family:inherit; font-size:12.5px; color:var(--primary); font-weight:600; }
+      .chip-row { display:flex; gap:8px; overflow-x:auto; padding:12px 16px 0; }
+      .chip { flex-shrink:0; border:1px solid var(--line); background:var(--surface); border-radius:20px; padding:7px 13px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
+      .chip--active { background:var(--primary); border-color:var(--primary); color:#fff; }
+      .section { margin-top:20px; padding:0 16px; }
+      .section--flush { flex:1; }
+      .section-head { display:flex; align-items:center; justify-content:space-between; font-size:13.5px; font-weight:700; color:var(--ink); margin-bottom:10px; }
+      .see-all { display:flex; align-items:center; gap:2px; font-size:12px; font-weight:600; color:var(--accent); background:none; border:none; cursor:pointer; font-family:inherit; }
+      .status-row { display:flex; gap:14px; overflow-x:auto; padding-bottom:4px; }
+      .status-item { flex-shrink:0; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; font-family:inherit; width:58px; }
+      .status-ring { padding:2.5px; border-radius:50%; border:2px solid var(--success); }
+      .status-name { font-size:10.5px; color:var(--ink-soft); }
+      .trade-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+      .trade-tile { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:10.5px; font-weight:600; color:var(--ink); cursor:pointer; font-family:inherit; text-align:center; }
+      .trade-icon { color:var(--primary); }
+      .wizard-cta { margin:12px 16px 0; text-align:left; background:var(--primary); color:#fff; border:none; border-radius:16px; padding:16px 18px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:4px; }
+      .wizard-cta-q { font-family:'Fraunces',serif; font-weight:600; font-size:16px; }
+      .wizard-cta-sub { font-size:11.5px; opacity:0.85; line-height:1.4; }
+      .wizard-question { font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin:4px 0 0; }
+      .feed { display:flex; flex-direction:column; gap:8px; padding:0 16px; }
+      .feed--scroll { padding:12px 16px 90px; overflow-y:auto; flex:1; }
+      .acard { display:flex; gap:12px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; text-align:left; cursor:pointer; font-family:inherit; }
+      .acard-avatar-wrap { position:relative; }
+      .dot { position:absolute; bottom:1px; right:1px; width:11px; height:11px; border-radius:50%; border:2px solid var(--surface); }
+      .dot--online { background:var(--success); }
+      .dot--offline { background:#B9B2A2; }
+      .acard-main { flex:1; min-width:0; }
+      .acard-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+      .acard-name { font-weight:600; font-size:14px; }
+      .badge { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color:var(--success); background:#E4F0E7; padding:3px 7px; border-radius:20px; flex-shrink:0; }
+      .badge--lg { font-size:12px; padding:6px 12px; }
+      .acard-trade { font-size:12px; color:var(--ink-soft); margin-top:2px; }
+      .acard-meta { display:flex; align-items:center; gap:4px; font-size:11.5px; color:var(--ink-soft); margin-top:6px; }
+      .dot-sep { color:var(--line); }
+      .profile-hero { display:flex; flex-direction:column; align-items:center; text-align:center; padding:8px 20px 18px; border-bottom:1px solid var(--line); }
+      .profile-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin-top:10px; }
+      .profile-trade { font-size:13px; color:var(--ink-soft); margin-top:2px; }
+      .profile-status { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); margin-top:8px; }
+      .profile-status .dot { position:static; border:none; }
+      .stat-row { display:flex; justify-content:space-around; padding:16px; border-bottom:1px solid var(--line); }
+      .stat { text-align:center; }
+      .stat-num { font-family:'Fraunces',serif; font-weight:600; font-size:18px; color:var(--primary); }
+      .stat-label { font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:3px; justify-content:center; margin-top:2px; }
+      .bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0; }
+      .work-row { display:flex; gap:8px; overflow-x:auto; }
+      .work-tile { flex:0 0 auto; width:88px; height:88px; border-radius:12px; background:var(--accent-bg); }
+      .form { padding:16px; display:flex; flex-direction:column; gap:16px; flex:1; }
+      .form label { font-size:13px; font-weight:600; color:var(--ink-soft); display:flex; flex-direction:column; gap:6px; }
+      .form textarea, .form select, .text-input { border:1px solid var(--line); border-radius:10px; padding:11px 12px; font-size:14px; font-family:inherit; color:var(--ink); resize:none; background:var(--surface); }
+      .info-note { font-size:12px; color:var(--ink-soft); background:var(--accent-bg); border-radius:10px; padding:10px 12px; line-height:1.5; }
+      .primary-btn { margin:8px 16px 10px; background:var(--primary); color:#fff; border:none; border-radius:12px; padding:14px; font-size:14.5px; font-weight:600; cursor:pointer; font-family:inherit; }
+      .primary-btn:disabled { opacity:0.4; cursor:not-allowed; }
+      .primary-btn--fixed { margin-top:auto; }
+      .ghost-btn--wide { margin:0 16px 16px; background:transparent; border:1px solid var(--line); color:var(--ink-soft); border-radius:12px; padding:13px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; }
+      .sent-icon { color:var(--success); margin-bottom:4px; }
+      .sent-title { font-family:'Fraunces',serif; font-weight:600; font-size:18px; }
+      .sent-sub { font-size:13px; color:var(--ink-soft); margin:8px 0 22px; line-height:1.5; }
+      .empty { padding:30px 20px; text-align:center; }
+      .empty-title { font-weight:600; margin-bottom:4px; font-size:14px; }
+      .empty-sub { font-size:12.5px; color:var(--ink-soft); }
+      .bottomnav { display:flex; border-top:1px solid var(--line); background:var(--surface); padding:8px 4px; }
+      .nav-item { flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0; color:var(--ink-soft); cursor:pointer; font-family:inherit; font-size:9.5px; font-weight:600; }
+      .nav-item--active { color:var(--primary); }
+      .nav-icon-wrap { position:relative; }
+      .nav-badge { position:absolute; top:-5px; right:-8px; background:var(--accent); color:#fff; font-size:9px; font-weight:700; border-radius:8px; padding:1px 5px; }
+      .req-card { display:flex; gap:12px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:14px; text-align:left; cursor:pointer; font-family:inherit; width:100%; }
+      .req-main { flex:1; min-width:0; }
+      .req-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+      .req-name { font-weight:600; font-size:14px; }
+      .req-job { font-size:12.5px; color:var(--ink-soft); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .req-when { font-size:11px; color:var(--ink-soft); margin-top:4px; opacity:0.8; }
+      .status-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:20px; flex-shrink:0; }
+      .badge--pending { background:var(--warn-bg); color:var(--warn); }
+      .badge--accepted { background:#E4F0E7; color:var(--success); }
+      .badge--confirmed { background:#DCE9E4; color:var(--primary); }
+      .badge--completed { background:var(--accent-bg); color:var(--accent); }
+      .badge--closed { background:#E7E2D5; color:var(--ink-soft); }
+      .badge--declined { background:#F3E1DC; color:var(--danger); }
+      .msg-row { display:flex; gap:12px; padding:12px 4px; background:transparent; border:none; border-bottom:1px solid var(--line); text-align:left; cursor:pointer; font-family:inherit; width:100%; }
+      .msg-main { flex:1; min-width:0; }
+      .msg-top { display:flex; align-items:center; justify-content:space-between; }
+      .msg-name { font-weight:600; font-size:14px; }
+      .msg-preview { font-size:12.5px; color:var(--ink-soft); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .convo-status { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); }
+      .convo-job { font-size:12px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .convo-messages { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+      .bubble-row { display:flex; }
+      .bubble-row--me { justify-content:flex-end; }
+      .bubble-row--them { justify-content:flex-start; }
+      .bubble-row--sys { justify-content:center; }
+      .bubble { max-width:78%; padding:10px 13px; border-radius:14px; font-size:13.5px; line-height:1.4; }
+      .bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:4px; }
+      .bubble--them { background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
+      .bubble-sys { font-size:11px; color:var(--ink-soft); background:var(--accent-bg); padding:5px 12px; border-radius:20px; }
+      .review-recap { text-align:center; font-size:12px; color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:8px 12px; }
+      .convo-input { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line); background:var(--surface); }
+      .convo-input input { flex:1; border:1px solid var(--line); border-radius:20px; padding:10px 14px; font-size:13.5px; font-family:inherit; outline:none; }
+      .send-btn { width:38px; height:38px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+      .action-btn { margin:10px 16px 0; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:12px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+      .report-link { margin:8px 16px 0; background:none; border:none; color:var(--danger); font-size:12px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer; font-family:inherit; align-self:center; }
+      .inline-confirm, .inline-panel { margin:10px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+      .inline-confirm-text { font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+      .star-row { display:flex; gap:4px; }
+      .star-btn { background:none; border:none; padding:0; cursor:pointer; }
+      .review-textarea { border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-size:13px; font-family:inherit; resize:none; width:100%; }
+      .quickadd-label { font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; }
+      .settle-actions { display:flex; gap:8px; }
+      .ghost-btn { background:transparent; border:1px solid var(--line); color:var(--ink-soft); border-radius:10px; padding:11px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; justify-content:center; }
+      .settle-btn { background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px 14px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; flex:1; }
+      .settle-btn--danger { background:var(--danger); }
+      .settle-btn:disabled { opacity:0.4; cursor:not-allowed; }
+      .artisan-cta { display:flex; align-items:center; gap:8px; width:100%; background:var(--accent-bg); color:var(--accent); border:1px dashed var(--accent); border-radius:12px; padding:13px 14px; font-size:13.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+      .form--card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; flex:none; }
+      .pending-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; }
+      .pending-card--approved { border-color:var(--success); background:#EAF4EC; }
+      .pending-title { font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px; color:var(--accent); }
+      .pending-sub { font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5; }
+      .avail-row { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:600; }
+      .toggle { width:42px; height:24px; border-radius:20px; background:#D7D0BE; border:none; position:relative; cursor:pointer; padding:2px; }
+      .toggle--on { background:var(--success); }
+      .toggle-knob { display:block; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform 0.15s; }
+      .toggle--on .toggle-knob { transform:translateX(18px); }
+      .jobs-btn { margin-top:12px; width:100%; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:11px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .verify-btn { margin-top:10px; width:100%; background:none; border:1px dashed var(--accent); color:var(--accent); border-radius:10px; padding:10px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:6px; }
+      .badge-progress { margin-top:8px; text-align:center; font-size:11px; color:var(--ink-soft); }
+      .verified-note { margin-top:10px; text-align:center; font-size:12px; font-weight:700; color:var(--accent); display:flex; align-items:center; justify-content:center; gap:5px; }
+      .nav-badge--static { position:static; margin-left:2px; }
+      .photo-picker { display:flex; gap:8px; flex-wrap:wrap; }
+      .photo-thumb { width:56px; height:56px; border-radius:10px; background:var(--accent-bg); }
+      .photo-add { width:56px; height:56px; border-radius:10px; border:1px dashed var(--line); background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:9px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
+      .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
+      .dash-card { background:linear-gradient(155deg, var(--surface) 0%, #FBF8F0 100%); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 10px 24px -18px rgba(30,27,22,0.35); }
+      .dash-header { display:flex; align-items:center; gap:14px; }
+      .dash-header-text { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; }
+      .dash-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; color:var(--ink); }
+      .dash-stats { display:flex; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+      .dash-stat { flex:1; text-align:center; position:relative; }
+      .dash-stat:not(:last-child)::after { content:""; position:absolute; right:0; top:2px; bottom:2px; width:1px; background:var(--line); }
+      .dash-stat-num { font-family:'Fraunces',serif; font-weight:700; font-size:19px; color:var(--primary); }
+      .dash-stat-label { font-size:10.5px; color:var(--ink-soft); margin-top:3px; display:flex; align-items:center; justify-content:center; gap:3px; }
+      .settings-list { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); }
+      .settings-row { display:flex; align-items:center; gap:10px; padding:14px 16px; font-size:13.5px; font-weight:500; border-bottom:1px solid var(--line); color:var(--ink); }
+      .settings-row:last-child { border-bottom:none; }
+      .settings-row--danger { color:var(--danger); }
+      .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
+
+      @media (min-width: 760px) {
+        .app { padding: 40px 24px; align-items: flex-start; }
+        .phone { max-width: 880px; min-height: 680px; border-radius: 20px; flex-direction: row; }
+        .content { order: 1; min-width: 0; }
+        .bottomnav { order: 2; flex-direction: column; width: 220px; flex-shrink: 0; border-top: none; border-left: 1px solid var(--line); padding: 22px 12px; gap: 4px; justify-content: flex-start; }
+        .nav-item { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 11px 12px; border-radius: 10px; font-size: 13px; }
+        .nav-item--active { background: var(--accent-bg); }
+        .feed--scroll { display: block; column-count: 2; column-gap: 14px; padding-bottom: 24px; }
+        .feed--scroll > * { break-inside: avoid; margin-bottom: 10px; }
+      }
+    `}</style>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
