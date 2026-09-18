@@ -278,6 +278,12 @@ function MainApp({ auth }) {
 
   useEffect(() => { loadArtisans(); }, [tradeFilter, area, query]);
   useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); }, []);
+  // Background refresh of requests every 8s so the nav badge count and requests/messages
+  // lists stay roughly current even when the user isn't actively viewing a conversation.
+  useEffect(() => {
+    const id = setInterval(() => { loadRequests(); }, 8000);
+    return () => clearInterval(id);
+  }, []);
 
   const onlineNow = artisans.filter((a) => a.online);
   const activeRequest = requests.find((r) => r.id === activeRequestId);
@@ -304,6 +310,24 @@ function MainApp({ auth }) {
     setActiveRequestId(requestId);
     setView("conversation");
     try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); } catch (e) { fail(e); }
+  }
+  // Silent background refresh — no toast/flash on failure, since this fires every
+  // few seconds and a transient network blip shouldn't spam the user.
+  async function pollConversation(requestId) {
+    try {
+      const [msgRes, reqRes] = await Promise.all([
+        api(`/api/requests/${requestId}/messages`, { token }),
+        api("/api/requests/mine", { token }),
+      ]);
+      setMessages(msgRes.messages);
+      if (isArtisan) {
+        const incomingRes = await api("/api/requests/incoming", { token });
+        const merged = [...incomingRes.requests, ...reqRes.requests].filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i);
+        setRequests(merged);
+      } else {
+        setRequests(reqRes.requests);
+      }
+    } catch (e) { /* silent — next poll will retry */ }
   }
   async function sendMessage(requestId, text) {
     try {
@@ -417,7 +441,8 @@ function MainApp({ auth }) {
             onConfirm={() => confirmRequest(activeRequest.id)}
             onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
             onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)}
-            onRespond={(status) => respondToRequest(activeRequest.id, status)} />
+            onRespond={(status) => respondToRequest(activeRequest.id, status)}
+            onPoll={pollConversation} />
         )}
         {view === "userProfile" && (
           <UserProfileView user={user} isArtisan={isArtisan} application={application}
@@ -758,13 +783,19 @@ function MessagesListView({ requests, user, onOpen }) {
 }
 
 /* ---------------- Conversation ---------------- */
-function ConversationView({ request, messages, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond }) {
+function ConversationView({ request, messages, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
+  // Poll for new messages/status while this conversation is open — no websockets yet,
+  // so this is what keeps both sides roughly in sync without a manual refresh.
+  useEffect(() => {
+    const id = setInterval(() => { onPoll(request.id); }, 4000);
+    return () => clearInterval(id);
+  }, [request.id]);
   const meta = statusMeta(request.status);
   const iAmArtisanSide = request.artisanProfile.user.id === user.id;
   const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
