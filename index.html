@@ -291,7 +291,14 @@ function MainApp({ auth }) {
   async function openArtisanProfile(a) {
     setSelectedArtisan(a);
     setView("artisanProfile");
+    // Reviews load first — small and fast. Photos load after, since base64 data
+    // URLs are large; this keeps the profile feeling instant instead of blocking
+    // on the heaviest part of the payload.
     try { const d = await api(`/api/artisans/${a.id}`); setSelectedArtisan(d.artisan); } catch (e) { /* keep list version */ }
+    try {
+      const p = await api(`/api/artisans/${a.id}/photos`);
+      setSelectedArtisan((prev) => (prev && prev.id === a.id ? { ...prev, photos: p.photos } : prev));
+    } catch (e) { /* photos just won't show */ }
   }
   function goNav(tab) {
     setNavTab(tab);
