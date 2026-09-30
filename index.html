@@ -529,7 +529,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, 
           </div>
           {myReviews.length > 0 && (
             <div className="review-list" style={{ marginTop: 12 }}>
-              {myReviews.map((r) => (
+              {myReviews.slice(0, 1).map((r) => (
                 <div key={r.id} className="review-item">
                   <div className="review-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={12} fill={i < r.rating ? "#B5651D" : "none"} stroke={i < r.rating ? "#B5651D" : "#C9BFAB"} />)}</div>
                   <div className="review-text">"{r.reviewText}"</div>
@@ -639,7 +639,7 @@ function ArtisanProfileView({ artisan, canRequest, onBack, onRequest }) {
           <div className="work-row">{artisan.photos.map((p) => <img key={p.id} src={p.url} className="work-tile" style={{ objectFit: "cover" }} />)}</div>
         </div>
       )}
-      {canRequest && <button className="primary-btn primary-btn--fixed" onClick={onRequest}>Request {artisan.user.name.split(" ")[0]}</button>}
+      {canRequest && <button className="primary-btn primary-btn--fixed profile-request-btn" onClick={onRequest}>Request {artisan.user.name.split(" ")[0]}</button>}
     </div>
   );
 }
@@ -1261,7 +1261,8 @@ function Style() {
       .stat-num { font-family:'Fraunces',serif; font-weight:600; font-size:18px; color:var(--primary); }
       .stat-label { font-size:10.5px; color:var(--ink-soft); display:flex; align-items:center; gap:3px; justify-content:center; margin-top:2px; }
       .bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0; }
-      .work-row { display:flex; gap:8px; overflow-x:auto; }
+      .work-row { display:flex; gap:8px; overflow-x:auto; margin-bottom:8px; }
+      .profile-request-btn { margin-top:20px; }
       .work-tile { flex:0 0 auto; width:88px; height:88px; border-radius:12px; background:var(--accent-bg); }
       .review-list { display:flex; flex-direction:column; gap:10px; }
       .review-item { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; }
