@@ -71,6 +71,7 @@ const ICON_PATHS = {
   x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
   award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
   camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+  alertTriangle: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
 };
 function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, ...rest }) {
   const shape = ICON_PATHS[name];
@@ -109,6 +110,7 @@ const Hammer = (p) => <Icon name="hammer" {...p} />;
 const X = (p) => <Icon name="x" {...p} />;
 const Award = (p) => <Icon name="award" {...p} />;
 const Camera = (p) => <Icon name="camera" {...p} />;
+const AlertTriangle = (p) => <Icon name="alertTriangle" {...p} />;
 
 const trades = [
   { id: "ELECTRICIAN", label: "Electrician", icon: Zap },
@@ -117,7 +119,8 @@ const trades = [
   { id: "PHONE_REPAIR", label: "Phone Repair", icon: Smartphone },
 ];
 const areas = ["All areas", "Main Gate", "Fanuyi", "Odo-Ado", "Ureju"];
-const reportReasons = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
+const reportReasonsCustomer = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
+const reportReasonsArtisan = ["Customer unavailable", "Wrong job description", "Customer issue", "Other"];
 
 function initials(name = "") { return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(); }
 function colorFor(id = "") { const palette = ["#1F3A34", "#B5651D", "#2E534B"]; let h = 0; for (const c of id) h += c.charCodeAt(0); return palette[h % palette.length]; }
@@ -245,6 +248,8 @@ function MainApp({ auth }) {
   const [openGroups, setOpenGroups] = useState([]);
   const [messages, setMessages] = useState([]);
   const [application, setApplication] = useState(null);
+  const [requestImage, setRequestImage] = useState(null);
+  const [myReviews, setMyReviews] = useState([]);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
   function fail(err) { flash(err.message || "Something went wrong"); }
@@ -287,6 +292,10 @@ function MainApp({ auth }) {
 
   useEffect(() => { loadArtisans(); }, [tradeFilter, area, query]);
   useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); }, []);
+  useEffect(() => {
+    if (!isArtisan) return;
+    api("/api/artisans/me/reviews", { token }).then((d) => setMyReviews(d.reviews)).catch(() => {});
+  }, [isArtisan]);
   // Background refresh of requests every 8s so the nav badge count and requests/messages
   // lists stay roughly current even when the user isn't actively viewing a conversation.
   useEffect(() => {
@@ -318,9 +327,9 @@ function MainApp({ auth }) {
     else setView("userProfile");
   }
 
-  async function sendRequest(artisanProfileId, job, when, jobGroupId) {
+  async function sendRequest(artisanProfileId, job, when, jobGroupId, image) {
     try {
-      const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined } });
+      const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined, image: image || undefined } });
       setRequests((prev) => [d.request, ...prev]);
       setActiveRequestId(d.request.id);
       setView("requestSent");
@@ -330,6 +339,12 @@ function MainApp({ auth }) {
     setActiveRequestId(requestId);
     setView("conversation");
     try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); } catch (e) { fail(e); }
+    const req = requests.find((r) => r.id === requestId);
+    if (req && req.hasImage) {
+      try { const img = await api(`/api/requests/${requestId}/image`, { token }); setRequestImage(img.imageUrl); } catch (e) { /* skip */ }
+    } else {
+      setRequestImage(null);
+    }
   }
   // Silent background refresh — no toast/flash on failure, since this fires every
   // few seconds and a transient network blip shouldn't spam the user.
@@ -423,7 +438,7 @@ function MainApp({ auth }) {
       <div className="content">
         {view === "home" && (
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
-            requests={requests}
+            requests={requests} myReviews={myReviews}
             onlineNow={onlineNow} filtered={artisans} onOpenProfile={openArtisanProfile}
             onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
             onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
@@ -444,7 +459,7 @@ function MainApp({ auth }) {
         )}
         {view === "request" && selectedArtisan && (
           <RequestView artisan={selectedArtisan} openJobGroups={openGroups} initialJob={prefillJob} onBack={() => setView("artisanProfile")}
-            onSend={(job, when, gId) => { sendRequest(selectedArtisan.id, job, when, gId); setPrefillJob(""); }} />
+            onSend={(job, when, gId, image) => { sendRequest(selectedArtisan.id, job, when, gId, image); setPrefillJob(""); }} />
         )}
         {view === "requestSent" && activeRequest && (
           <RequestSentView artisan={activeRequest.artisanProfile} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => openConversation(activeRequest.id)} />
@@ -455,7 +470,7 @@ function MainApp({ auth }) {
         )}
         {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={openConversation} />}
         {view === "conversation" && activeRequest && (
-          <ConversationView request={activeRequest} messages={messages} user={user}
+          <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user}
             onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
             onSend={(text) => sendMessage(activeRequest.id, text)}
             onConfirm={() => confirmRequest(activeRequest.id)}
@@ -480,7 +495,7 @@ function MainApp({ auth }) {
 }
 
 /* ---------------- Home ---------------- */
-function HomeView({ user, isArtisan, requests, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onLogout }) {
+function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onLogout }) {
   return (
     <div className="screen">
       <div className="topbar">
@@ -511,6 +526,17 @@ function HomeView({ user, isArtisan, requests, area, setArea, query, setQuery, o
               <div className="dash-stat"><div className="dash-stat-num">{requests.filter((r) => r.status === "PENDING").length}</div><div className="dash-stat-label">New requests</div></div>
             </div>
           </div>
+          {myReviews.length > 0 && (
+            <div className="review-list" style={{ marginTop: 12 }}>
+              {myReviews.map((r) => (
+                <div key={r.id} className="review-item">
+                  <div className="review-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={12} fill={i < r.rating ? "#B5651D" : "none"} stroke={i < r.rating ? "#B5651D" : "#C9BFAB"} />)}</div>
+                  <div className="review-text">"{r.reviewText}"</div>
+                  <div className="review-author">— {r.student.name.split(" ")[0]}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
@@ -699,6 +725,7 @@ function RequestView({ artisan, openJobGroups, initialJob, onBack, onSend }) {
   const [mode, setMode] = useState("new");
   const [job, setJob] = useState(initialJob || "");
   const [when, setWhen] = useState("");
+  const [image, setImage] = useState(null);
   const [sending, setSending] = useState(false);
   const attaching = mode !== "new";
   const attachedGroup = attaching ? openJobGroups.find((g) => g.jobGroupId === mode) : null;
@@ -722,6 +749,19 @@ function RequestView({ artisan, openJobGroups, initialJob, onBack, onSend }) {
           <>
             <label>What do you need done?<textarea rows={3} value={job} onChange={(e) => setJob(e.target.value)} placeholder="e.g. Fan not turning on, socket in room sparking" /></label>
             <label>When<select value={when} onChange={(e) => setWhen(e.target.value)}><option value="">Select a time</option><option>As soon as possible</option><option>Later today</option><option>Tomorrow</option><option>This week</option></select></label>
+            <label>Photo of the problem (optional)
+              {image ? (
+                <div className="id-preview">
+                  <img src={image} className="id-preview-img" />
+                  <button type="button" className="id-remove-btn" onClick={() => setImage(null)}><X size={12} /> Remove</button>
+                </div>
+              ) : (
+                <label className="id-upload-btn">
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; if (f) setImage(await fileToDataUrl(f)); e.target.value = ""; }} />
+                  <Camera size={16} /> Add a photo
+                </label>
+              )}
+            </label>
           </>
         )}
       </div>
@@ -729,7 +769,7 @@ function RequestView({ artisan, openJobGroups, initialJob, onBack, onSend }) {
         onClick={() => {
           if (!valid || sending) return;
           setSending(true);
-          onSend(attaching ? attachedGroup.job : job.trim(), attaching ? attachedGroup.when : when, attaching ? attachedGroup.jobGroupId : null);
+          onSend(attaching ? attachedGroup.job : job.trim(), attaching ? attachedGroup.when : when, attaching ? attachedGroup.jobGroupId : null, attaching ? null : image);
         }}>
         {sending ? "Sending…" : "Send request"}
       </button>
@@ -822,7 +862,7 @@ function MessagesListView({ requests, user, onOpen }) {
 }
 
 /* ---------------- Conversation ---------------- */
-function ConversationView({ request, messages, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll }) {
+function ConversationView({ request, messages, requestImage, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
@@ -848,6 +888,7 @@ function ConversationView({ request, messages, user, onBack, onSend, onConfirm, 
         <div className="avatar avatar--sm" style={{ background: colorFor(request.id) }}>{initials(other.name)}</div>
       </div>
       <div className="convo-status"><span className={"status-badge " + meta.cls}>{meta.label}</span><span className="convo-job">{request.job}</span></div>
+      {requestImage && <img src={requestImage} className="convo-job-image" />}
 
       <div className="convo-messages">
         {messages.map((m) => (
@@ -888,10 +929,10 @@ function ConversationView({ request, messages, user, onBack, onSend, onConfirm, 
       )}
       {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t) => { onComplete(r, t); setShowComplete(false); }} />}
 
-      {!iAmArtisanSide && canAct && !showReport && (
+      {canAct && !showReport && (
         <button className="report-link" onClick={() => setShowReport(true)}><Flag size={13} /> Report a problem</button>
       )}
-      {showReport && <ReportForm onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
+      {showReport && <ReportForm reasons={iAmArtisanSide ? reportReasonsArtisan : reportReasonsCustomer} onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
 
       <form className="convo-input" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { onSend(text.trim()); setText(""); } }}>
         <input placeholder="Type a message…" value={text} onChange={(e) => setText(e.target.value)} />
@@ -919,14 +960,14 @@ function CompletionForm({ onCancel, onSubmit }) {
   );
 }
 
-function ReportForm({ onCancel, onSubmit }) {
-  const [reason, setReason] = useState(reportReasons[0]);
+function ReportForm({ reasons, onCancel, onSubmit }) {
+  const [reason, setReason] = useState(reasons[0]);
   const [note, setNote] = useState("");
   return (
     <div className="inline-panel">
       <div className="quickadd-label">What went wrong?</div>
       <select className="review-textarea" value={reason} onChange={(e) => setReason(e.target.value)}>
-        {reportReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+        {reasons.map((r) => <option key={r} value={r}>{r}</option>)}
       </select>
       <textarea rows={2} className="review-textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add any details (optional)" />
       <div className="settle-actions">
@@ -1082,6 +1123,9 @@ function UserProfileView({ user, isArtisan, application, incomingCount, onApply,
             <div className="pending-card">
               <div className="pending-title">Application under review</div>
               <div className="pending-sub">We're checking your details. You'll become an artisan once approved by an admin.</div>
+              {application.infoRequestNote && (
+                <div className="info-request-note"><AlertTriangle size={13} /> VettedHands needs more info: "{application.infoRequestNote}". Please reach out to support with this.</div>
+              )}
             </div>
           )}
           {application && application.status === "REJECTED" && (
@@ -1289,6 +1333,8 @@ function Style() {
       .id-preview { display:flex; align-items:center; gap:10px; }
       .id-preview-img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
       .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
+      .convo-job-image { width:100%; max-height:160px; object-fit:cover; border-bottom:1px solid var(--line); }
+      .info-request-note { margin-top:10px; font-size:12px; color:var(--accent); background:var(--accent-bg); border-radius:10px; padding:10px 12px; display:flex; gap:7px; line-height:1.5; }
       .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
       .dash-card { background:linear-gradient(155deg, var(--surface) 0%, #FBF8F0 100%); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 10px 24px -18px rgba(30,27,22,0.35); }
       .dash-header { display:flex; align-items:center; gap:14px; }
