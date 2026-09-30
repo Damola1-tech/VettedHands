@@ -152,6 +152,9 @@ function Dashboard({ token, user, onLogout }) {
   const [selectedApp, setSelectedApp] = useState(null);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+  const [serviceRequests, setServiceRequests] = useState([]);
+  const [reports, setReports] = useState([]);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2200); }
   function fail(e) { flash(e.message || "Something went wrong"); }
@@ -159,14 +162,20 @@ function Dashboard({ token, user, onLogout }) {
   async function loadAll() {
     setLoading(true);
     try {
-      const [pendingRes, artisansRes, activityRes] = await Promise.all([
+      const [pendingRes, artisansRes, activityRes, statsRes, requestsRes, reportsRes] = await Promise.all([
         api("/api/admin/applications?status=pending", { token }),
-        api("/api/artisans", {}),
+        api("/api/admin/artisans-all", { token }),
         api("/api/admin/activity", { token }),
+        api("/api/admin/stats", { token }),
+        api("/api/admin/requests", { token }),
+        api("/api/admin/reports", { token }),
       ]);
       setPending(pendingRes.applications);
       setActive(artisansRes.artisans);
       setActivity(activityRes.activity);
+      setStats(statsRes.stats);
+      setServiceRequests(requestsRes.requests);
+      setReports(reportsRes.reports);
     } catch (e) { fail(e); }
     finally { setLoading(false); }
   }
@@ -227,12 +236,12 @@ function Dashboard({ token, user, onLogout }) {
       fail(e);
     }
   }
-  async function delist(id) {
+    async function toggleSuspend(a) {
     try {
-      const target = active.find((x) => x.id === id);
-      await api(`/api/admin/artisans/${id}`, { method: "DELETE", token });
-      setActive((a) => a.filter((x) => x.id !== id));
-      flash(`${target.user.name} delisted`);
+      const nextSuspended = !a.suspended;
+      await api(`/api/admin/artisans/${a.id}`, { method: "PATCH", token, body: { suspended: nextSuspended } });
+      setActive((arr) => arr.map((x) => (x.id === a.id ? { ...x, suspended: nextSuspended } : x)));
+      flash(nextSuspended ? `${a.user.name} suspended — hidden from customers` : `${a.user.name} reactivated`);
     } catch (e) { fail(e); }
   }
 
@@ -250,16 +259,26 @@ function Dashboard({ token, user, onLogout }) {
           <div className="empty"><div className="empty-title">Loading…</div></div>
         ) : (
           <>
-            <div className="stats-grid">
-              <div className="stat-box"><div className="stat-num">{pending.length}</div><div className="stat-label">Pending</div></div>
-              <div className="stat-box"><div className="stat-num">{active.length}</div><div className="stat-label">Active</div></div>
-              <div className="stat-box"><div className="stat-num">{activity.length}</div><div className="stat-label">Events</div></div>
-              <div className="stat-box stat-box--warn"><div className="stat-num">{flaggedCount}</div><div className="stat-label">Flagged</div></div>
-            </div>
+            {stats && (
+              <div className="stats-grid stats-grid--full">
+                <div className="stat-box"><div className="stat-num">{stats.totalUsers}</div><div className="stat-label">Users</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.totalArtisans}</div><div className="stat-label">Artisans</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.pendingApplications}</div><div className="stat-label">Pending apps</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.pendingRequests}</div><div className="stat-label">Pending req.</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.activeJobs}</div><div className="stat-label">Active jobs</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.completedJobs}</div><div className="stat-label">Completed</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.cancelledJobs}</div><div className="stat-label">Cancelled</div></div>
+                <div className="stat-box"><div className="stat-num">{stats.reviews}</div><div className="stat-label">Reviews</div></div>
+                <div className="stat-box stat-box--warn"><div className="stat-num">{flaggedCount}</div><div className="stat-label">Flagged</div></div>
+                <div className="stat-box stat-box--warn"><div className="stat-num">{stats.reports}</div><div className="stat-label">Reports</div></div>
+              </div>
+            )}
 
-            <div className="tabs">
+            <div className="tabs tabs--wrap">
               <button className={"tab" + (tab === "pending" ? " tab--active" : "")} onClick={() => setTab("pending")}>Pending {pending.length > 0 && <span className="tab-count">{pending.length}</span>}</button>
               <button className={"tab" + (tab === "active" ? " tab--active" : "")} onClick={() => setTab("active")}>Active</button>
+              <button className={"tab" + (tab === "requests" ? " tab--active" : "")} onClick={() => setTab("requests")}>Requests</button>
+              <button className={"tab" + (tab === "reports" ? " tab--active" : "")} onClick={() => setTab("reports")}>Reports {reports.length > 0 && <span className="tab-count">{reports.length}</span>}</button>
               <button className={"tab" + (tab === "activity" ? " tab--active" : "")} onClick={() => setTab("activity")}>Activity</button>
             </div>
 
@@ -284,11 +303,11 @@ function Dashboard({ token, user, onLogout }) {
             {tab === "active" && (
               <div className="feed feed--scroll">
                 {active.map((a) => (
-                  <div key={a.id} className={"artisan-row" + (a.flagged ? " artisan-row--flagged" : "")}>
+                  <div key={a.id} className={"artisan-row" + (a.flagged ? " artisan-row--flagged" : "") + (a.suspended ? " artisan-row--suspended" : "")}>
                     <div className="app-top">
                       <div className="avatar">{initials(a.user.name)}</div>
                       <div className="app-top-text">
-                        <div className="app-name">{a.user.name} {a.flagged && <AlertTriangle size={12} className="flag-icon" />}</div>
+                        <div className="app-name">{a.user.name} {a.flagged && <AlertTriangle size={12} className="flag-icon" />} {a.suspended && <span className="suspended-tag">Suspended</span>}</div>
                         <div className="app-trade"><MapPin size={11} /> {tradeLabel(a.trade)} · {a.area}</div>
                       </div>
                     </div>
@@ -303,8 +322,40 @@ function Dashboard({ token, user, onLogout }) {
                         <option value="TOP_RATED">Top Rated</option>
                       </select>
                       <button className={"pro-btn" + (a.isPro ? " pro-btn--active" : "")} onClick={() => toggleProStatus(a)}>{a.isPro ? "Pro ✓" : "Make Pro"}</button>
-                      <button className="delist-btn" onClick={() => delist(a.id)}>Delist</button>
+                      <button className={"suspend-btn" + (a.suspended ? " suspend-btn--reactivate" : "")} onClick={() => toggleSuspend(a)}>{a.suspended ? "Reactivate" : "Suspend"}</button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+                        {tab === "requests" && (
+              <div className="feed feed--scroll">
+                {serviceRequests.length === 0 && <div className="empty"><div className="empty-title">No requests yet</div></div>}
+                {serviceRequests.map((r) => (
+                  <div key={r.id} className="req-row">
+                    <div className="req-row-top">
+                      <span className="req-row-parties">{r.student.name} → {r.artisanProfile.user.name}</span>
+                      <span className={"status-pill status-pill--" + r.status.toLowerCase()}>{r.status}</span>
+                    </div>
+                    <div className="req-row-job">{r.job}</div>
+                    <div className="req-row-meta">{tradeLabel(r.artisanProfile.trade)} · {new Date(r.updatedAt).toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === "reports" && (
+              <div className="feed feed--scroll">
+                {reports.length === 0 && <div className="empty"><div className="empty-title">No reports</div></div>}
+                {reports.map((rep) => (
+                  <div key={rep.id} className="report-row">
+                    <div className="req-row-top">
+                      <span className="req-row-parties">{rep.reporter.name} reported {rep.artisanProfile.user.name}</span>
+                      <span className="report-reason">{rep.reason}</span>
+                    </div>
+                    {rep.note && <div className="report-note">"{rep.note}"</div>}
+                    <div className="req-row-meta">Job: {rep.request.job} · {new Date(rep.createdAt).toLocaleString()}</div>
                   </div>
                 ))}
               </div>
@@ -408,7 +459,24 @@ function Style() {
       .dot-sep { color:var(--line); }
       .artisan-actions { display:flex; gap:8px; margin-top:10px; }
       .badge-select { flex:1; border:1px solid var(--line); border-radius:8px; padding:8px; font-size:12.5px; font-family:inherit; background:var(--bg); }
-      .delist-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+            .suspend-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+      .suspend-btn--reactivate { border-color:var(--success); color:var(--success); }
+      .artisan-row--suspended { opacity:0.6; }
+      .suspended-tag { font-size:9.5px; font-weight:700; color:var(--danger); background:#F3E1DC; padding:2px 6px; border-radius:6px; margin-left:4px; }
+      .stats-grid--full { grid-template-columns:repeat(5,1fr); }
+      .tabs--wrap { flex-wrap:wrap; }
+      .req-row, .report-row { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; }
+      .req-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .req-row-parties { font-size:12.5px; font-weight:700; }
+      .req-row-job { font-size:12px; color:var(--ink-soft); margin-top:4px; }
+      .req-row-meta { font-size:10.5px; color:var(--ink-soft); margin-top:6px; opacity:0.8; }
+      .status-pill { font-size:9.5px; font-weight:700; padding:2px 8px; border-radius:10px; flex-shrink:0; }
+      .status-pill--pending { background:var(--accent-bg); color:var(--accent); }
+      .status-pill--accepted, .status-pill--confirmed { background:#E4F0E7; color:var(--success); }
+      .status-pill--completed { background:#DCE9E4; color:var(--primary); }
+      .status-pill--declined, .status-pill--closed { background:#F3E1DC; color:var(--danger); }
+      .report-reason { font-size:10.5px; font-weight:700; color:var(--danger); background:#F3E1DC; padding:2px 8px; border-radius:8px; flex-shrink:0; }
+      .report-note { font-size:12px; color:var(--ink); font-style:italic; margin-top:6px; }
       .pro-btn { background:none; border:1px solid var(--line); color:var(--ink-soft); border-radius:8px; padding:8px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; }
       .pro-btn--active { background:var(--accent-bg); color:var(--accent); border-color:var(--accent); }
       .activity-wrap { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:11px 4px; border-bottom:1px solid var(--line); }
@@ -431,7 +499,9 @@ function Style() {
       .approve-btn { background:var(--primary); color:#fff; }
       .toast { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
 
-      @media (min-width: 760px) {
+      @media (max-width: 420px) {
+        .stats-grid--full { grid-template-columns:repeat(3,1fr); }
+      }
         .app { padding: 40px 24px; align-items: flex-start; }
         .phone { max-width: 900px; min-height: 680px; border-radius: 20px; }
         .topbar, .stats-grid, .tabs, .feed--scroll { max-width: 760px; margin-left: auto; margin-right: auto; width: 100%; }
