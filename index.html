@@ -395,9 +395,9 @@ function MainApp({ auth }) {
       flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
     } catch (e) { fail(e); }
   }
-  async function applyAsArtisan(trade, bio, photos, phone, socialHandle) {
+  async function applyAsArtisan(trade, bio, photos, phone, socialHandle, idDocument) {
     try {
-      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined } });
+      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined, idDocument } });
       setApplication(d.application);
       flash("Application submitted for review");
     } catch (e) { fail(e); }
@@ -948,6 +948,7 @@ function UserProfileView({ user, isArtisan, application, incomingCount, onApply,
   const [phone, setPhone] = useState("");
   const [socialHandle, setSocialHandle] = useState("");
   const [photos, setPhotos] = useState([]); // data URLs
+  const [idDocument, setIdDocument] = useState(null); // single data URL
   const [uploading, setUploading] = useState(false);
   const [online, setOnline] = useState(user.artisanProfile ? user.artisanProfile.online : true);
   const [confirmingVerify, setConfirmingVerify] = useState(false);
@@ -960,6 +961,14 @@ function UserProfileView({ user, isArtisan, application, incomingCount, onApply,
       const dataUrls = await Promise.all(files.map(fileToDataUrl));
       setPhotos((p) => [...p, ...dataUrls]);
     } finally { setUploading(false); e.target.value = ""; }
+  }
+
+  async function handleIdPick(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    setIdDocument(dataUrl);
+    e.target.value = "";
   }
 
   return (
@@ -1031,6 +1040,19 @@ function UserProfileView({ user, isArtisan, application, incomingCount, onApply,
               <label>Tell customers about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="At least 10 characters…" /></label>
               <label>Phone / WhatsApp number<input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="text-input" placeholder="e.g. 0803xxxxxxx" /></label>
               <label>Social media username (Instagram, Facebook, or Twitter/X)<input value={socialHandle} onChange={(e) => setSocialHandle(e.target.value)} className="text-input" placeholder="e.g. @tunde_electrics" /></label>
+              <label>Government ID (NIN slip, driver's license, or voter's card) — seen only by VettedHands admin
+                {idDocument ? (
+                  <div className="id-preview">
+                    <img src={idDocument} className="id-preview-img" />
+                    <button type="button" className="id-remove-btn" onClick={() => setIdDocument(null)}><X size={12} /> Remove</button>
+                  </div>
+                ) : (
+                  <label className="id-upload-btn">
+                    <input type="file" accept="image/*" onChange={handleIdPick} style={{ display: "none" }} />
+                    <Camera size={16} /> Upload ID photo
+                  </label>
+                )}
+              </label>
               <label>Photos of past work
                 <div className="photo-picker">
                   {photos.map((p, i) => <img key={i} src={p} className="photo-thumb" style={{ objectFit: "cover" }} />)}
@@ -1044,7 +1066,7 @@ function UserProfileView({ user, isArtisan, application, incomingCount, onApply,
               </label>
               <div className="settle-actions">
                 <button className="ghost-btn" onClick={() => setShowForm(false)}><X size={14} /> Cancel</button>
-                <button className="settle-btn" disabled={bio.trim().length < 10 || !phone.trim()} onClick={() => { onApply(trade, bio.trim(), photos, phone.trim(), socialHandle.trim()); setShowForm(false); }}>Submit for review</button>
+                <button className="settle-btn" disabled={bio.trim().length < 10 || !phone.trim() || !idDocument} onClick={() => { onApply(trade, bio.trim(), photos, phone.trim(), socialHandle.trim(), idDocument); setShowForm(false); }}>Submit for review</button>
               </div>
             </div>
           )}
@@ -1255,6 +1277,10 @@ function Style() {
       .photo-picker { display:flex; gap:8px; flex-wrap:wrap; }
       .photo-thumb { width:56px; height:56px; border-radius:10px; background:var(--accent-bg); }
       .photo-add { width:56px; height:56px; border-radius:10px; border:1px dashed var(--line); background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:9px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; }
+      .id-upload-btn { display:flex; align-items:center; justify-content:center; gap:6px; border:1px dashed var(--line); border-radius:10px; padding:12px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; background:var(--bg); }
+      .id-preview { display:flex; align-items:center; gap:10px; }
+      .id-preview-img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
+      .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
       .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
       .dash-card { background:linear-gradient(155deg, var(--surface) 0%, #FBF8F0 100%); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 10px 24px -18px rgba(30,27,22,0.35); }
       .dash-header { display:flex; align-items:center; gap:14px; }

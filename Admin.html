@@ -394,6 +394,12 @@ function Dashboard({ token, user, onLogout }) {
                 {selectedApp.socialHandle && <div><strong>Social:</strong> {selectedApp.socialHandle}</div>}
               </div>
             )}
+            {selectedApp.idDocumentUrl && (
+              <div className="modal-id-section">
+                <div className="modal-id-label">Government ID</div>
+                <img src={selectedApp.idDocumentUrl} className="modal-id-img" />
+              </div>
+            )}
             {selectedApp.photos && selectedApp.photos.length > 0 && (
               <div className="modal-photos">
                 {selectedApp.photos.map((p, i) => (
@@ -401,7 +407,7 @@ function Dashboard({ token, user, onLogout }) {
                 ))}
               </div>
             )}
-            <div className="modal-note"><AlertTriangle size={13} /> Vetting checklist (manual, off-app for now): confirm identity, call the listed phone number, cross-check their social handle, review sample work photos before approving.</div>
+            <div className="modal-note"><AlertTriangle size={13} /> Vetting checklist (manual, off-app for now): confirm the ID photo matches their name, call the listed phone number, cross-check their social handle, review sample work photos before approving.</div>
             <div className="modal-actions">
               <button className="reject-btn" onClick={() => reject(selectedApp)}><XCircle size={15} /> Reject</button>
               <button className="approve-btn" onClick={() => approve(selectedApp)}><CheckCircle2 size={15} /> Approve &amp; list</button>
@@ -490,6 +496,9 @@ function Style() {
       .modal-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
       .modal-bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 10px; }
       .modal-contact { font-size:12.5px; color:var(--ink); line-height:1.6; margin-bottom:12px; display:flex; flex-direction:column; gap:2px; }
+      .modal-id-section { margin-bottom:14px; }
+      .modal-id-label { font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
+      .modal-id-img { width:100%; max-width:220px; border-radius:10px; border:1px solid var(--line); display:block; }
       .modal-photos { display:flex; gap:8px; overflow-x:auto; margin-bottom:14px; }
       .modal-photo-tile { flex:0 0 auto; width:84px; height:84px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
       .modal-note { font-size:11.5px; color:var(--ink-soft); background:var(--bg); border-radius:10px; padding:10px 12px; display:flex; gap:7px; line-height:1.5; margin-bottom:16px; }
