@@ -164,7 +164,7 @@ function Dashboard({ token, user, onLogout }) {
     try {
       const [pendingRes, artisansRes, activityRes, statsRes, requestsRes, reportsRes] = await Promise.all([
         api("/api/admin/applications?status=pending", { token }),
-        api("/api/admin/artisans-all", { token }),
+        api("/api/admin/artisans", { token }),
         api("/api/admin/activity", { token }),
         api("/api/admin/stats", { token }),
         api("/api/admin/requests", { token }),
@@ -502,6 +502,8 @@ function Style() {
       @media (max-width: 420px) {
         .stats-grid--full { grid-template-columns:repeat(3,1fr); }
       }
+
+      @media (min-width: 760px) {
         .app { padding: 40px 24px; align-items: flex-start; }
         .phone { max-width: 900px; min-height: 680px; border-radius: 20px; }
         .topbar, .stats-grid, .tabs, .feed--scroll { max-width: 760px; margin-left: auto; margin-right: auto; width: 100%; }
