@@ -341,7 +341,8 @@ function MainApp({ auth }) {
     try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); } catch (e) { fail(e); }
     const req = requests.find((r) => r.id === requestId);
     if (req && req.hasImage) {
-      try { const img = await api(`/api/requests/${requestId}/image`, { token }); setRequestImage(img.imageUrl); } catch (e) { /* skip */ }
+      setRequestImage("loading");
+      try { const img = await api(`/api/requests/${requestId}/image`, { token }); setRequestImage(img.imageUrl); } catch (e) { setRequestImage(null); }
     } else {
       setRequestImage(null);
     }
@@ -818,7 +819,7 @@ function RequestsListView({ requests, user, onOpen, onRespond }) {
                 <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(other.name)}</div>
                 <div className="req-main">
                   <div className="req-top"><span className="req-name">{other.name}{iAmArtisanSide ? " (incoming)" : ""}</span><span className={"status-badge " + meta.cls}>{meta.label}</span></div>
-                  <div className="req-job">{r.job}</div>
+                  <div className="req-job">{r.hasImage && <Camera size={11} style={{ marginRight: 4, verticalAlign: "-1px" }} />}{r.job}</div>
                   <div className="req-when">{r.when}</div>
                 </div>
               </button>
@@ -849,9 +850,9 @@ function MessagesListView({ requests, user, onOpen }) {
           return (
             <button key={r.id} className="msg-row" onClick={() => onOpen(r.id)}>
               <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(name)}</div>
-              <div className="msg-main">
+                <div className="msg-main">
                 <div className="msg-top"><span className="msg-name">{name}</span></div>
-                <div className="msg-preview">{r.job}</div>
+                <div className="msg-preview">{r.hasImage && <Camera size={11} style={{ marginRight: 4, verticalAlign: "-1px" }} />}{r.job}</div>
               </div>
             </button>
           );
@@ -888,7 +889,8 @@ function ConversationView({ request, messages, requestImage, user, onBack, onSen
         <div className="avatar avatar--sm" style={{ background: colorFor(request.id) }}>{initials(other.name)}</div>
       </div>
       <div className="convo-status"><span className={"status-badge " + meta.cls}>{meta.label}</span><span className="convo-job">{request.job}</span></div>
-      {requestImage && <img src={requestImage} className="convo-job-image" />}
+      {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
+      {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" />}
 
       <div className="convo-messages">
         {messages.map((m) => (
@@ -981,10 +983,31 @@ function ReportForm({ reasons, onCancel, onSubmit }) {
 /* ---------------- Profile ---------------- */
 // Converts a picked image file into a base64 data URL so it can be sent straight to the
 // backend as a plain string — no separate image hosting service needed for now.
-function fileToDataUrl(file) {
+// Resizes and compresses an image before converting to a data URL — cuts a
+// typical 2-5MB phone photo down to ~50-150KB, which is the main thing making
+// uploads, sends, and later loads feel slow. Same function signature as before,
+// so every existing call site (work photos, ID doc, request image) speeds up
+// automatically with no other changes needed.
+function fileToDataUrl(file, maxDim = 1000, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+          else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -1334,6 +1357,7 @@ function Style() {
       .id-preview-img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
       .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
       .convo-job-image { width:100%; max-height:160px; object-fit:cover; border-bottom:1px solid var(--line); }
+      .convo-job-loading { padding:10px 16px; font-size:12px; color:var(--ink-soft); background:var(--accent-bg); text-align:center; }
       .info-request-note { margin-top:10px; font-size:12px; color:var(--accent); background:var(--accent-bg); border-radius:10px; padding:10px 12px; display:flex; gap:7px; line-height:1.5; }
       .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
       .dash-card { background:linear-gradient(155deg, var(--surface) 0%, #FBF8F0 100%); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 10px 24px -18px rgba(30,27,22,0.35); }
