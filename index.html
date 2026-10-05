@@ -119,6 +119,7 @@ const trades = [
   { id: "PHONE_REPAIR", label: "Phone Repair", icon: Smartphone },
 ];
 const areas = ["All areas", "Main Gate", "Fanuyi", "Odo-Ado", "Ureju"];
+const SUPPORT_EMAIL = "support@vettedhands.com"; // TODO: replace with your real support email
 const reportReasonsCustomer = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
 const reportReasonsArtisan = ["Customer unavailable", "Wrong job description", "Customer issue", "Other"];
 
@@ -250,6 +251,14 @@ function MainApp({ auth }) {
   const [application, setApplication] = useState(null);
   const [requestImage, setRequestImage] = useState(null);
   const [myReviews, setMyReviews] = useState([]);
+  const [profileOrigin, setProfileOrigin] = useState("home"); // where artisanProfile's back button returns to
+  const [wizardStep, setWizardStep] = useState(1);
+  const [wizardTrade, setWizardTrade] = useState(null);
+  const [wizardProblem, setWizardProblem] = useState("");
+  const [wizardArea, setWizardArea] = useState(areas[1]);
+  const [wizardResults, setWizardResults] = useState([]);
+  const [wizardLoading, setWizardLoading] = useState(false);
+  const [wizardSearched, setWizardSearched] = useState(false);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
   function fail(err) { flash(err.message || "Something went wrong"); }
@@ -306,7 +315,8 @@ function MainApp({ auth }) {
   const onlineNow = artisans.filter((a) => a.online);
   const activeRequest = requests.find((r) => r.id === activeRequestId);
 
-  async function openArtisanProfile(a) {
+  async function openArtisanProfile(a, origin = "home") {
+    setProfileOrigin(origin);
     setSelectedArtisan(a);
     setView("artisanProfile");
     // Reviews load first — small and fast. Photos load after, since base64 data
@@ -440,23 +450,41 @@ function MainApp({ auth }) {
         {view === "home" && (
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
             requests={requests} myReviews={myReviews}
-            onlineNow={onlineNow} filtered={artisans} onOpenProfile={openArtisanProfile}
+            onlineNow={onlineNow} filtered={artisans} onOpenProfile={(a) => openArtisanProfile(a, "home")}
             onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
             onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
             onOpenWizard={() => setView("wizard")}
             onLogout={logout} />
         )}
         {view === "wizard" && (
-          <RequestWizardView onBack={() => { setView("home"); setNavTab("home"); }}
-            onSelectArtisan={(a, problem) => { setPrefillJob(problem); openArtisanProfile(a); }} />
+          <RequestWizardView
+            step={wizardStep} setStep={setWizardStep}
+            trade={wizardTrade} setTrade={setWizardTrade}
+            problem={wizardProblem} setProblem={setWizardProblem}
+            area={wizardArea} setArea={setWizardArea}
+            results={wizardResults} setResults={setWizardResults}
+            loading={wizardLoading} setLoading={setWizardLoading}
+            searched={wizardSearched} setSearched={setWizardSearched}
+            onBack={() => {
+              setView("home"); setNavTab("home");
+              setWizardStep(1); setWizardTrade(null); setWizardProblem("");
+              setWizardArea(areas[1]); setWizardResults([]); setWizardSearched(false);
+            }}
+            onSelectArtisan={(a, problem) => { setPrefillJob(problem); openArtisanProfile(a, "wizard"); }} />
         )}
         {view === "browse" && (
           <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
             area={area} setArea={setArea} filtered={artisans}
-            onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={openArtisanProfile} />
+            onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={(a) => openArtisanProfile(a, "browse")} />
         )}
         {view === "artisanProfile" && selectedArtisan && (
-          <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id} onBack={() => setView(navTab === "browse" ? "browse" : "home")} onRequest={() => setView("request")} />
+          <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id}
+            onBack={() => {
+              if (profileOrigin === "wizard") setView("wizard");
+              else if (profileOrigin === "browse") setView("browse");
+              else setView("home");
+            }}
+            onRequest={() => setView("request")} />
         )}
         {view === "request" && selectedArtisan && (
           <RequestView artisan={selectedArtisan} openJobGroups={openGroups} initialJob={prefillJob} onBack={() => setView("artisanProfile")}
@@ -645,15 +673,7 @@ function ArtisanProfileView({ artisan, canRequest, onBack, onRequest }) {
 }
 
 /* ---------------- Request wizard ---------------- */
-function RequestWizardView({ onBack, onSelectArtisan }) {
-  const [step, setStep] = useState(1); // 1 trade, 2 problem, 3 area, 4 results
-  const [trade, setTrade] = useState(null);
-  const [problem, setProblem] = useState("");
-  const [area, setArea] = useState(areas[1]);
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-
+function RequestWizardView({ step, setStep, trade, setTrade, problem, setProblem, area, setArea, results, setResults, loading, setLoading, searched, setSearched, onBack, onSelectArtisan }) {
   async function runSearch() {
     setLoading(true);
     try {
@@ -1147,7 +1167,10 @@ function UserProfileView({ user, isArtisan, application, incomingCount, onApply,
               <div className="pending-title">Application under review</div>
               <div className="pending-sub">We're checking your details. You'll become an artisan once approved by an admin.</div>
               {application.infoRequestNote && (
-                <div className="info-request-note"><AlertTriangle size={13} /> VettedHands needs more info: "{application.infoRequestNote}". Please reach out to support with this.</div>
+                <div className="info-request-note">
+                  <AlertTriangle size={13} /> VettedHands needs more info: "{application.infoRequestNote}".
+                  <a className="support-link" href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Application info request")}&body=${encodeURIComponent("Hi, responding to your request for more info on my artisan application: ")}`}>Reach out to support</a>
+                </div>
               )}
             </div>
           )}
@@ -1359,7 +1382,8 @@ function Style() {
       .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
       .convo-job-image { width:100%; max-height:160px; object-fit:cover; border-bottom:1px solid var(--line); }
       .convo-job-loading { padding:10px 16px; font-size:12px; color:var(--ink-soft); background:var(--accent-bg); text-align:center; }
-      .info-request-note { margin-top:10px; font-size:12px; color:var(--accent); background:var(--accent-bg); border-radius:10px; padding:10px 12px; display:flex; gap:7px; line-height:1.5; }
+      .info-request-note { margin-top:10px; font-size:12px; color:var(--accent); background:var(--accent-bg); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; line-height:1.5; }
+      .support-link { color:var(--accent); font-weight:700; text-decoration:underline; align-self:flex-start; }
       .browse-link { margin:14px auto 0; width:calc(100% - 32px); background:none; border:none; color:var(--ink-soft); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-family:inherit; }
       .dash-card { background:linear-gradient(155deg, var(--surface) 0%, #FBF8F0 100%); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 10px 24px -18px rgba(30,27,22,0.35); }
       .dash-header { display:flex; align-items:center; gap:14px; }
