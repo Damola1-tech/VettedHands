@@ -1,8 +1,8 @@
 {
-  "name": "VettedHands",
+  "name": "VettedHands Waitlist",
   "short_name": "VettedHands",
-  "description": "People you can trust for the job. Vetted electricians, plumbers, tailors and phone repairers.",
-  "start_url": "./",
+  "description": "Join the VettedHands waitlist.",
+  "start_url": "./waitlist.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#F4F1EA",
