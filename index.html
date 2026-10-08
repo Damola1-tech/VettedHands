@@ -523,21 +523,40 @@ function MainApp({ auth }) {
   );
 }
 
-/* ---------------- Home ---------------- */
+/* ---------------- Home ---------------- *//* ---------------- Home ---------------- */
 function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onLogout }) {
   return (
     <div className="screen">
-      <div className="topbar">
-        <div className="brand"><span className="brand-mark"><ShieldCheck size={16} /></span><span className="brand-name">VettedHands</span></div>
-        <div className="topbar-icons">
-          <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>Hi, {user.name.split(" ")[0]}</span>
-          <button className="iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
+      <div className="hero">
+        <div className="hero-top">
+          <div className="hero-brand"><span className="brand-mark"><ShieldCheck size={16} /></span><span className="brand-name">VettedHands</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="hero-greet">Hi, {user.name.split(" ")[0]}</span>
+            <button className="hero-iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
+          </div>
         </div>
+        <div className="hero-title">Find a vetted hand</div>
+        <div className="hero-search"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
       </div>
+
+      <div className="qa-row">
+        {trades.map((t) => { const I = t.icon; return (
+          <button key={t.id} className="qa" onClick={() => onPickTrade(t.id)}>
+            <span className="qa-icon"><I size={22} /></span>
+            <span className="qa-label">{t.id === "PHONE_REPAIR" ? "Repair" : t.label}</span>
+          </button>
+        ); })}
+        <button className="qa" onClick={onSeeAll}>
+          <span className="qa-icon" style={{ fontSize: 24, fontWeight: 700 }}>+</span>
+          <span className="qa-label">More</span>
+        </button>
+      </div>
+
       <button className="wizard-cta" onClick={onOpenWizard}>
         <span className="wizard-cta-q">What do you need help with?</span>
         <span className="wizard-cta-sub">Tell us the problem, we'll match you with a vetted artisan nearby</span>
       </button>
+
       {isArtisan && user.artisanProfile && (
         <div className="section" style={{ marginTop: 12 }}>
           <div className="dash-card">
@@ -550,7 +569,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, 
               </div>
             </div>
             <div className="dash-stats">
-              <div className="dash-stat"><div className="dash-stat-num">{fmtStars(user.artisanProfile.rating)}</div><div className="dash-stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
+              <div className="dash-stat"><div className="dash-stat-num">{fmtStars(user.artisanProfile.rating)}</div><div className="dash-stat-label"><Star size={11} fill="#E0A458" stroke="none" /> Rating</div></div>
               <div className="dash-stat"><div className="dash-stat-num">{user.artisanProfile.jobsCompleted}</div><div className="dash-stat-label">Jobs done</div></div>
               <div className="dash-stat"><div className="dash-stat-num">{requests.filter((r) => r.status === "PENDING").length}</div><div className="dash-stat-label">New requests</div></div>
             </div>
@@ -568,7 +587,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, 
           )}
         </div>
       )}
-      <div className="searchbar"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+
       <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
       <div className="section">
         <div className="section-head"><span>Online now</span></div>
@@ -580,14 +599,6 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, 
             </button>
           ))}
           {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
-        </div>
-      </div>
-      <div className="section">
-        <div className="section-head"><span>Browse a trade</span></div>
-        <div className="trade-grid">
-          {trades.map((t) => { const I = t.icon; return (
-            <button key={t.id} className="trade-tile" onClick={() => onPickTrade(t.id)}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
-          ); })}
         </div>
       </div>
       <div className="section section--flush">
@@ -1400,6 +1411,34 @@ function Style() {
       .settings-row:last-child { border-bottom:none; }
       .settings-row--danger { color:var(--danger); }
       .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
+
+      .hero { background:linear-gradient(135deg,#1F3A34 0%,#14241F 100%); border-radius:0 0 28px 28px; padding:calc(20px + env(safe-area-inset-top)) 18px 22px; }
+      .hero-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+      .hero-brand { display:flex; align-items:center; gap:7px; }
+      .hero-brand .brand-mark { background:rgba(244,239,224,.16); color:#F4EFE0; }
+      .hero-brand .brand-name { color:#F4EFE0; }
+      .hero-greet { font-size:12px; color:rgba(244,239,224,.7); }
+      .hero-iconbtn { width:34px; height:34px; border-radius:10px; background:rgba(244,239,224,.14); border:none; color:#F4EFE0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .hero-title { font-family:'Fraunces',serif; font-weight:600; font-size:23px; color:#F4EFE0; margin-bottom:14px; }
+      .hero-search { display:flex; align-items:center; gap:10px; background:rgba(244,239,224,.14); border-radius:13px; padding:12px 14px; color:rgba(244,239,224,.8); }
+      .hero-search input { flex:1; border:none; outline:none; background:transparent; color:#F4EFE0; font-size:14px; font-family:inherit; min-width:0; }
+      .hero-search input::placeholder { color:rgba(244,239,224,.7); }
+      .qa-row { display:flex; justify-content:space-between; padding:18px 20px 0; }
+      .qa { background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:7px; cursor:pointer; font-family:inherit; width:62px; }
+      .qa-icon { width:52px; height:52px; border-radius:16px; background:var(--surface); color:var(--primary); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(31,58,52,.1); }
+      .qa-label { font-size:10.5px; font-weight:600; color:var(--ink); }
+      .wizard-cta { background:var(--surface); color:var(--ink); border:1px solid var(--line); border-left:4px solid var(--accent); box-shadow:0 2px 10px -6px rgba(30,27,22,.25); }
+      .wizard-cta-q { color:var(--primary); }
+      .wizard-cta-sub { opacity:1; color:var(--ink-soft); }
+      .dash-card { background:linear-gradient(135deg,#1F3A34 0%,#14241F 100%); border:none; box-shadow:0 14px 28px -18px rgba(20,36,31,.6); }
+      .dash-card .avatar { background:rgba(244,239,224,.16) !important; color:#F4EFE0; }
+      .dash-name { color:#F4EFE0; }
+      .dash-card .app-trade { color:rgba(244,239,224,.7); }
+      .dash-card .badge { background:rgba(244,239,224,.16); color:#F4EFE0; }
+      .dash-stats { border-top:1px solid rgba(244,239,224,.18); }
+      .dash-stat:not(:last-child)::after { background:rgba(244,239,224,.18); }
+      .dash-stat-num { color:#F4EFE0; }
+      .dash-stat-label { color:rgba(244,239,224,.7); }
 
       @media (max-width: 480px) {
         .app { padding: 0; }

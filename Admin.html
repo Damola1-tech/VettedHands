@@ -594,6 +594,17 @@ function Style() {
       .approve-btn { background:var(--primary); color:#fff; }
       .toast { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
 
+      .topbar { background:linear-gradient(135deg,#1F3A34 0%,#14241F 100%); border-radius:0 0 28px 28px; padding:20px 16px 46px; }
+      .topbar .brand-name { color:#F4EFE0; }
+      .topbar .brand-mark { background:rgba(244,239,224,.16); color:#F4EFE0; }
+      .topbar .brand-sub { background:rgba(244,239,224,.14); border-color:transparent; color:rgba(244,239,224,.85); }
+      .topbar .iconbtn { background:rgba(244,239,224,.14); border:none; color:#F4EFE0; }
+      .stats-grid { margin-top:-28px; position:relative; }
+      .stat-box { box-shadow:0 6px 16px -10px rgba(30,27,22,.35); }
+      @media (min-width: 760px) {
+        .phone .topbar { max-width:none; margin:0; padding-left:calc((100% - 760px) / 2 + 16px); padding-right:calc((100% - 760px) / 2 + 16px); }
+      }
+
       @media (max-width: 420px) {
         .stats-grid--full { grid-template-columns:repeat(3,1fr); }
       }
