@@ -131,6 +131,10 @@ const trades = [
   { id: "PLUMBER", label: "Plumber", icon: Droplet },
   { id: "TAILOR", label: "Tailor", icon: Scissors },
   { id: "PHONE_REPAIR", label: "Phone Repair", icon: Smartphone },
+  { id: "LAPTOP_REPAIR", label: "Laptop Repair", icon: Laptop },
+  { id: "PAINTER", label: "Painter", icon: PaintRoller },
+  { id: "CARPENTER", label: "Carpenter", icon: Hammer },
+  { id: "CLEANER", label: "Cleaner", icon: Sparkle },
 ];
 const areas = ["All areas", "Main Gate", "Fanuyi", "Odo-Ado", "Ureju"];
 const SUPPORT_EMAIL = "vettedhands@gmail.com"; // TODO: replace with your real support email
@@ -338,13 +342,8 @@ function MainApp({ auth, intent }) {
   const [requestImage, setRequestImage] = useState(null);
   const [myReviews, setMyReviews] = useState([]);
   const [profileOrigin, setProfileOrigin] = useState("home"); // where artisanProfile's back button returns to
-  const [wizardStep, setWizardStep] = useState(1);
-  const [wizardTrade, setWizardTrade] = useState(null);
-  const [wizardProblem, setWizardProblem] = useState("");
-  const [wizardArea, setWizardArea] = useState(areas[1]);
-  const [wizardResults, setWizardResults] = useState([]);
-  const [wizardLoading, setWizardLoading] = useState(false);
-  const [wizardSearched, setWizardSearched] = useState(false);
+  const blankWiz = { step: 1, trade: null, problem: "", area: user.area && areas.includes(user.area) ? user.area : areas[1], when: "asap", whenDate: "", image: null, results: [], loading: false, searched: false, sort: "best" };
+  const [wiz, setWiz] = useState(blankWiz);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
   function fail(err) { flash(err.message || "Something went wrong"); }
@@ -425,7 +424,7 @@ function MainApp({ auth, intent }) {
     } catch (e) { /* photos just won't show */ }
   }
   function goNav(tab) {
-    setNavTab(tab);
+    setNavTab(tab === "browse" ? "home" : tab);
     if (tab === "home") setView("home");
     else if (tab === "browse") { setTradeFilter(null); setView("browse"); }
     else if (tab === "requests") { loadRequests(); setView("requestsList"); }
@@ -433,13 +432,21 @@ function MainApp({ auth, intent }) {
     else setView("userProfile");
   }
 
-  async function sendRequest(artisanProfileId, job, when, jobGroupId, image) {
+  async function sendRequest(artisanProfileId, job, when, jobGroupId, image, reqArea) {
     try {
-      const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined, image: image || undefined } });
+      const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined, image: image || undefined, area: reqArea || undefined } });
       setRequests((prev) => [d.request, ...prev]);
       setActiveRequestId(d.request.id);
+      setWiz({ ...blankWiz });
       setView("requestSent");
     } catch (e) { fail(e); }
+  }
+  async function requestFromProfile() {
+    if (profileOrigin === "wizard" && wiz.problem.trim().length >= 10) {
+      await sendRequest(selectedArtisan.id, wiz.problem.trim(), whenText(wiz), null, wiz.image, wiz.area);
+    } else {
+      setView("request");
+    }
   }
   async function openConversation(requestId, from = null) {
     setConvoFrom(from);
@@ -549,9 +556,9 @@ function MainApp({ auth, intent }) {
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
             requests={requests} myReviews={myReviews}
             onlineNow={onlineNow} filtered={artisans} onOpenProfile={(a) => openArtisanProfile(a, "home")}
-            onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
-            onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
-            onOpenWizard={() => setView("wizard")}
+            onPickTrade={(id) => { setWiz({ ...blankWiz, trade: id }); setView("wizard"); }}
+            onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("home"); }}
+            onOpenWizard={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
             onOpenRequests={() => setView("notifications")}
             onOpenMe={() => goNav("profile")}
             hasAlerts={unreadNotifs > 0}
@@ -559,20 +566,9 @@ function MainApp({ auth, intent }) {
             onLogout={logout} />
         )}
         {view === "wizard" && (
-          <RequestWizardView
-            step={wizardStep} setStep={setWizardStep}
-            trade={wizardTrade} setTrade={setWizardTrade}
-            problem={wizardProblem} setProblem={setWizardProblem}
-            area={wizardArea} setArea={setWizardArea}
-            results={wizardResults} setResults={setWizardResults}
-            loading={wizardLoading} setLoading={setWizardLoading}
-            searched={wizardSearched} setSearched={setWizardSearched}
-            onBack={() => {
-              setView("home"); setNavTab("home");
-              setWizardStep(1); setWizardTrade(null); setWizardProblem("");
-              setWizardArea(areas[1]); setWizardResults([]); setWizardSearched(false);
-            }}
-            onSelectArtisan={(a, problem) => { setPrefillJob(problem); openArtisanProfile(a, "wizard"); }} />
+          <RequestFlow wiz={wiz} setWiz={setWiz} meId={user.id}
+            onBack={() => { setView("home"); setNavTab("home"); setWiz({ ...blankWiz }); }}
+            onSelectArtisan={(a) => openArtisanProfile(a, "wizard")} />
         )}
         {view === "browse" && (
           <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
@@ -581,12 +577,13 @@ function MainApp({ auth, intent }) {
         )}
         {view === "artisanProfile" && selectedArtisan && (
           <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id}
+            summary={profileOrigin === "wizard" && wiz.problem.trim().length >= 10 ? `${tradeLabel(wiz.trade)} · ${whenText(wiz)} · ${wiz.area}` : null}
             onBack={() => {
               if (profileOrigin === "wizard") setView("wizard");
               else if (profileOrigin === "browse") setView("browse");
               else setView("home");
             }}
-            onRequest={() => setView("request")} />
+            onRequest={requestFromProfile} />
         )}
         {view === "request" && selectedArtisan && (
           <RequestView artisan={selectedArtisan} openJobGroups={openGroups} initialJob={prefillJob} onBack={() => setView("artisanProfile")}
@@ -768,111 +765,300 @@ function ArtisanCard({ artisan, onOpen }) {
 }
 
 /* ---------------- Artisan profile ---------------- */
-function ArtisanProfileView({ artisan, canRequest, onBack, onRequest }) {
+function timeAgo(d) {
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 864e5);
+  if (days < 1) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 14) return `${days} days ago`;
+  if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
+  return `${Math.floor(days / 30)} months ago`;
+}
+
+function ArtisanProfileView({ artisan: a, canRequest, summary, onBack, onRequest }) {
+  const [busy, setBusy] = useState(false);
+  const st = a.stats || null;
+  const first = a.user.name.split(" ")[0];
+  const top = a.badge === "TOP_RATED";
+  const minJobs = st ? st.minJobs : 15;
+  const minRating = st ? st.minRating : 4.5;
+  const approved = a.createdAt ? new Date(a.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : null;
+  const rows = [
+    { ok: true, t: "Identity verified", d: "ID and phone number checked by VettedHands." },
+    { ok: !!a.skillVerified, t: a.skillVerified ? "Skill verified" : "Skill not yet verified", d: a.skillVerified ? "Trade and experience confirmed by our review team." : "Our review team has not confirmed this trade yet." },
+    ...(approved ? [{ ok: true, t: "Approved by admin", d: `Application reviewed and approved in ${approved}.` }] : []),
+    { ok: top, t: top ? "Top Rated" : "Top Rated not yet earned", d: top ? `Earned: ${minJobs}+ completed jobs with a ${minRating}+ average rating.` : `Needs ${minJobs} completed jobs and a ${minRating}+ average rating. ${a.jobsCompleted} so far.` },
+  ];
+  async function go() {
+    if (busy) return;
+    setBusy(true);
+    try { await onRequest(); } finally { setBusy(false); }
+  }
   return (
-    <div className="screen">
-      <div className="topbar"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button><div className="topbar-title">Profile</div><div style={{ width: 34 }} /></div>
-      <div className="profile-hero">
-        <div className="avatar avatar--lg" style={{ background: colorFor(artisan.id) }}>{initials(artisan.user.name)}</div>
-        <div className="profile-name">{artisan.user.name}</div>
-        <div className="profile-trade">{tradeLabel(artisan.trade)} · {artisan.area}</div>
-        <div className="profile-status"><span className={"dot " + (artisan.online ? "dot--online" : "dot--offline")} />{artisan.online ? "Online now" : "Offline"}</div>
-        <div className="badge badge--lg"><CheckCircle2 size={13} /> {artisan.badge === "TOP_RATED" ? "Top Rated" : "Vetted"} by VettedHands</div>
-      </div>
-      <div className="stat-row">
-        <div className="stat"><div className="stat-num">{fmtStars(artisan.rating)}</div><div className="stat-label"><Star size={11} fill="#B5651D" stroke="none" /> Rating</div></div>
-        <div className="stat"><div className="stat-num">{artisan.jobsCompleted}</div><div className="stat-label">Completed jobs</div></div>
-      </div>
-      <div className="section"><div className="section-head"><span>About</span></div><p className="bio">{artisan.bio}</p></div>
-      {artisan.reviews && artisan.reviews.length > 0 && (
-        <div className="section">
-          <div className="section-head"><span>What customers say</span></div>
-          <div className="review-list">
-            {artisan.reviews.map((r) => (
-              <div key={r.id} className="review-item">
-                <div className="review-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={12} fill={i < r.rating ? "#B5651D" : "none"} stroke={i < r.rating ? "#B5651D" : "#C9BFAB"} />)}</div>
-                <div className="review-text">"{r.reviewText}"</div>
-                <div className="review-author">— {r.student.name.split(" ")[0]}</div>
-              </div>
-            ))}
+    <div className="screen ap">
+      <div className="ap-hero">
+        <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+        <div className="ap-id">
+          <span className="ap-av">{initials(a.user.name)}</span>
+          <div>
+            <div className="ap-name">{a.user.name}</div>
+            <div className="ap-trade">{tradeLabel(a.trade)} · {a.area}, Ado-Ekiti</div>
           </div>
         </div>
-      )}
-      {artisan.photos && artisan.photos.length > 0 && (
-        <div className="section">
-          <div className="section-head"><span>Recent work</span></div>
-          <div className="work-row">{artisan.photos.map((p) => <img key={p.id} src={p.url} className="work-tile" style={{ objectFit: "cover" }} />)}</div>
+        <div className="ap-pills">
+          <span className="ap-pill"><ShieldCheck size={15} /> Vetted Artisan</span>
+          {a.skillVerified && <span className="ap-pill ap-pill--b">Skill Verified</span>}
+          {top && <span className="ap-pill ap-pill--a">Top Rated</span>}
+        </div>
+      </div>
+
+      <div className="ap-stats">
+        <div className="ap-stat"><b>{fmtStars(a.rating)}</b><span>Rating</span></div>
+        <div className="ap-stat"><b>{a.jobsCompleted}</b><span>Jobs completed</span></div>
+        <div className="ap-stat"><b>{st ? st.repeatCustomers : "–"}</b><span>Repeat customers</span></div>
+      </div>
+      <div className={"ap-avail" + (a.online ? "" : " ap-avail--off")}><i />{a.online ? `Available now · ${a.area}` : `Currently unavailable · ${a.area}`}</div>
+
+      <div className="ap-sec">
+        <h2 className="ap-h">Verification</h2>
+        <div className="ap-card">
+          {rows.map((r) => (
+            <div key={r.t} className={"ap-vrow" + (r.ok ? "" : " ap-vrow--no")}>
+              <span className="ap-vic">{r.ok ? <Check size={16} /> : <Clock size={16} />}</span>
+              <div><b>{r.t}</b><span>{r.d}</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="ap-sec"><h2 className="ap-h">About</h2><p className="ap-about">{a.bio}</p></div>
+
+      {a.photos && a.photos.length > 0 && (
+        <div className="ap-sec">
+          <h2 className="ap-h">Recent work</h2>
+          <div className="ap-work">{a.photos.map((p) => <img key={p.id} src={p.url} alt="" />)}</div>
         </div>
       )}
-      {canRequest && <button className="primary-btn primary-btn--fixed profile-request-btn" onClick={onRequest}>Request {artisan.user.name.split(" ")[0]}</button>}
+
+      <div className="ap-sec">
+        <h2 className="ap-h">Reviews<small>From completed jobs only</small></h2>
+        {(a.reviews || []).map((r) => { const [bg, fg] = tintFor(r.id); return (
+          <div className="ap-rev" key={r.id}>
+            <div className="ap-rev-top">
+              <span className="ap-rev-av" style={{ background: bg, color: fg }}>{initials(r.student.name)}</span>
+              <div className="ap-rev-id"><b>{shortName(r.student.name)}</b><span>{tradeLabel(a.trade)}{r.updatedAt ? ` · ${timeAgo(r.updatedAt)}` : ""}</span></div>
+              <span className="ap-rev-r">{Number(r.rating).toFixed(1)} <Star size={14} fill="#B5651D" stroke="none" /></span>
+            </div>
+            <p>{r.reviewText}</p>
+          </div>
+        ); })}
+        {(!a.reviews || a.reviews.length === 0) && (
+          <div className="ap-card" style={{ padding: "18px 16px", color: "var(--ink-soft)" }}>No reviews yet. Reviews appear after a customer confirms a completed job.</div>
+        )}
+      </div>
+
+      <div className="ap-sec">
+        <h2 className="ap-h">Track record</h2>
+        <div className="ap-track">
+          <div className="ap-bar">
+            <div className="ap-bar-top"><span>Jobs completed</span><b>{a.jobsCompleted}</b></div>
+            <div className="ap-bar-t"><i style={{ width: Math.min(100, (a.jobsCompleted / minJobs) * 100) + "%" }} /></div>
+          </div>
+          {st && st.totalCustomers > 0 && (
+            <div className="ap-bar">
+              <div className="ap-bar-top"><span>Repeat customers</span><b>{st.repeatCustomers} of {st.totalCustomers}</b></div>
+              <div className="ap-bar-t"><i style={{ width: (st.repeatCustomers / st.totalCustomers) * 100 + "%" }} /></div>
+            </div>
+          )}
+          {st && (
+            <div className="ap-bar">
+              <div className="ap-bar-top"><span>Reviews</span><b>{st.reviewCount}</b></div>
+              <div className="ap-bar-t"><i style={{ width: Math.min(100, (st.reviewCount / Math.max(1, a.jobsCompleted)) * 100) + "%" }} /></div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {canRequest ? (
+        <div className="ap-cta">
+          <button disabled={busy} onClick={go}>{busy ? "Sending…" : `Request ${first}`}</button>
+          {summary && <div className="ap-note">Sends your request: {summary}</div>}
+        </div>
+      ) : <div style={{ height: 24 }} />}
     </div>
   );
 }
 
-/* ---------------- Request wizard ---------------- */
-function RequestWizardView({ step, setStep, trade, setTrade, problem, setProblem, area, setArea, results, setResults, loading, setLoading, searched, setSearched, onBack, onSelectArtisan }) {
-  async function runSearch() {
-    setLoading(true);
+/* ---------------- Request flow ---------------- */
+const WHEN_OPTIONS = [
+  { id: "asap", label: "As soon as possible", sub: "Next available artisan", short: "ASAP" },
+  { id: "today", label: "Today", sub: "Afternoon", short: "Today" },
+  { id: "tomorrow", label: "Tomorrow", sub: "Morning", short: "Tomorrow" },
+  { id: "date", label: "Pick a date", sub: "Choose day and time", short: "Scheduled" },
+];
+const SORTS = [["best", "Best match"], ["area", "Same area"], ["rating", "Rating"], ["jobs", "Jobs completed"]];
+
+function whenText(w) {
+  if (w.when === "today") return "Today afternoon";
+  if (w.when === "tomorrow") return "Tomorrow morning";
+  if (w.when === "date" && w.whenDate) {
+    const d = new Date(w.whenDate);
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  return "As soon as possible";
+}
+
+// Trade match is the search itself. Then: available, same area, verification,
+// rating (weighted by jobs so one 5-star job cannot outrank a proven record), jobs completed.
+function matchScore(a, area) {
+  let s = 0;
+  if (a.online) s += 1000;
+  if (a.area === area) s += 400;
+  if (a.skillVerified) s += 120;
+  if (a.badge === "TOP_RATED") s += 120;
+  s += Number(a.rating || 0) * 20 * Math.min(1, (a.jobsCompleted || 0) / 5);
+  s += Math.min(a.jobsCompleted || 0, 50);
+  return s;
+}
+
+function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan }) {
+  const set = (patch) => setWiz((w) => ({ ...w, ...patch }));
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const formOk = wiz.trade && wiz.problem.trim().length >= 10 && (wiz.when !== "date" || !!wiz.whenDate);
+
+  async function pickPhoto(e) {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    setPhotoBusy(true);
+    try { set({ image: await fileToDataUrl(f) }); } finally { setPhotoBusy(false); }
+  }
+  async function search() {
+    set({ step: 2, loading: true, searched: false, sort: "best" });
     try {
-      const qs = new URLSearchParams({ trade, area });
-      const d = await api(`/api/artisans?${qs.toString()}`);
-      setResults(d.artisans);
-    } catch (e) { setResults([]); }
-    finally { setLoading(false); setSearched(true); }
+      const d = await api(`/api/artisans?trade=${wiz.trade}`);
+      set({ results: d.artisans.filter((a) => a.user.id !== meId), loading: false, searched: true });
+    } catch (e) { set({ results: [], loading: false, searched: true }); }
   }
 
-  function back() { if (step === 1) onBack(); else setStep(step - 1); }
+  const list = useMemo(() => {
+    const arr = [...wiz.results];
+    const sc = (a) => matchScore(a, wiz.area);
+    if (wiz.sort === "area") arr.sort((a, b) => (b.area === wiz.area) - (a.area === wiz.area) || sc(b) - sc(a));
+    else if (wiz.sort === "rating") arr.sort((a, b) => (b.rating - a.rating) || (b.jobsCompleted - a.jobsCompleted));
+    else if (wiz.sort === "jobs") arr.sort((a, b) => (b.jobsCompleted - a.jobsCompleted) || (b.rating - a.rating));
+    else arr.sort((a, b) => sc(b) - sc(a));
+    return arr;
+  }, [wiz.results, wiz.sort, wiz.area]);
+
+  const whenShort = (WHEN_OPTIONS.find((o) => o.id === wiz.when) || WHEN_OPTIONS[0]).short;
 
   return (
-    <div className="screen">
-      <div className="topbar"><button className="iconbtn" onClick={back}><ArrowLeft size={18} /></button><div className="topbar-title">Get help</div><div style={{ width: 34 }} /></div>
+    <div className="screen rf">
+      <div className="rf-top">
+        <button className="rf-back" onClick={() => (wiz.step === 2 ? set({ step: 1 }) : onBack())} aria-label="Back"><ArrowLeft size={22} /></button>
+        <span>New request · Step {wiz.step} of 2</span>
+      </div>
 
-      {step === 1 && (
-        <div className="section" style={{ marginTop: 10 }}>
-          <div className="wizard-question">What do you need help with?</div>
-          <div className="trade-grid" style={{ marginTop: 14 }}>
-            {trades.map((t) => { const I = t.icon; return (
-              <button key={t.id} className="trade-tile" onClick={() => { setTrade(t.id); setStep(2); }}><span className="trade-icon"><I size={18} /></span>{t.label}</button>
-            ); })}
+      {wiz.step === 1 ? (
+        <>
+          <h1 className="rf-h">What do you need help with?</h1>
+          <p className="rf-sub">The clearer the job, the better the match.</p>
+
+          <div className="rf-label">Service category</div>
+          <div className="rf-chips">
+            {trades.map((t) => <button key={t.id} type="button" className={"rf-chip" + (wiz.trade === t.id ? " on" : "")} onClick={() => set({ trade: t.id })}>{t.label}</button>)}
           </div>
-        </div>
-      )}
 
-      {step === 2 && (
-        <div className="form">
-          <div className="wizard-question">What's the problem?</div>
-          <textarea rows={4} value={problem} onChange={(e) => setProblem(e.target.value)} placeholder="e.g. My phone isn't charging" />
-          <button className="primary-btn" style={{ margin: 0 }} disabled={problem.trim().length < 3} onClick={() => setStep(3)}>Next</button>
-        </div>
-      )}
+          <div className="rf-label">Describe the job</div>
+          <textarea className="rf-text" rows={4} maxLength={500} value={wiz.problem} onChange={(e) => set({ problem: e.target.value })} placeholder="e.g. The socket in my kitchen sparks when I plug anything in." />
+          <div className="rf-count"><span>Mention what you see, hear or smell.</span><span>{wiz.problem.length} / 500</span></div>
 
-      {step === 3 && (
-        <div className="form">
-          <div className="wizard-question">Where are you?</div>
-          <select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select>
-          <button className="primary-btn" style={{ margin: 0 }} onClick={() => { setStep(4); runSearch(); }}>Find artisans</button>
-        </div>
-      )}
+          <div className="rf-label">Your location</div>
+          <label className="rf-field">
+            <MapPin size={18} />
+            <select value={wiz.area} onChange={(e) => set({ area: e.target.value })}>
+              {areas.filter((a) => a !== "All areas").map((a) => <option key={a} value={a}>{a}, Ado-Ekiti</option>)}
+            </select>
+            <ChevronDown size={16} />
+          </label>
 
-      {step === 4 && (
-        <div className="feed feed--scroll">
-          <div className="wizard-question" style={{ marginBottom: 10 }}>Available {tradeLabel(trade).toLowerCase()}s near {area}</div>
-          {loading && <div className="empty"><div className="empty-title">Searching…</div></div>}
-          {!loading && searched && results.length === 0 && <div className="empty"><div className="empty-title">No one matches yet</div><div className="empty-sub">Try a different area.</div></div>}
-          {!loading && results.map((a) => (
-            <div key={a.id} className="acard" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}>
-              <div style={{ display: "flex", gap: 12 }}>
-                <div className="acard-avatar-wrap"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div><span className={"dot " + (a.online ? "dot--online" : "dot--offline")} /></div>
-                <div className="acard-main">
-                  <div className="acard-top"><span className="acard-name">{a.user.name}</span><span className="badge"><CheckCircle2 size={11} /> {a.badge === "TOP_RATED" ? "Top Rated" : "Vetted"}</span></div>
-                  <div className="acard-trade">{a.online ? "Online now" : "Offline"} · {a.area}</div>
-                  <div className="acard-meta"><span><Star size={12} fill="#B5651D" stroke="none" /> {fmtStars(a.rating)}</span><span className="dot-sep">·</span><span>{a.jobsCompleted} jobs</span></div>
-                </div>
+          <div className="rf-label">Preferred time</div>
+          <div className="rf-times">
+            {WHEN_OPTIONS.map((o) => (
+              <button key={o.id} type="button" className={"rf-time" + (wiz.when === o.id ? " on" : "")} onClick={() => set({ when: o.id })}>
+                <b>{o.label}</b><span>{o.sub}</span>
+              </button>
+            ))}
+          </div>
+          {wiz.when === "date" && <input className="rf-date" type="datetime-local" value={wiz.whenDate} onChange={(e) => set({ whenDate: e.target.value })} />}
+
+          <div className="rf-label">Photo <small>(optional)</small></div>
+          <div className="rf-photo">
+            <label className="rf-add">
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={pickPhoto} />
+              <span>{photoBusy ? "…" : "+"}</span>Add
+            </label>
+            {wiz.image && (
+              <div className="rf-thumb">
+                <img src={wiz.image} alt="" />
+                <button type="button" onClick={() => set({ image: null })} aria-label="Remove photo"><X size={12} /></button>
               </div>
-              <button className="settle-btn" onClick={() => onSelectArtisan(a, problem.trim())}>Request {a.user.name.split(" ")[0]}</button>
+            )}
+            <p>A clear photo helps artisans quote and prepare tools.</p>
+          </div>
+
+          <div className="rf-bar">
+            <div className="rf-note"><ShieldCheck size={16} /> Only vetted artisans are matched. No payment needed to request.</div>
+            <button className="rf-go" disabled={!formOk || photoBusy} onClick={search}>Find trusted artisans</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <h1 className="rf-h">
+            {wiz.loading ? "Finding trusted artisans…" : list.length ? `We found ${list.length} trusted ${list.length === 1 ? "artisan" : "artisans"} near you` : "No artisans available for this service right now"}
+          </h1>
+          <div className="rf-tags"><span>{tradeLabel(wiz.trade)}</span><span>{wiz.area}</span><span>{whenShort}</span></div>
+
+          {!wiz.loading && wiz.searched && list.length === 0 && (
+            <div className="rf-empty">
+              <div className="rf-empty-ic"><MapPin size={26} /></div>
+              <b>No artisans available for this service right now.</b>
+              <p>Nobody vetted for {tradeLabel(wiz.trade)} is listed in Ado-Ekiti yet. Try another service, or check back soon.</p>
+              <button className="rf-ghost" onClick={() => set({ step: 1 })}>Try another service</button>
             </div>
-          ))}
-        </div>
+          )}
+
+          {list.length > 0 && (
+            <>
+              <div className="rf-info"><ShieldCheck size={18} /><span>Ranked by trade match, availability, area, verification, rating and jobs completed.</span></div>
+              <div className="rf-sorts">
+                {SORTS.map(([k, l]) => <button key={k} className={"rf-sort" + (wiz.sort === k ? " on" : "")} onClick={() => set({ sort: k })}>{l}</button>)}
+              </div>
+              <div className="rf-list">
+                {list.map((a) => { const [bg, fg] = tintFor(a.id); return (
+                  <div key={a.id} className="rf-card">
+                    <div className="rf-card-top">
+                      <span className="rf-av" style={{ background: bg, color: fg }}>{initials(a.user.name)}</span>
+                      <div className="rf-id"><b>{a.user.name}</b><span>{tradeLabel(a.trade)}{a.area === wiz.area ? " · Same area" : ""}</span></div>
+                      <span className="rf-rate"><Star size={14} fill="#B5651D" stroke="none" /><b>{fmtStars(a.rating)}</b></span>
+                    </div>
+                    <div className="rf-badges">
+                      <span className="rf-b rf-b--g"><ShieldCheck size={13} /> Vetted</span>
+                      {a.skillVerified && <span className="rf-b rf-b--b">Skill Verified</span>}
+                      {a.badge === "TOP_RATED" && <span className="rf-b rf-b--a">Top Rated</span>}
+                    </div>
+                    <div className="rf-meta">
+                      <span><b>{a.jobsCompleted}</b> jobs completed</span>
+                      <span><MapPin size={13} /> {a.area}</span>
+                      <span className={a.online ? "rf-on" : "rf-off"}><i />{a.online ? "Available now" : "Offline"}</span>
+                    </div>
+                    <button className="rf-view" onClick={() => onSelectArtisan(a)}>View profile</button>
+                  </div>
+                ); })}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );
@@ -1518,7 +1704,6 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
 function BottomNav({ active, onChange, isArtisan, requestCount, messageCount }) {
   const items = [
     { id: "home", label: "Home", icon: Home },
-    { id: "browse", label: "Browse", icon: Compass },
     { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
     { id: "messages", label: "Messages", icon: MessageCircle, badge: messageCount },
     { id: "profile", label: "Profile", icon: UserIcon },
@@ -1960,6 +2145,125 @@ function Style() {
       .auth-submit { background:var(--primary); color:#fff; border:none; border-radius:14px; padding:16px; font-size:16px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:4px; }
       .auth-submit:disabled { opacity:.5; cursor:not-allowed; }
       .auth-note { display:flex; gap:12px; align-items:flex-start; margin-top:22px; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:16px; font-size:14px; line-height:1.5; }
+
+            /* ===== Request flow ===== */
+      .rf { padding:calc(14px + env(safe-area-inset-top)) 20px 0; min-height:0; }
+      .rf-top { display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:15px; font-weight:600; margin-bottom:6px; }
+      .rf-back { background:none; border:none; color:var(--ink); width:40px; height:40px; margin-left:-10px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .rf-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:31px; line-height:1.08; letter-spacing:-0.02em; margin:6px 0 8px; }
+      .rf-sub { color:var(--ink-soft); font-size:16px; margin:0 0 20px; }
+      .rf-label { font-weight:700; font-size:15px; margin:22px 0 10px; }
+      .rf-label small { font-weight:500; color:var(--ink-soft); font-size:15px; }
+      .rf-chips { display:flex; flex-wrap:wrap; gap:10px; }
+      .rf-chip { background:var(--surface); border:1.5px solid var(--line); border-radius:999px; padding:12px 18px; font-family:inherit; font-size:15px; font-weight:600; color:var(--ink); cursor:pointer; }
+      .rf-chip.on { background:var(--primary); border-color:var(--primary); color:#fff; }
+      .rf-text { width:100%; border:1.5px solid var(--line); border-radius:14px; padding:14px; font-family:inherit; font-size:16px; line-height:1.45; resize:none; background:var(--surface); color:var(--ink); }
+      .rf-text:focus, .rf-date:focus { outline:none; border-color:var(--primary); }
+      .rf-count { display:flex; justify-content:space-between; gap:12px; color:var(--ink-soft); font-size:13.5px; margin-top:8px; }
+      .rf-field { display:flex; align-items:center; gap:10px; background:var(--surface); border:1.5px solid var(--line); border-radius:14px; padding:0 14px; color:var(--primary); }
+      .rf-field select { flex:1; border:none; background:transparent; font-family:inherit; font-size:16px; padding:15px 0; color:var(--ink); appearance:none; -webkit-appearance:none; outline:none; }
+      .rf-times { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .rf-time { text-align:left; background:var(--surface); border:1.5px solid var(--line); border-radius:14px; padding:13px 14px; font-family:inherit; cursor:pointer; display:flex; flex-direction:column; gap:3px; }
+      .rf-time b { font-size:15px; color:var(--ink); }
+      .rf-time span { font-size:13px; color:var(--ink-soft); }
+      .rf-time.on { background:#E3EFE9; border-color:var(--primary); }
+      .rf-date { width:100%; margin-top:10px; border:1.5px solid var(--line); border-radius:14px; padding:13px 14px; font-family:inherit; font-size:16px; background:var(--surface); }
+      .rf-photo { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+      .rf-add { width:84px; height:84px; border:1.5px dashed #BFB69F; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:var(--primary); font-weight:700; font-size:13px; cursor:pointer; }
+      .rf-add span { font-size:24px; line-height:1; }
+      .rf-thumb { position:relative; width:84px; height:84px; }
+      .rf-thumb img { width:100%; height:100%; object-fit:cover; border-radius:16px; }
+      .rf-thumb button { position:absolute; top:-6px; right:-6px; width:24px; height:24px; border-radius:50%; background:var(--danger); color:#fff; border:2px solid var(--bg); display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer; }
+      .rf-photo p { flex-basis:100%; margin:0; color:var(--ink-soft); font-size:13.5px; }
+      .rf-bar { position:sticky; bottom:0; margin:26px -20px 0; padding:12px 20px calc(14px + env(safe-area-inset-bottom)); background:var(--bg); border-top:1px solid var(--line); }
+      .rf-note { display:flex; align-items:center; gap:8px; color:var(--ink-soft); font-size:13.5px; margin-bottom:10px; }
+      .rf-go { width:100%; background:var(--primary); color:#fff; border:none; border-radius:14px; padding:17px; font-family:inherit; font-size:16.5px; font-weight:700; cursor:pointer; }
+      .rf-go:disabled { opacity:.4; cursor:not-allowed; }
+      .rf-tags { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 16px; }
+      .rf-tags span { background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:7px 14px; font-size:14px; font-weight:600; }
+      .rf-info { display:flex; gap:10px; align-items:flex-start; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:14px; font-size:14px; line-height:1.45; margin-bottom:16px; }
+      .rf-info svg { margin-top:2px; }
+      .rf-sorts { display:flex; gap:10px; overflow-x:auto; margin:0 -20px 16px; padding:0 20px 2px; }
+      .rf-sort { flex-shrink:0; background:var(--surface); border:1.5px solid var(--line); border-radius:999px; padding:11px 18px; font-family:inherit; font-size:15px; font-weight:600; cursor:pointer; color:var(--ink); }
+      .rf-sort.on { background:var(--primary); border-color:var(--primary); color:#fff; }
+      .rf-list { display:flex; flex-direction:column; gap:14px; padding-bottom:24px; }
+      .rf-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
+      .rf-card-top { display:flex; align-items:center; gap:14px; }
+      .rf-av { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:18px; flex-shrink:0; }
+      .rf-id { flex:1; min-width:0; display:flex; flex-direction:column; }
+      .rf-id b { font-family:'Bricolage Grotesque',sans-serif; font-size:19px; line-height:1.15; }
+      .rf-id span { color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
+      .rf-rate { display:inline-flex; align-items:center; gap:5px; font-size:16px; flex-shrink:0; }
+      .rf-badges { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 12px; }
+      .rf-b { display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:6px 12px; font-size:13px; font-weight:700; }
+      .rf-b--g { background:#E3EFE9; color:var(--primary); }
+      .rf-b--b { background:#DDE9F4; color:#1F5A8A; }
+      .rf-b--a { background:#FBEBC8; color:#8A5A12; }
+      .rf-meta { display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; font-size:14.5px; color:var(--ink-soft); margin-bottom:14px; }
+      .rf-meta span { display:inline-flex; align-items:center; gap:5px; }
+      .rf-meta b { color:var(--ink); }
+      .rf-on { color:var(--success); font-weight:700; }
+      .rf-on i, .rf-off i { width:8px; height:8px; border-radius:50%; background:var(--success); display:inline-block; }
+      .rf-off i { background:#B9B2A2; }
+      .rf-view { width:100%; background:var(--surface); border:1.5px solid var(--primary); color:var(--primary); border-radius:14px; padding:14px; font-family:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+      .rf-empty { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 22px; text-align:center; margin-top:10px; }
+      .rf-empty-ic { width:54px; height:54px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; }
+      .rf-empty b { font-family:'Bricolage Grotesque',sans-serif; font-size:21px; display:block; margin-bottom:8px; }
+      .rf-empty p { color:var(--ink-soft); line-height:1.5; margin:0 0 18px; }
+      .rf-ghost { background:var(--surface); border:1.5px solid var(--primary); color:var(--primary); border-radius:14px; padding:13px 22px; font-family:inherit; font-size:15.5px; font-weight:700; cursor:pointer; }
+
+      /* ===== Artisan profile (customer view) ===== */
+      .ap { padding-bottom:0; }
+      .ap-hero { background:linear-gradient(135deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; padding:calc(14px + env(safe-area-inset-top)) 20px 62px; }
+      .ap-back { background:none; border:none; color:#F4EFE0; width:40px; height:40px; margin-left:-10px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .ap-id { display:flex; align-items:center; gap:16px; margin-top:8px; }
+      .ap-av { width:84px; height:84px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:28px; flex-shrink:0; }
+      .ap-name { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:27px; line-height:1.08; letter-spacing:-0.01em; }
+      .ap-trade { color:rgba(244,239,224,.78); font-size:15px; margin-top:5px; }
+      .ap-pills { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+      .ap-pill { display:inline-flex; align-items:center; gap:6px; background:#fff; color:var(--primary); border-radius:999px; padding:8px 14px; font-size:14px; font-weight:700; }
+      .ap-pill--b { background:#DDE9F4; color:#1F5A8A; }
+      .ap-pill--a { background:#FBEBC8; color:#8A5A12; }
+      .ap-stats { display:flex; background:var(--surface); border:1px solid var(--line); border-radius:18px; margin:-40px 16px 0; padding:18px 0; box-shadow:0 10px 24px -18px rgba(30,27,22,.35); position:relative; }
+      .ap-stat { flex:1; text-align:center; display:flex; flex-direction:column; gap:3px; }
+      .ap-stat:not(:last-child) { border-right:1px solid var(--line); }
+      .ap-stat b { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:28px; color:var(--ink); }
+      .ap-stat span { font-size:13px; color:var(--ink-soft); }
+      .ap-avail { margin:14px 16px 0; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:14px 16px; font-weight:700; font-size:15px; display:flex; align-items:center; gap:10px; }
+      .ap-avail i { width:10px; height:10px; border-radius:50%; background:var(--success); flex-shrink:0; }
+      .ap-avail--off { background:#ECE7D8; color:var(--ink-soft); }
+      .ap-avail--off i { background:#B9B2A2; }
+      .ap-sec { padding:0 20px; margin-top:26px; }
+      .ap-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:24px; margin:0 0 14px; }
+      .ap-h small { font-family:'Figtree',sans-serif; font-size:13.5px; font-weight:500; color:var(--ink-soft); float:right; margin-top:8px; }
+      .ap-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:6px 16px; }
+      .ap-vrow { display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); }
+      .ap-vrow:last-child { border-bottom:none; }
+      .ap-vic { width:32px; height:32px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .ap-vrow--no .ap-vic { background:#ECE7D8; color:#A39B88; }
+      .ap-vrow b { display:block; font-size:16px; }
+      .ap-vrow span { display:block; color:var(--ink-soft); font-size:14px; line-height:1.4; margin-top:2px; }
+      .ap-about { font-size:16.5px; line-height:1.55; margin:0; }
+      .ap-work { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .ap-work img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:16px; border:1px solid var(--line); }
+      .ap-rev { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:12px; }
+      .ap-rev-top { display:flex; align-items:center; gap:12px; }
+      .ap-rev-av { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+      .ap-rev-id { flex:1; min-width:0; }
+      .ap-rev-id b { display:block; font-size:16px; }
+      .ap-rev-id span { font-size:13px; color:var(--ink-soft); }
+      .ap-rev-r { font-weight:700; color:#8A5A12; display:inline-flex; align-items:center; gap:4px; }
+      .ap-rev p { margin:12px 0 0; font-size:15.5px; line-height:1.5; }
+      .ap-track { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; }
+      .ap-bar { margin-bottom:16px; }
+      .ap-bar:last-child { margin-bottom:0; }
+      .ap-bar-top { display:flex; justify-content:space-between; font-size:14.5px; margin-bottom:8px; }
+      .ap-bar-t { height:10px; background:#EEE7D5; border-radius:999px; overflow:hidden; }
+      .ap-bar-t i { display:block; height:100%; background:var(--primary); border-radius:999px; }
+      .ap-cta { position:sticky; bottom:0; margin-top:26px; padding:14px 20px calc(14px + env(safe-area-inset-bottom)); background:linear-gradient(to top,var(--bg) 70%,rgba(245,240,228,0)); }
+      .ap-cta button { width:100%; background:var(--primary); color:#fff; border:none; border-radius:14px; padding:17px; font-family:inherit; font-size:16.5px; font-weight:700; cursor:pointer; }
+      .ap-cta button:disabled { opacity:.5; }
+      .ap-note { text-align:center; color:var(--ink-soft); font-size:13px; margin-top:8px; }
 
       @media (max-width: 480px) {
         .app { padding: 0; }
