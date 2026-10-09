@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#1F3A34" />
+<meta name="theme-color" content="#0F4D3A" />
 <meta name="robots" content="noindex, nofollow" />
 <link rel="icon" href="favicon.ico" sizes="48x48" />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -11,9 +11,175 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <link rel="manifest" href="manifest.webmanifest" />
 <title>VettedHands Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+:root{--bg:#F5F0E4;--surface:#fff;--ink:#14201B;--soft:#6B6B5E;--line:#E4DCC8;--green:#0F4D3A;--mint:#E3EFE9;--amber:#B97A12;--amberbg:#FBEBC8;--red:#A8402D;--redbg:#F8E3DD;--blue:#1F5A8A;--bluebg:#DDE9F4}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Figtree',sans-serif;font-size:14px;line-height:1.45}
+h1,h2,h3,.logo{font-family:'Bricolage Grotesque',sans-serif}
+h1{font-size:32px;font-weight:800;letter-spacing:-.02em;margin:0}
+h2{font-size:26px;margin:0}
+h3{font-size:17px;font-weight:700;margin:0}
+button,input,select,textarea{font-family:inherit;font-size:14px}
+.boot{padding:60px;text-align:center;color:var(--soft)}
+.soft{color:var(--soft)} .good{color:var(--green);font-weight:600} .bad{color:var(--red);font-weight:600} .center{text-align:center}
+.shell{display:flex;min-height:100vh}
+.side{position:fixed;inset:0 auto 0 0;width:244px;background:var(--green);color:#fff;display:flex;flex-direction:column;padding:22px 12px;z-index:40;overflow-y:auto}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;padding:0 8px 22px}
+.logo small{display:block;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:500;opacity:.7}
+.logo-mark{width:34px;height:34px;border-radius:10px;background:#fff;color:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav{display:flex;align-items:center;justify-content:space-between;width:100%;padding:11px 12px;border:none;background:none;color:rgba(255,255,255,.82);font-weight:500;font-size:14.5px;border-radius:10px;cursor:pointer;text-align:left;margin-bottom:2px}
+.nav:hover{background:rgba(255,255,255,.08)}
+.nav.on{background:rgba(255,255,255,.15);color:#fff;font-weight:700}
+.nav-n{background:#D69A1F;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.side-foot{margin-top:auto;border-top:1px solid rgba(255,255,255,.15);padding:14px 8px 0;display:flex;align-items:center;gap:10px}
+.side-foot .avatar{background:#fff!important;color:var(--green)!important}
+.side-who{flex:1;min-width:0;font-weight:700;font-size:13.5px}
+.side-who span{display:block;font-weight:400;opacity:.7;font-size:12px}
+.side-out{background:none;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px}
+.main{margin-left:244px;flex:1;min-width:0;padding:32px 36px 70px}
+.mtop{display:none}
+.scrim{display:none}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.head-sub{margin:6px 0 0;color:var(--soft)}
+.search{min-width:260px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 14px}
+.avatar{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-weight:700;flex-shrink:0;font-family:'Bricolage Grotesque',sans-serif}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px}
+.card-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:18px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;text-align:left;font:inherit}
+.stat.click{cursor:pointer}
+.stat-l{color:var(--soft);font-size:13px}
+.stat-n{font-family:'Bricolage Grotesque',sans-serif;font-size:34px;font-weight:800;margin:4px 0 2px}
+.stat-s{color:var(--soft);font-size:12.5px}
+.stat.amber{border-color:#EBD7A8}.stat.amber .stat-n{color:var(--amber)}
+.stat.red{border-color:#E9C7BD}.stat.red .stat-n{color:var(--red)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:18px;align-items:start}
+.split.rep{grid-template-columns:370px minmax(0,1fr)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;color:var(--ink)}
+.chip span{opacity:.6;margin-left:6px}
+.chip.on{background:var(--green);color:#fff;border-color:var(--green)}
+.tbl-wrap{background:#fff;border:1px solid var(--line);border-radius:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);text-align:left;padding:14px 16px;background:#FAF7EE;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:13px 16px;border-bottom:1px solid #EEE7D5;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.row{cursor:pointer}
+tr.row:hover td{background:#FBF9F2}
+tr.sel td{background:#EEF6F1}
+.who{display:flex;align-items:center;gap:11px}
+.who b{display:block}
+.who small{color:var(--soft)}
+.pill{display:inline-block;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.p-green{background:var(--mint);color:var(--green)}.p-amber{background:var(--amberbg);color:#7A4F0C}.p-blue{background:var(--bluebg);color:var(--blue)}
+.p-red{background:var(--redbg);color:var(--red)}.p-grey{background:#ECE7D8;color:#4A4636}.p-dark{background:var(--green);color:#fff}
+.badges{display:inline-flex;gap:5px;flex-wrap:wrap}
+.btn{border:1.5px solid var(--green);background:#fff;color:var(--green);border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+.btn-primary{background:var(--green);color:#fff}
+.btn-danger{border-color:#C9806F;color:var(--red)}
+.btn-info{border-color:#2F6A96;color:var(--blue)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.wide{width:100%}
+.btn-sm{padding:7px 12px;font-size:13px}
+.empty{padding:50px 20px;text-align:center;color:var(--soft)}
+.empty.err{color:var(--red)}
+.back{background:none;border:none;color:var(--green);font-weight:700;cursor:pointer;padding:0;margin-bottom:16px}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px 20px;margin-top:6px}
+.kv label,.lbl{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);margin-bottom:3px;font-weight:600}
+.kv div b{font-weight:600}
+.doc{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px}
+.doc-i{width:40px;height:44px;background:#ECE7D8;border-radius:8px;flex-shrink:0}
+.doc-t{flex:1;min-width:0}
+.doc-t small{display:block;color:var(--soft)}
+.ptiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-top:12px}
+.ptiles img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;border:1px solid var(--line);cursor:pointer}
+.chk{display:flex;align-items:center;gap:10px;margin:10px 0;font-weight:500;cursor:pointer}
+.chk input{width:20px;height:20px;accent-color:var(--green)}
+.note{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:96px;resize:vertical}
+.stack>*{margin-top:10px}
+.hist{margin:12px 0 0;padding:0;list-style:none}
+.hist li{padding:8px 0;border-bottom:1px solid #EEE7D5;font-size:13px}
+.hist li:last-child{border-bottom:none}
+.hist small{display:block;color:var(--soft)}
+.panel-top{display:flex;gap:12px;align-items:center}
+.panel-warn{background:var(--redbg);color:var(--red);border-radius:12px;padding:12px;margin:14px 0;font-size:13px}
+.counts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.count{background:#F4EFE0;border-radius:12px;text-align:center;padding:12px 6px}
+.count b{display:block;font-family:'Bricolage Grotesque',sans-serif;font-size:22px}
+.count span{font-size:12px;color:var(--soft)}
+.vrow{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #EEE7D5;font-size:13.5px}
+.vrow:last-child{border-bottom:none}
+.mini{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #EEE7D5;font-size:13px}
+.mini:last-child{border-bottom:none}
+.mini span.t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft);font-weight:700;margin:18px 0 4px}
+.bars{display:flex;align-items:flex-end;gap:10px;height:210px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bar{width:100%;border-radius:8px 8px 0 0;min-height:3px}
+.bar-v{font-size:12px;font-weight:700;margin-bottom:4px}
+.bar-l{font-size:11.5px;color:var(--soft);margin-top:8px}
+.hb{display:flex;align-items:center;gap:12px;margin:10px 0}
+.hb-n{width:110px;font-weight:600;flex-shrink:0}
+.hb-t{flex:1;height:12px;background:#EEE7D5;border-radius:999px;overflow:hidden}
+.hb-t div{height:100%;background:var(--green);border-radius:999px}
+.hb-v{width:40px;text-align:right;font-weight:700}
+.prog{width:140px}
+.prog small{color:var(--soft);display:flex;justify-content:space-between}
+.prog i{display:block;height:7px;background:#EEE7D5;border-radius:99px;margin-top:4px;overflow:hidden}
+.prog i b{display:block;height:100%;background:var(--green)}
+.callout{background:var(--amberbg);border-radius:12px;padding:14px 16px;margin-top:16px;color:#6B4509}
+.revcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:12px}
+.revhead{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.revtext{font-size:15px;margin:10px 0}
+.revact{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.revwhy{color:var(--red);font-size:12.5px;font-weight:600;flex:1}
+.rep-list{display:flex;flex-direction:column;gap:10px}
+.rep-item{text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;font:inherit;color:inherit}
+.rep-item.on{border:2px solid var(--green);padding:13px}
+.rep-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rep-t{font-weight:600;margin:8px 0 6px}
+.rep-b{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
+.s-new{color:var(--red);font-weight:700}.s-investigating{color:var(--amber);font-weight:700}.s-resolved{color:var(--green);font-weight:700}.s-dismissed{color:var(--soft);font-weight:700}
+.stmt{background:#F4EFE0;border-radius:12px;padding:16px;font-size:15px;margin:14px 0}
+.tl{margin:8px 0 0;padding:0;list-style:none;max-height:260px;overflow-y:auto}
+.tl li{display:flex;gap:16px;padding:6px 0}
+.tl time{width:70px;color:var(--soft);font-size:12.5px;flex-shrink:0}
+.acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.lightbox{position:fixed;inset:0;background:rgba(10,20,16,.82);z-index:80;display:flex;align-items:center;justify-content:center;padding:24px}
+.lightbox img{max-width:100%;max-height:100%;border-radius:12px;background:#fff}
+.lightbox-x{position:absolute;top:18px;right:20px;background:#fff;border:none;border-radius:999px;width:38px;height:38px;cursor:pointer;font-size:16px}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:600;z-index:90;max-width:90vw}
+.login{display:grid;grid-template-columns:1fr 1fr;min-height:100vh}
+.login-left{background:var(--green);color:#fff;padding:48px;display:flex;flex-direction:column;justify-content:space-between}
+.login-left .logo{padding:0}
+.login-left h1{font-size:46px;line-height:1.05;max-width:480px;margin-bottom:18px}
+.login-left p{opacity:.82;max-width:440px;font-size:16px;margin:0}
+.login-right{display:flex;align-items:center;justify-content:center;padding:30px}
+.login-form{width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px}
+.login-form label{display:flex;flex-direction:column;gap:6px;font-weight:700}
+.login-form input{border:1.5px solid var(--line);border-radius:12px;padding:13px;background:#fff}
+.login-form input:focus{outline:none;border-color:var(--green)}
+.kicker{font-size:12px;letter-spacing:.08em;color:var(--soft);font-weight:700}
+.login-err{background:var(--redbg);color:var(--red);padding:10px 12px;border-radius:10px}
+.login-note{font-size:12.5px;color:var(--soft)}
+@media (max-width:1150px){.split,.split.rep,.two{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.kv{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:900px){
+ .side{transform:translateX(-100%);transition:transform .2s}.side.open{transform:none}
+ .scrim.open{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:35}
+ .mtop{display:flex;position:fixed;top:0;left:0;right:0;height:56px;background:var(--green);color:#fff;align-items:center;gap:12px;padding:0 14px;z-index:30;font-weight:700}
+ .mtop button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;padding:6px 12px;font-size:16px}
+ .main{margin-left:0;padding:76px 16px 60px}
+ h1{font-size:26px}.search{min-width:0;width:100%}
+}
+@media (max-width:800px){.login{grid-template-columns:1fr}.login-left{display:none}}
+</style>
 </head>
 <body>
 <div id="root"></div>
@@ -32,602 +198,726 @@ async function api(path, { method = "GET", body, token } = {}) {
   return data;
 }
 
-/* ============ ICONS ============ */
-const ICON_PATHS = {
-  shieldCheck: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>,
-  checkCircle2: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
-  xCircle: <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>,
-  clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
-  activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
-  star: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>,
-  mapPin: <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>,
-  alertTriangle: <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
-  arrowLeft: <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
-  logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
-};
-function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke = "currentColor", style, ...rest }) {
-  const shape = ICON_PATHS[name];
-  if (!shape) return null;
+/* ============ helpers ============ */
+const TRADES = { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair", LAPTOP_REPAIR: "Laptop Repair", PAINTER: "Painter", CARPENTER: "Carpenter", CLEANER: "Cleaner" };
+const tradeLabel = (t) => TRADES[t] || t;
+const NAV = [["dashboard", "Dashboard"], ["applications", "Artisan Applications"], ["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
+const PAGES = NAV.map((n) => n[0]);
+const initials = (n = "") => n.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const fmtDateLong = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+function relDay(d) { const x = new Date(d), t = new Date(); if (x.toDateString() === t.toDateString()) return "Today"; if (x.toDateString() === new Date(t.getTime() - 864e5).toDateString()) return "Yesterday"; return fmtDate(d); }
+function ago(d) { const s = (Date.now() - new Date(d).getTime()) / 1000; if (s < 3600) return Math.max(1, Math.round(s / 60)) + " min ago"; if (s < 86400) return Math.round(s / 3600) + " hours ago"; if (s < 172800) return "Yesterday"; return Math.round(s / 86400) + " days ago"; }
+function waitLabel(d) { const n = Math.floor((Date.now() - new Date(d).getTime()) / 864e5); return n < 1 ? "Today" : n === 1 ? "1 day" : n + " days"; }
+const shortId = (id, p = "VH") => `${p}-${String(id).slice(0, 4).toUpperCase()}`;
+const firstLast = (name = "") => { const p = name.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; };
+const match = (q, ...f) => !q.trim() || f.join(" ").toLowerCase().includes(q.trim().toLowerCase());
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+function downloadCsv(rows, name) {
+  const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const url = URL.createObjectURL(new Blob([rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv" }));
+  const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+}
+
+const TINTS = [["#E3EFE9", "#0F4D3A"], ["#FBEBC8", "#8A5A12"], ["#DDE9F4", "#1F5A8A"], ["#F6E1DA", "#9A3B26"], ["#ECE7D8", "#4A4636"]];
+function Avatar({ name, size = 38 }) {
+  let h = 0; for (const c of name || "") h += c.charCodeAt(0);
+  const [bg, fg] = TINTS[h % TINTS.length];
+  return <span className="avatar" style={{ width: size, height: size, background: bg, color: fg, fontSize: size * 0.36 }}>{initials(name)}</span>;
+}
+const Shield = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" /></svg>;
+
+const REQ_STATUS = { PENDING: ["Pending", "p-amber"], ACCEPTED: ["Accepted", "p-blue"], CONFIRMED: ["In Progress", "p-green"], COMPLETED: ["Completed", "p-dark"], DECLINED: ["Cancelled", "p-red"], CLOSED: ["Cancelled", "p-red"] };
+const ReqPill = ({ status }) => { const [t, c] = REQ_STATUS[status] || [status, "p-grey"]; return <span className={"pill " + c}>{t}</span>; };
+const Badges = ({ a }) => <span className="badges"><span className="pill p-green">Vetted</span>{a.skillVerified && <span className="pill p-blue">Skill</span>}{a.badge === "TOP_RATED" && <span className="pill p-amber">Top</span>}</span>;
+const Head = ({ title, sub, right }) => <div className="head"><div><h1>{title}</h1>{sub && <p className="head-sub">{sub}</p>}</div>{right}</div>;
+const SearchBox = ({ value, onChange, placeholder }) => <input className="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />;
+const Chips = ({ items, value, onChange }) => <div className="chips">{items.map(([k, l, n]) => <button key={k} className={"chip" + (value === k ? " on" : "")} onClick={() => onChange(k)}>{l}{n != null && <span>{n}</span>}</button>)}</div>;
+const Lightbox = ({ src, onClose }) => !src ? null : <div className="lightbox" onClick={onClose}><img src={src} onClick={(e) => e.stopPropagation()} /><button className="lightbox-x" onClick={onClose}>✕</button></div>;
+const docsLabel = (a) => !a.hasId ? <span className="bad">ID missing</span> : <span className="good">ID{a.photoCount ? ` + ${plural(a.photoCount, "photo")}` : ""}</span>;
+
+function useFetch(token, path) {
+  const [st, setSt] = useState({ path: null, data: null, loading: true, error: null });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!path) { setSt({ path: null, data: null, loading: false, error: null }); return; }
+    let live = true;
+    setSt((s) => ({ path, data: s.path === path ? s.data : null, loading: true, error: null }));
+    api(path, { token })
+      .then((data) => { if (live) setSt({ path, data, loading: false, error: null }); })
+      .catch((e) => { if (live) setSt({ path, data: null, loading: false, error: e.message }); });
+    return () => { live = false; };
+  }, [path, token, tick]);
+  return { data: st.data, loading: st.loading, error: st.error, reload: () => setTick((t) => t + 1) };
+}
+function wait(res) {
+  if (res.error) return <div className="empty err">{res.error}</div>;
+  if (!res.data) return <div className="empty">Loading…</div>;
+  return null;
+}
+
+/* ============ charts ============ */
+function LineChart({ data }) {
+  const W = 560, H = 230, p = { l: 34, r: 14, t: 26, b: 30 };
+  const top = Math.max(4, Math.ceil(Math.max(...data.map((d) => d.count)) / 4) * 4);
+  const x = (i) => p.l + (i * (W - p.l - p.r)) / Math.max(1, data.length - 1);
+  const y = (v) => p.t + (H - p.t - p.b) * (1 - v / top);
+  const line = data.map((d, i) => `${i ? "L" : "M"}${x(i)},${y(d.count)}`).join(" ");
+  const area = `${line} L${x(data.length - 1)},${y(0)} L${x(0)},${y(0)} Z`;
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
-      fill={fill} stroke={color || stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
-      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style }} {...rest}>{shape}</svg>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%">
+      {[0, 1, 2, 3, 4].map((i) => { const v = (top / 4) * i; return <g key={i}><line x1={p.l} x2={W - p.r} y1={y(v)} y2={y(v)} stroke="#E4DCC8" /><text x={p.l - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#6B6B5E">{v}</text></g>; })}
+      <path d={area} fill="#0F4D3A" opacity=".08" />
+      <path d={line} fill="none" stroke="#0F4D3A" strokeWidth="2.5" />
+      {data.map((d, i) => <g key={i}><circle cx={x(i)} cy={y(d.count)} r="4.5" fill="#fff" stroke="#0F4D3A" strokeWidth="2" /><text x={x(i)} y={y(d.count) - 10} textAnchor="middle" fontSize="11.5" fontWeight="700">{d.count}</text><text x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#6B6B5E">{d.label}</text></g>)}
+    </svg>
   );
 }
-const ShieldCheck = (p) => <Icon name="shieldCheck" {...p} />;
-const CheckCircle2 = (p) => <Icon name="checkCircle2" {...p} />;
-const XCircle = (p) => <Icon name="xCircle" {...p} />;
-const Clock = (p) => <Icon name="clock" {...p} />;
-const Activity = (p) => <Icon name="activity" {...p} />;
-const Star = (p) => <Icon name="star" {...p} />;
-const MapPin = (p) => <Icon name="mapPin" {...p} />;
-const AlertTriangle = (p) => <Icon name="alertTriangle" {...p} />;
-const ArrowLeft = (p) => <Icon name="arrowLeft" {...p} />;
-const LogOut = (p) => <Icon name="logOut" {...p} />;
+function BarChart({ data, color }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  return <div className="bars">{data.map((d) => <div className="bar-col" key={d.label}><div className="bar-v">{d.count}</div><div className="bar" style={{ height: (d.count / max) * 150 + "px", background: color }} /><div className="bar-l">{d.label}</div></div>)}</div>;
+}
+function HBars({ data }) {
+  if (!data.length) return <div className="empty">No requests yet.</div>;
+  const max = Math.max(...data.map((d) => d.count));
+  return <div>{data.map((d) => <div className="hb" key={d.trade}><span className="hb-n">{tradeLabel(d.trade)}</span><span className="hb-t"><div style={{ width: (d.count / max) * 100 + "%" }} /></span><span className="hb-v">{d.count}</span></div>)}</div>;
+}
 
-function initials(name = "") { return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(); }
-function tradeLabel(t) { return { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair" }[t] || t; }
-
-/* ============ LOGIN ============ */
-function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  async function submit(e) {
-    e.preventDefault();
-    setErr(null); setBusy(true);
-    try { await onLogin(email.trim(), password); }
-    catch (ex) { setErr(ex.message); }
-    finally { setBusy(false); }
-  }
-
+/* ============ login + app ============ */
+function Login({ onLogin }) {
+  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
+  async function submit(e) { e.preventDefault(); setErr(null); setBusy(true); try { await onLogin(email.trim(), password); } catch (ex) { setErr(ex.message); } finally { setBusy(false); } }
   return (
-    <div className="phone">
-      <div className="content" style={{ alignItems: "center", justifyContent: "center", display: "flex", padding: 24 }}>
-        <form onSubmit={submit} style={{ width: "100%", maxWidth: 300, display: "flex", flexDirection: "column", gap: 14 }}>
-          <div className="brand" style={{ justifyContent: "center", marginBottom: 6 }}>
-            <span className="brand-mark"><ShieldCheck size={16} /></span><span className="brand-name">VettedHands</span><span className="brand-sub">Admin</span>
-          </div>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-soft)" }}>Admin email
-            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="badge-select" style={{ width: "100%", marginTop: 6 }} />
-          </label>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-soft)" }}>Password
-            <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="badge-select" style={{ width: "100%", marginTop: 6 }} />
-          </label>
-          {err && <div className="modal-note" style={{ color: "var(--danger)" }}>{err}</div>}
-          <button className="approve-btn" disabled={busy} style={{ justifyContent: "center" }}>{busy ? "Please wait…" : "Log in"}</button>
+    <div className="login">
+      <div className="login-left">
+        <div className="logo"><span className="logo-mark"><Shield /></span>VettedHands</div>
+        <div><h1>Trust is built by the people behind the badges.</h1><p>Review applications, verify artisans and keep every job fair. Your decisions decide who customers can trust.</p></div>
+        <div style={{ opacity: .6, fontSize: 13 }}>VettedHands Admin</div>
+      </div>
+      <div className="login-right">
+        <form className="login-form" onSubmit={submit}>
+          <div className="kicker">ADMIN CONSOLE</div>
+          <h2>Sign in</h2>
+          <label>Work email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label>Password<input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          {err && <div className="login-err">{err}</div>}
+          <button className="btn btn-primary wide" disabled={busy}>{busy ? "Please wait…" : "Sign in to dashboard"}</button>
+          <div className="login-note">Admin accounts only.</div>
         </form>
       </div>
     </div>
   );
 }
 
-/* ============ APP ============ */
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem("vh_admin_token") || null);
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(!!token);
-
   useEffect(() => {
     if (!token) { setChecking(false); return; }
     api("/api/auth/me", { token })
-      .then((d) => {
-        if (d.user.role !== "ADMIN") throw new Error("Not an admin account");
-        setUser(d.user);
-      })
+      .then((d) => { if (d.user.role !== "ADMIN") throw new Error("Not an admin account"); setUser(d.user); })
       .catch(() => { localStorage.removeItem("vh_admin_token"); setToken(null); })
       .finally(() => setChecking(false));
   }, [token]);
-
   async function login(email, password) {
     const d = await api("/api/auth/login", { method: "POST", body: { email, password } });
     if (d.user.role !== "ADMIN") throw new Error("This account isn't an admin");
-    localStorage.setItem("vh_admin_token", d.token);
-    setToken(d.token);
-    setUser(d.user);
+    localStorage.setItem("vh_admin_token", d.token); setToken(d.token); setUser(d.user);
   }
   function logout() { localStorage.removeItem("vh_admin_token"); setToken(null); setUser(null); }
-
-  return (
-    <div className="app">
-      <Style />
-      {checking ? (
-        <div className="phone"><div className="content" style={{ alignItems: "center", justifyContent: "center", display: "flex" }}>Loading…</div></div>
-      ) : !token || !user ? (
-        <LoginScreen onLogin={login} />
-      ) : (
-        <Dashboard token={token} user={user} onLogout={logout} />
-      )}
-    </div>
-  );
+  if (checking) return <div className="boot">Loading…</div>;
+  if (!token || !user) return <Login onLogin={login} />;
+  return <Shell token={token} user={user} onLogout={logout} />;
 }
 
-function Dashboard({ token, user, onLogout }) {
-  const [tab, setTab] = useState("pending");
-  const [pending, setPending] = useState([]);
-  const [active, setActive] = useState([]);
-  const [activity, setActivity] = useState([]);
-  const [selectedApp, setSelectedApp] = useState(null);
+function Shell({ token, user, onLogout }) {
+  const first = (window.location.hash || "").replace(/^#\//, "");
+  const [page, setPage] = useState(PAGES.includes(first) ? first : "dashboard");
+  const [param, setParam] = useState(null);
+  const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState(null);
-  const [serviceRequests, setServiceRequests] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [selectedArtisanDetail, setSelectedArtisanDetail] = useState(null);
+  const [img, setImg] = useState(null);
+  const stats = useFetch(token, "/api/admin/stats");
+  const s = stats.data ? stats.data.stats : null;
+  const badge = { applications: s ? s.pendingApplications : 0, reports: s ? s.openReports : 0 };
 
-  function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2200); }
-  function fail(e) { flash(e.message || "Something went wrong"); }
+  function go(p, id = null) { setPage(p); setParam(id); setMenu(false); window.location.hash = "/" + p; window.scrollTo(0, 0); }
+  function flash(m) { setToast(m); clearTimeout(window.__vhT); window.__vhT = setTimeout(() => setToast(null), 2800); }
+  const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats };
 
-  async function loadAll() {
-    setLoading(true);
-    try {
-      const [pendingRes, artisansRes, activityRes, statsRes, requestsRes, reportsRes] = await Promise.all([
-        api("/api/admin/applications?status=pending", { token }),
-        api("/api/admin/artisans", { token }),
-        api("/api/admin/activity", { token }),
-        api("/api/admin/stats", { token }),
-        api("/api/admin/requests", { token }),
-        api("/api/admin/reports", { token }),
-      ]);
-      setPending(pendingRes.applications);
-      setActive(artisansRes.artisans);
-      setActivity(activityRes.activity);
-      setStats(statsRes.stats);
-      setServiceRequests(requestsRes.requests);
-      setReports(reportsRes.reports);
-    } catch (e) { fail(e); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { loadAll(); }, []);
-
-  async function approve(app) {
-    try {
-      await api(`/api/admin/applications/${app.id}`, { method: "PATCH", token, body: { status: "APPROVED" } });
-      setPending((p) => p.filter((x) => x.id !== app.id));
-      setSelectedApp(null);
-      flash(`${app.user.name} approved and now live`);
-      loadAll();
-    } catch (e) { fail(e); }
-  }
-  async function reject(app) {
-    try {
-      await api(`/api/admin/applications/${app.id}`, { method: "PATCH", token, body: { status: "REJECTED" } });
-      setPending((p) => p.filter((x) => x.id !== app.id));
-      setSelectedApp(null);
-      flash(`${app.user.name}'s application rejected`);
-    } catch (e) { fail(e); }
-  }
-
-  async function requestInfo(app) {
-    const note = window.prompt("What do you need from this applicant?");
-    if (!note || !note.trim()) return;
-    try {
-      const d = await api(`/api/admin/applications/${app.id}/info`, { method: "PATCH", token, body: { note: note.trim() } });
-      setPending((p) => p.map((x) => (x.id === app.id ? d.application : x)));
-      setSelectedApp(d.application);
-      flash("Info request sent");
-    } catch (e) { fail(e); }
-  }
-
-  async function openArtisanDetail(a) {
-    try {
-      const d = await api(`/api/admin/artisans/${a.id}/detail`, { token });
-      setSelectedArtisanDetail(d);
-    } catch (e) { fail(e); }
-  }
-
-    async function toggleProStatus(a) {
-    try {
-      const nextIsPro = !a.isPro;
-      let proExpiresAt = null;
-      if (nextIsPro) {
-        const days = window.prompt("Grant Pro for how many days?", "30");
-        if (!days) return;
-        const d = new Date();
-        d.setDate(d.getDate() + Number(days));
-        proExpiresAt = d.toISOString();
-      }
-      await api(`/api/admin/artisans/${a.id}`, { method: "PATCH", token, body: { isPro: nextIsPro, proExpiresAt } });
-      setActive((arr) => arr.map((x) => (x.id === a.id ? { ...x, isPro: nextIsPro, proExpiresAt } : x)));
-      flash(nextIsPro ? `${a.user.name} is now Pro` : `${a.user.name}'s Pro status removed`);
-    } catch (e) { fail(e); }
-  }
-
-  async function setBadge(id, badge) {
-    try {
-      await api(`/api/admin/artisans/${id}`, { method: "PATCH", token, body: { badge } });
-      setActive((a) => a.map((x) => (x.id === id ? { ...x, badge } : x)));
-      flash("Badge updated");
-    } catch (e) {
-      if (badge === "TOP_RATED" && /not eligible/i.test(e.message)) {
-        const ok = window.confirm(`${e.message}\n\nOverride anyway?`);
-        if (ok) {
-          try {
-            await api(`/api/admin/artisans/${id}`, { method: "PATCH", token, body: { badge, force: true } });
-            setActive((a) => a.map((x) => (x.id === id ? { ...x, badge } : x)));
-            flash("Badge force-updated");
-          } catch (e2) { fail(e2); }
-        }
-        return;
-      }
-      fail(e);
-    }
-  }
-    async function toggleSuspend(a) {
-    try {
-      const nextSuspended = !a.suspended;
-      await api(`/api/admin/artisans/${a.id}`, { method: "PATCH", token, body: { suspended: nextSuspended } });
-      setActive((arr) => arr.map((x) => (x.id === a.id ? { ...x, suspended: nextSuspended } : x)));
-      flash(nextSuspended ? `${a.user.name} suspended — hidden from customers` : `${a.user.name} reactivated`);
-    } catch (e) { fail(e); }
-  }
-
-  const flaggedCount = active.filter((a) => a.flagged).length;
+  let body;
+  if (page === "dashboard") body = <Dashboard {...c} />;
+  else if (page === "applications") body = param ? <ApplicationDetail key={param} id={param} {...c} /> : <Applications {...c} />;
+  else if (page === "artisans") body = <Artisans key={param || "x"} {...c} />;
+  else if (page === "customers") body = <Customers {...c} />;
+  else if (page === "requests") body = <Requests {...c} />;
+  else if (page === "active") body = <ActiveJobs {...c} />;
+  else if (page === "completed") body = <Completed {...c} />;
+  else if (page === "reviews") body = <Reviews {...c} />;
+  else if (page === "reports") body = <Reports {...c} />;
+  else if (page === "verification") body = <Verification {...c} />;
+  else body = <Settings {...c} user={user} />;
 
   return (
-    <div className="phone">
-      <div className="content">
-        <div className="topbar">
-          <div className="brand"><span className="brand-mark"><ShieldCheck size={16} /></span><span className="brand-name">VettedHands</span><span className="brand-sub">Admin</span></div>
-          <button className="iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
+    <div className="shell">
+      <div className="mtop"><button onClick={() => setMenu(true)}>☰</button>VettedHands Admin</div>
+      <div className={"scrim" + (menu ? " open" : "")} onClick={() => setMenu(false)} />
+      <aside className={"side" + (menu ? " open" : "")}>
+        <div className="logo"><span className="logo-mark"><Shield /></span><div>VettedHands<small>Admin</small></div></div>
+        {NAV.map(([k, l]) => (
+          <button key={k} className={"nav" + (page === k ? " on" : "")} onClick={() => go(k)}>
+            {l}{badge[k] > 0 && <span className="nav-n">{badge[k]}</span>}
+          </button>
+        ))}
+        <div className="side-foot">
+          <Avatar name={user.name} size={36} />
+          <div className="side-who">{user.name}<span>Admin</span></div>
+          <button className="side-out" onClick={onLogout}>Log out</button>
         </div>
-
-        {loading ? (
-          <div className="empty"><div className="empty-title">Loading…</div></div>
-        ) : (
-          <>
-            {stats && (
-              <div className="stats-grid stats-grid--full">
-                <div className="stat-box"><div className="stat-num">{stats.totalUsers}</div><div className="stat-label">Users</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.totalArtisans}</div><div className="stat-label">Artisans</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.pendingApplications}</div><div className="stat-label">Pending apps</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.pendingRequests}</div><div className="stat-label">Pending req.</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.activeJobs}</div><div className="stat-label">Active jobs</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.completedJobs}</div><div className="stat-label">Completed</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.cancelledJobs}</div><div className="stat-label">Cancelled</div></div>
-                <div className="stat-box"><div className="stat-num">{stats.reviews}</div><div className="stat-label">Reviews</div></div>
-                <div className="stat-box stat-box--warn"><div className="stat-num">{flaggedCount}</div><div className="stat-label">Flagged</div></div>
-                <div className="stat-box stat-box--warn"><div className="stat-num">{stats.reports}</div><div className="stat-label">Reports</div></div>
-              </div>
-            )}
-
-            <div className="tabs tabs--wrap">
-              <button className={"tab" + (tab === "pending" ? " tab--active" : "")} onClick={() => setTab("pending")}>Pending {pending.length > 0 && <span className="tab-count">{pending.length}</span>}</button>
-              <button className={"tab" + (tab === "active" ? " tab--active" : "")} onClick={() => setTab("active")}>Active</button>
-              <button className={"tab" + (tab === "requests" ? " tab--active" : "")} onClick={() => setTab("requests")}>Requests</button>
-              <button className={"tab" + (tab === "reports" ? " tab--active" : "")} onClick={() => setTab("reports")}>Reports {reports.length > 0 && <span className="tab-count">{reports.length}</span>}</button>
-              <button className={"tab" + (tab === "activity" ? " tab--active" : "")} onClick={() => setTab("activity")}>Activity</button>
-            </div>
-
-            {tab === "pending" && (
-              <div className="feed feed--scroll">
-                {pending.length === 0 && <div className="empty"><div className="empty-title">Nothing waiting</div><div className="empty-sub">All applications have been reviewed.</div></div>}
-                {pending.map((app) => (
-                  <button key={app.id} className="app-card" onClick={() => setSelectedApp(app)}>
-                    <div className="app-top">
-                      <div className="avatar">{initials(app.user.name)}</div>
-                      <div className="app-top-text">
-                        <div className="app-name">{app.user.name}</div>
-                        <div className="app-trade"><MapPin size={11} /> {tradeLabel(app.trade)} · {app.user.area || "—"}</div>
-                      </div>
-                    </div>
-                    <div className="app-bio">{app.bio}</div>
-                    {app.infoRequestNote && <div className="info-tag">Info requested</div>}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {tab === "active" && (
-              <div className="feed feed--scroll">
-                {active.map((a) => (
-                  <div key={a.id} className={"artisan-row" + (a.flagged ? " artisan-row--flagged" : "") + (a.suspended ? " artisan-row--suspended" : "")}>
-                    <button className="app-top" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%", textAlign: "left" }} onClick={() => openArtisanDetail(a)}>
-                      <div className="avatar">{initials(a.user.name)}</div>
-                      <div className="app-top-text">
-                        <div className="app-name">{a.user.name} {a.flagged && <AlertTriangle size={12} className="flag-icon" />} {a.suspended && <span className="suspended-tag">Suspended</span>}</div>
-                        <div className="app-trade"><MapPin size={11} /> {tradeLabel(a.trade)} · {a.area}</div>
-                      </div>
-                    </button>
-                    <div className="artisan-meta">
-                      <span><Star size={12} fill="#B5651D" stroke="none" /> {Number(a.rating).toFixed(1)}</span>
-                      <span className="dot-sep">·</span>
-                      <span>{a.jobsCompleted} jobs</span>
-                    </div>
-                    <div className="artisan-actions">
-                      <select value={a.badge} onChange={(e) => setBadge(a.id, e.target.value)} className="badge-select">
-                        <option value="VETTED">Vetted</option>
-                        <option value="TOP_RATED">Top Rated</option>
-                      </select>
-                      <button className={"pro-btn" + (a.isPro ? " pro-btn--active" : "")} onClick={() => toggleProStatus(a)}>{a.isPro ? "Pro ✓" : "Make Pro"}</button>
-                      <button className={"suspend-btn" + (a.suspended ? " suspend-btn--reactivate" : "")} onClick={() => toggleSuspend(a)}>{a.suspended ? "Reactivate" : "Suspend"}</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-                        {tab === "requests" && (
-              <div className="feed feed--scroll">
-                {serviceRequests.length === 0 && <div className="empty"><div className="empty-title">No requests yet</div></div>}
-                {serviceRequests.map((r) => (
-                  <div key={r.id} className="req-row">
-                    <div className="req-row-top">
-                      <span className="req-row-parties">{r.student.name} → {r.artisanProfile.user.name}</span>
-                      <span className={"status-pill status-pill--" + r.status.toLowerCase()}>{r.status}</span>
-                    </div>
-                    <div className="req-row-job">{r.job}</div>
-                    <div className="req-row-meta">{tradeLabel(r.artisanProfile.trade)} · {new Date(r.updatedAt).toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {tab === "reports" && (
-              <div className="feed feed--scroll">
-                {reports.length === 0 && <div className="empty"><div className="empty-title">No reports</div></div>}
-                {reports.map((rep) => (
-                  <div key={rep.id} className="report-row">
-                    <div className="req-row-top">
-                      <span className="req-row-parties">{rep.reporter.name} reported {rep.artisanProfile.user.name}</span>
-                      <span className="report-reason">{rep.reason}</span>
-                    </div>
-                    {rep.note && <div className="report-note">"{rep.note}"</div>}
-                    <div className="req-row-meta">Job: {rep.request.job} · {new Date(rep.createdAt).toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {tab === "activity" && (
-              <div className="feed feed--scroll">
-                {activity.map((f) => (
-                  <div key={f.id} className="activity-wrap">
-                    <div className="activity-row"><Activity size={13} /><span>{f.text}</span></div>
-                    <span className="activity-time">{new Date(f.time).toLocaleString()}</span>
-                  </div>
-                ))}
-                {activity.length === 0 && <div className="empty"><div className="empty-title">No activity yet</div></div>}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {selectedApp && (
-        <div className="modal-backdrop" onClick={() => setSelectedApp(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-back" onClick={() => setSelectedApp(null)}><ArrowLeft size={16} /> Back</button>
-            <div className="modal-top">
-              <div className="avatar avatar--lg">{initials(selectedApp.user.name)}</div>
-              <div>
-                <div className="modal-name">{selectedApp.user.name}</div>
-                <div className="app-trade"><MapPin size={12} /> {tradeLabel(selectedApp.trade)} · {selectedApp.user.area || "—"}</div>
-              </div>
-            </div>
-            <p className="modal-bio">{selectedApp.bio}</p>
-            {(selectedApp.phone || selectedApp.socialHandle) && (
-              <div className="modal-contact">
-                {selectedApp.phone && <div><strong>Phone:</strong> {selectedApp.phone}</div>}
-                {selectedApp.socialHandle && <div><strong>Social:</strong> {selectedApp.socialHandle}</div>}
-              </div>
-            )}
-            {selectedApp.idDocumentUrl && (
-              <div className="modal-id-section">
-                <div className="modal-id-label">Government ID</div>
-                <img src={selectedApp.idDocumentUrl} className="modal-id-img" />
-              </div>
-            )}
-            {selectedApp.photos && selectedApp.photos.length > 0 && (
-              <div className="modal-photos">
-                {selectedApp.photos.map((p, i) => (
-                  <img key={p.id || i} src={p.url || p} className="modal-photo-tile" />
-                ))}
-              </div>
-            )}
-            <div className="modal-note"><AlertTriangle size={13} /> Vetting checklist (manual, off-app for now): confirm the ID photo matches their name, call the listed phone number, cross-check their social handle, review sample work photos before approving.</div>
-            {selectedApp.infoRequestNote && (
-              <div className="modal-contact"><strong>Info requested:</strong> {selectedApp.infoRequestNote}</div>
-            )}
-            <div className="modal-actions">
-              <button className="reject-btn" onClick={() => reject(selectedApp)}><XCircle size={15} /> Reject</button>
-              <button className="info-btn" onClick={() => requestInfo(selectedApp)}>Request info</button>
-              <button className="approve-btn" onClick={() => approve(selectedApp)}><CheckCircle2 size={15} /> Approve &amp; list</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedArtisanDetail && (
-        <div className="modal-backdrop" onClick={() => setSelectedArtisanDetail(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-back" onClick={() => setSelectedArtisanDetail(null)}><ArrowLeft size={16} /> Back</button>
-            <div className="modal-top">
-              <div className="avatar avatar--lg">{initials(selectedArtisanDetail.artisan.user.name)}</div>
-              <div>
-                <div className="modal-name">{selectedArtisanDetail.artisan.user.name}</div>
-                <div className="app-trade"><MapPin size={12} /> {tradeLabel(selectedArtisanDetail.artisan.trade)} · {selectedArtisanDetail.artisan.area}</div>
-              </div>
-            </div>
-            <div className="modal-contact">
-              {selectedArtisanDetail.artisan.phone && <div><strong>Phone:</strong> {selectedArtisanDetail.artisan.phone}</div>}
-              {selectedArtisanDetail.artisan.socialHandle && <div><strong>Social:</strong> {selectedArtisanDetail.artisan.socialHandle}</div>}
-              <div><strong>Email:</strong> {selectedArtisanDetail.artisan.user.email}</div>
-            </div>
-            {selectedArtisanDetail.artisan.idDocumentUrl && (
-              <div className="modal-id-section">
-                <div className="modal-id-label">Government ID</div>
-                <img src={selectedArtisanDetail.artisan.idDocumentUrl} className="modal-id-img" />
-              </div>
-            )}
-            <div className="detail-section-label">Jobs ({selectedArtisanDetail.jobs.length})</div>
-            <div className="detail-list">
-              {selectedArtisanDetail.jobs.map((j) => (
-                <div key={j.id} className="req-row">
-                  <div className="req-row-top"><span className="req-row-parties">{j.student.name}</span><span className={"status-pill status-pill--" + j.status.toLowerCase()}>{j.status}</span></div>
-                  <div className="req-row-job">{j.job}</div>
-                </div>
-              ))}
-              {selectedArtisanDetail.jobs.length === 0 && <div className="empty-sub">No jobs yet.</div>}
-            </div>
-            <div className="detail-section-label">Reviews ({selectedArtisanDetail.reviews.length})</div>
-            <div className="detail-list">
-              {selectedArtisanDetail.reviews.map((r) => (
-                <div key={r.id} className="review-row">★{r.rating} — "{r.reviewText}" <span className="review-row-author">({r.student.name})</span></div>
-              ))}
-              {selectedArtisanDetail.reviews.length === 0 && <div className="empty-sub">No reviews yet.</div>}
-            </div>
-            <div className="detail-section-label">Reports ({selectedArtisanDetail.reports.length})</div>
-            <div className="detail-list">
-              {selectedArtisanDetail.reports.map((rep) => (
-                <div key={rep.id} className="report-row">
-                  <div className="req-row-top"><span className="req-row-parties">{rep.reporter.name}</span><span className="report-reason">{rep.reason}</span></div>
-                  {rep.note && <div className="report-note">"{rep.note}"</div>}
-                </div>
-              ))}
-              {selectedArtisanDetail.reports.length === 0 && <div className="empty-sub">No reports.</div>}
-            </div>
-          </div>
-        </div>
-      )}
-
+      </aside>
+      <main className="main">{body}</main>
+      <Lightbox src={img} onClose={() => setImg(null)} />
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
 
-function Style() {
+/* ============ dashboard ============ */
+function Dashboard({ statsRes, go }) {
+  const w = wait(statsRes); if (w) return w;
+  const { stats: s, series, popular } = statsRes.data;
+  const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const last = (a) => (a.length ? a[a.length - 1].count : 0);
+  const Card = ({ l, n, sub, tone, to }) => <button className={"stat" + (tone ? " " + tone : "") + (to ? " click" : "")} onClick={() => to && go(to)}><div className="stat-l">{l}</div><div className="stat-n">{n}</div><div className="stat-s">{sub}</div></button>;
   return (
-    <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
-      :root { --bg:#F4F1EA; --surface:#FFFFFF; --ink:#1E1B16; --ink-soft:#6B6357; --line:#E1DACB; --primary:#1F3A34; --accent:#B5651D; --accent-bg:#F0DFC8; --success:#2E7D4F; --danger:#A8402D; }
-      * { box-sizing:border-box; }
-      body { margin:0; }
-      .app { min-height:100vh; background:#EDE7D8; display:flex; justify-content:center; padding:24px 12px; font-family:'Inter',sans-serif; color:var(--ink); }
-      .phone { width:100%; max-width:420px; min-height:760px; background:var(--bg); border-radius:22px; box-shadow:0 1px 0 rgba(30,27,22,0.06),0 20px 40px -24px rgba(30,27,22,0.4); overflow:hidden; border:1px solid var(--line); display:flex; flex-direction:column; position:relative; }
-      .content { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
-      .topbar { padding:18px 16px 4px; display:flex; align-items:center; justify-content:space-between; }
-      .brand { display:flex; align-items:center; gap:7px; }
-      .brand-mark { width:24px; height:24px; border-radius:7px; background:var(--primary); color:var(--accent-bg); display:flex; align-items:center; justify-content:center; }
-      .brand-name { font-family:'Fraunces',serif; font-weight:700; font-size:16.5px; color:var(--primary); }
-      .brand-sub { font-size:11px; font-weight:600; color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); padding:2px 8px; border-radius:8px; margin-left:2px; }
-      .iconbtn { width:32px; height:32px; border-radius:9px; background:var(--surface); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink); }
-      .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:14px 16px 0; }
-      .stat-box { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px 6px; text-align:center; }
-      .stat-box--warn { border-color:#E7C9BE; }
-      .stat-num { font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--primary); }
-      .stat-label { font-size:9.5px; color:var(--ink-soft); margin-top:1px; }
-      .tabs { display:flex; gap:6px; margin:14px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:4px; }
-      .tab { flex:1; border:none; background:transparent; padding:9px 4px; border-radius:8px; font-weight:700; font-size:12px; color:var(--ink-soft); cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:5px; }
-      .tab--active { background:var(--primary); color:#fff; }
-      .tab-count { background:var(--accent); color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:8px; }
-      .feed--scroll { padding:14px 16px 24px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:10px; }
-      .empty { padding:40px 20px; text-align:center; }
-      .empty-title { font-weight:700; font-size:14px; margin-bottom:4px; }
-      .empty-sub { font-size:12.5px; color:var(--ink-soft); }
-      .app-card { text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; cursor:pointer; font-family:inherit; }
-      .app-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-      .app-top-text { flex:1; min-width:0; }
-      .avatar { width:38px; height:38px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; font-family:'Fraunces',serif; flex-shrink:0; }
-      .avatar--lg { width:54px; height:54px; font-size:18px; }
-      .app-name { font-weight:700; font-size:14px; display:flex; align-items:center; gap:5px; }
-      .app-trade { font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:4px; margin-top:2px; }
-      .app-bio { font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin-bottom:8px; }
-      .artisan-row { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; }
-      .artisan-row--flagged { border-color:#E7C9BE; background:#FBF3EF; }
-      .flag-icon { color:var(--danger); }
-      .artisan-meta { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); margin-top:4px; margin-left:48px; }
-      .dot-sep { color:var(--line); }
-      .artisan-actions { display:flex; gap:8px; margin-top:10px; }
-      .badge-select { flex:1; border:1px solid var(--line); border-radius:8px; padding:8px; font-size:12.5px; font-family:inherit; background:var(--bg); }
-            .suspend-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
-      .suspend-btn--reactivate { border-color:var(--success); color:var(--success); }
-      .artisan-row--suspended { opacity:0.6; }
-      .suspended-tag { font-size:9.5px; font-weight:700; color:var(--danger); background:#F3E1DC; padding:2px 6px; border-radius:6px; margin-left:4px; }
-      .stats-grid--full { grid-template-columns:repeat(5,1fr); }
-      .tabs--wrap { flex-wrap:wrap; }
-      .req-row, .report-row { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; }
-      .req-row-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-      .req-row-parties { font-size:12.5px; font-weight:700; }
-      .req-row-job { font-size:12px; color:var(--ink-soft); margin-top:4px; }
-      .req-row-meta { font-size:10.5px; color:var(--ink-soft); margin-top:6px; opacity:0.8; }
-      .status-pill { font-size:9.5px; font-weight:700; padding:2px 8px; border-radius:10px; flex-shrink:0; }
-      .status-pill--pending { background:var(--accent-bg); color:var(--accent); }
-      .status-pill--accepted, .status-pill--confirmed { background:#E4F0E7; color:var(--success); }
-      .status-pill--completed { background:#DCE9E4; color:var(--primary); }
-      .status-pill--declined, .status-pill--closed { background:#F3E1DC; color:var(--danger); }
-      .report-reason { font-size:10.5px; font-weight:700; color:var(--danger); background:#F3E1DC; padding:2px 8px; border-radius:8px; flex-shrink:0; }
-      .report-note { font-size:12px; color:var(--ink); font-style:italic; margin-top:6px; }
-      .pro-btn { background:none; border:1px solid var(--line); color:var(--ink-soft); border-radius:8px; padding:8px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; }
-      .pro-btn--active { background:var(--accent-bg); color:var(--accent); border-color:var(--accent); }
-      .activity-wrap { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:11px 4px; border-bottom:1px solid var(--line); }
-      .activity-row { display:flex; align-items:flex-start; gap:9px; font-size:13px; color:var(--ink); flex:1; }
-      .activity-row svg { color:var(--accent); flex-shrink:0; margin-top:2px; }
-      .activity-time { font-size:11px; color:var(--ink-soft); flex-shrink:0; white-space:nowrap; }
-      .modal-backdrop { position:absolute; inset:0; background:rgba(30,27,22,0.45); display:flex; align-items:flex-end; z-index:20; }
-      .modal { background:var(--surface); border-radius:20px 20px 0 0; padding:20px; width:100%; max-height:85%; overflow-y:auto; }
-      .modal-back { background:none; border:none; display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:inherit; padding:0; margin-bottom:12px; }
-      .modal-top { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
-      .modal-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
-      .modal-bio { font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 10px; }
-      .modal-contact { font-size:12.5px; color:var(--ink); line-height:1.6; margin-bottom:12px; display:flex; flex-direction:column; gap:2px; }
-      .modal-id-section { margin-bottom:14px; }
-      .modal-id-label { font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
-      .modal-id-img { width:100%; max-width:220px; border-radius:10px; border:1px solid var(--line); display:block; }
-      .modal-photos { display:flex; gap:8px; overflow-x:auto; margin-bottom:14px; }
-      .modal-photo-tile { flex:0 0 auto; width:84px; height:84px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
-      .modal-note { font-size:11.5px; color:var(--ink-soft); background:var(--bg); border-radius:10px; padding:10px 12px; display:flex; gap:7px; line-height:1.5; margin-bottom:16px; }
-      .modal-actions { display:flex; gap:10px; }
-      .reject-btn, .approve-btn, .info-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; border-radius:10px; padding:12px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; border:none; }
-      .info-btn { background:var(--accent-bg); color:var(--accent); }
-      .info-tag { font-size:9.5px; font-weight:700; color:var(--accent); background:var(--accent-bg); padding:2px 6px; border-radius:6px; margin-top:4px; display:inline-block; }
-      .modal-id-section { margin-bottom:14px; }
-      .modal-id-label { font-size:11px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
-      .modal-id-img { width:100%; max-width:220px; border-radius:10px; border:1px solid var(--line); display:block; }
-      .detail-section-label { font-size:12px; font-weight:700; color:var(--ink-soft); margin:14px 0 8px; text-transform:uppercase; letter-spacing:0.03em; }
-      .detail-list { display:flex; flex-direction:column; gap:8px; margin-bottom:6px; }
-      .review-row { font-size:12.5px; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px; }
-      .review-row-author { color:var(--ink-soft); font-size:11px; }
-      .reject-btn { background:#F3E1DC; color:var(--danger); }
-      .approve-btn { background:var(--primary); color:#fff; }
-      .toast { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
-
-      .topbar { background:linear-gradient(135deg,#1F3A34 0%,#14241F 100%); border-radius:0 0 28px 28px; padding:20px 16px 46px; }
-      .topbar .brand-name { color:#F4EFE0; }
-      .topbar .brand-mark { background:rgba(244,239,224,.16); color:#F4EFE0; }
-      .topbar .brand-sub { background:rgba(244,239,224,.14); border-color:transparent; color:rgba(244,239,224,.85); }
-      .topbar .iconbtn { background:rgba(244,239,224,.14); border:none; color:#F4EFE0; }
-      .stats-grid { margin-top:-28px; position:relative; }
-      .stat-box { box-shadow:0 6px 16px -10px rgba(30,27,22,.35); }
-      @media (min-width: 760px) {
-        .phone .topbar { max-width:none; margin:0; padding-left:calc((100% - 760px) / 2 + 16px); padding-right:calc((100% - 760px) / 2 + 16px); }
-      }
-
-      .app-card, .artisan-row, .req-row, .report-row { border-radius:16px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
-      .approve-btn { box-shadow:0 8px 16px -10px rgba(31,58,52,.55); }
-
-      @media (max-width: 420px) {
-        .stats-grid--full { grid-template-columns:repeat(3,1fr); }
-      }
-
-      @media (min-width: 760px) {
-        .app { padding: 40px 24px; align-items: flex-start; }
-        .phone { max-width: 900px; min-height: 680px; border-radius: 20px; }
-        .topbar, .stats-grid, .tabs, .feed--scroll { max-width: 760px; margin-left: auto; margin-right: auto; width: 100%; }
-        .tabs { max-width: 380px; }
-        .feed--scroll { display: block; column-count: 2; column-gap: 14px; padding-bottom: 24px; }
-        .feed--scroll > * { break-inside: avoid; margin-bottom: 10px; }
-        .modal-backdrop { align-items: center; justify-content: center; }
-        .modal { border-radius: 20px; max-width: 480px; max-height: 80vh; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.35); }
-      }
-    `}</style>
+    <>
+      <Head title="Dashboard" sub={`${today} · Ado-Ekiti`} />
+      <div className="stats">
+        <Card l="Total users" n={s.totalUsers} sub={`+${s.newUsers30d} this month`} />
+        <Card l="Total artisans" n={s.totalArtisans} sub={`${s.activeArtisans} currently active`} to="artisans" />
+        <Card l="Pending applications" n={s.pendingApplications} tone="amber" sub={s.pendingApplications ? `Oldest waiting ${plural(s.oldestPendingDays, "day")}` : "Nothing waiting"} to="applications" />
+        <Card l="Active jobs" n={s.activeJobs} sub="Accepted or in progress" to="active" />
+        <Card l="Completed jobs" n={s.completedJobs} sub={`${s.completedThisWeek} this week`} to="completed" />
+        <Card l="Open reports" n={s.openReports} tone="red" sub={`${s.fraudReports} flagged as fraud`} to="reports" />
+      </div>
+      <div className="grid2">
+        <div className="card"><div className="card-h"><h3>Service requests over time</h3><span className="soft">Per week · {last(series.requests)} this week</span></div><LineChart data={series.requests} /></div>
+        <div className="card"><div className="card-h"><h3>Completed jobs</h3><span className="soft">Per week · {last(series.completed)} this week</span></div><BarChart data={series.completed} color="#0F4D3A" /></div>
+        <div className="card"><div className="card-h"><h3>New artisans</h3><span className="soft">Approved per week · {last(series.artisans)} this week</span></div><BarChart data={series.artisans} color="#1B6650" /></div>
+        <div className="card"><div className="card-h"><h3>Popular services</h3><span className="soft">Requests, all time</span></div><HBars data={popular} /></div>
+      </div>
+    </>
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+/* ============ applications ============ */
+const BUCKET = { review: ["Under review", "p-amber"], info: ["More info needed", "p-blue"], approved: ["Approved", "p-green"], rejected: ["Rejected", "p-red"] };
+const bucketOf = (a) => a.status === "PENDING" ? (a.infoRequestNote ? "info" : "review") : a.status === "APPROVED" ? "approved" : "rejected";
+
+function Applications({ token, go }) {
+  const res = useFetch(token, "/api/admin/applications?status=all");
+  const [chip, setChip] = useState("all"); const [q, setQ] = useState("");
+  const w = wait(res); if (w) return w;
+  const all = res.data.applications.map((a) => ({ ...a, bucket: bucketOf(a) }));
+  const n = (b) => all.filter((a) => a.bucket === b).length;
+  const rows = all.filter((a) => (chip === "all" || a.bucket === chip) && match(q, a.user.name, tradeLabel(a.trade), a.user.area));
+  const waiting = n("review") + n("info");
+  return (
+    <>
+      <Head title="Artisan applications" sub={`${waiting} waiting for review · oldest first`} right={<SearchBox value={q} onChange={setQ} placeholder="Search by name, trade or location" />} />
+      <Chips value={chip} onChange={setChip} items={[["all", "All", all.length], ["review", "Under review", n("review")], ["info", "More info needed", n("info")], ["approved", "Approved", n("approved")], ["rejected", "Rejected", n("rejected")]]} />
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Applicant</th><th>Trade</th><th>Location</th><th>Applied</th><th>Documents</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((a) => { const [t, c] = BUCKET[a.bucket]; return (
+            <tr key={a.id} className="row" onClick={() => go("applications", a.id)}>
+              <td><div className="who"><Avatar name={a.user.name} /><div><b>{a.user.name}</b><small>{a.user.email}</small></div></div></td>
+              <td>{tradeLabel(a.trade)}</td><td>{a.user.area || "—"}</td><td>{fmtDate(a.createdAt)}</td><td>{docsLabel(a)}</td>
+              <td><span className={"pill " + c}>{t}</span></td>
+              <td><button className="btn btn-primary btn-sm">Review</button></td>
+            </tr>); })}
+        </tbody>
+      </table>{!rows.length && <div className="empty">No applications here.</div>}</div>
+    </>
+  );
+}
+
+function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
+  const res = useFetch(token, `/api/admin/applications/${id}`);
+  const [identityOk, setIdentityOk] = useState(false);
+  const [skillOk, setSkillOk] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (res.data) setNote(res.data.application.adminNote || ""); }, [res.data && res.data.application.id]);
+  const w = wait(res); if (w) return w;
+  const a = res.data.application;
+  const pending = a.status === "PENDING";
+  const [stText, stCls] = BUCKET[bucketOf(a)];
+
+  async function decide(status) {
+    if (status === "REJECTED" && !note.trim()) return flash("Add a reason in the note so the applicant knows why");
+    setBusy(true);
+    try {
+      await api(`/api/admin/applications/${id}`, { method: "PATCH", token, body: { status, note: note.trim(), skillVerified: skillOk } });
+      flash(status === "APPROVED" ? `${a.user.name} approved and now live` : "Application rejected");
+      refreshStats(); go("applications");
+    } catch (e) { flash(e.message); setBusy(false); }
+  }
+  async function askInfo() {
+    if (!note.trim()) return flash("Write what you need from the applicant in the note");
+    setBusy(true);
+    try { await api(`/api/admin/applications/${id}/info`, { method: "PATCH", token, body: { note: note.trim() } }); flash("Info request saved"); res.reload(); }
+    catch (e) { flash(e.message); }
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <button className="back" onClick={() => go("applications")}>← All applications</button>
+      <div className="head">
+        <div className="who" style={{ gap: 16 }}>
+          <Avatar name={a.user.name} size={64} />
+          <div><h1>{a.user.name}</h1><p className="head-sub">{tradeLabel(a.trade)} · {a.user.area || "—"} · Applied {fmtDateLong(a.createdAt)} · {shortId(a.id, "APP")}</p></div>
+        </div>
+        <span className={"pill " + stCls}>{stText}</span>
+      </div>
+      <div className="two">
+        <div className="stack">
+          <div className="card">
+            <h3>Identity and trade</h3>
+            <div className="kv">
+              <div><label>Full name</label><b>{a.user.name}</b></div>
+              <div><label>Phone</label><b>{a.phone || "—"}</b></div>
+              <div><label>Email</label><b>{a.user.email}</b></div>
+              <div><label>Trade</label><b>{tradeLabel(a.trade)}</b></div>
+              <div><label>Location</label><b>{a.user.area || "—"}</b></div>
+              <div><label>Social</label><b>{a.socialHandle || "—"}</b></div>
+            </div>
+            <div style={{ marginTop: 16 }}><label className="lbl">About their service</label>{a.bio}</div>
+          </div>
+          <div className="card">
+            <h3>Documents</h3>
+            <div className="doc"><div className="doc-i" /><div className="doc-t"><b>Government ID</b><small>{a.idDocumentUrl ? "Uploaded " + fmtDate(a.createdAt) : "Not provided"}</small></div>
+              {a.idDocumentUrl ? <button className="btn btn-sm" onClick={() => openImage(a.idDocumentUrl)}>Open</button> : <span className="pill p-red">Missing</span>}</div>
+          </div>
+          <div className="card">
+            <h3>Portfolio</h3>
+            {a.photos.length ? <div className="ptiles">{a.photos.map((p) => <img key={p.id} src={p.url} onClick={() => openImage(p.url)} />)}</div> : <p className="soft">No work photos uploaded.</p>}
+          </div>
+        </div>
+        <div className="stack">
+          <div className="card" style={{ border: "2px solid var(--green)" }}>
+            <h3>Decision</h3>
+            {pending ? (<>
+              <label className="chk"><input type="checkbox" checked={identityOk} onChange={(e) => setIdentityOk(e.target.checked)} />Identity verified</label>
+              <label className="chk"><input type="checkbox" checked={skillOk} onChange={(e) => setSkillOk(e.target.checked)} />Skill verified</label>
+              <label className="lbl" style={{ marginTop: 12 }}>Internal note / reason</label>
+              <textarea className="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Required when you reject or ask for more information" />
+              <button className="btn btn-primary wide" disabled={busy || !identityOk || !a.idDocumentUrl} onClick={() => decide("APPROVED")}>Approve · make Vetted</button>
+              <button className="btn btn-info wide" disabled={busy} onClick={askInfo}>Request more information</button>
+              <button className="btn btn-danger wide" disabled={busy} onClick={() => decide("REJECTED")}>Reject application</button>
+              <p className="soft" style={{ fontSize: 12.5 }}>Approval needs the ID on file and "Identity verified" ticked. It makes the profile visible to customers.</p>
+            </>) : (<>
+              <p>This application was <b>{a.status.toLowerCase()}</b>{a.reviewedAt ? ` on ${fmtDateLong(a.reviewedAt)}` : ""}.</p>
+              {(a.rejectionReason || a.adminNote) && <p className="soft">Note: {a.rejectionReason || a.adminNote}</p>}
+            </>)}
+          </div>
+          <div className="card">
+            <h3>Review history</h3>
+            <ul className="hist">
+              <li>Application submitted<small>{fmtDateLong(a.createdAt)} · {fmtTime(a.createdAt)}</small></li>
+              {a.infoRequestedAt && <li>More information requested<small>{fmtDateLong(a.infoRequestedAt)} · "{a.infoRequestNote}"</small></li>}
+              {a.reviewedAt && <li>{a.status === "APPROVED" ? "Approved" : "Rejected"}<small>{fmtDateLong(a.reviewedAt)}</small></li>}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ artisans ============ */
+function Artisans({ token, flash, refreshStats, param, openImage }) {
+  const list = useFetch(token, "/api/admin/artisans");
+  const [sel, setSel] = useState(param || null);
+  const [q, setQ] = useState("");
+  const detail = useFetch(token, sel ? `/api/admin/artisans/${sel}/detail` : null);
+  const w = wait(list); if (w) return w;
+  const all = list.data.artisans;
+  const rows = all.filter((a) => match(q, a.user.name, tradeLabel(a.trade), a.area));
+  const susp = all.filter((a) => a.suspended).length;
+  const changed = () => { list.reload(); detail.reload(); refreshStats(); };
+  return (
+    <>
+      <Head title="Artisans" sub={`${all.length} artisans · ${all.length - susp} active · ${susp} suspended`} right={<SearchBox value={q} onChange={setQ} placeholder="Search by name, trade or location" />} />
+      <div className="split">
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Artisan</th><th>Trade</th><th>Badges</th><th>Jobs</th><th>Rating</th><th>Status</th></tr></thead>
+          <tbody>{rows.map((a) => (
+            <tr key={a.id} className={"row" + (sel === a.id ? " sel" : "")} onClick={() => setSel(a.id)}>
+              <td><div className="who"><Avatar name={a.user.name} /><div><b>{a.user.name}</b><small>{a.area}</small></div></div></td>
+              <td>{tradeLabel(a.trade)}</td><td><Badges a={a} /></td><td>{a.jobsCompleted}</td><td>{Number(a.rating).toFixed(1)}</td>
+              <td><span className={"pill " + (a.suspended ? "p-red" : "p-green")}>{a.suspended ? "Suspended" : "Active"}</span></td>
+            </tr>))}</tbody>
+        </table>{!rows.length && <div className="empty">No artisans match.</div>}</div>
+        {sel ? <ArtisanPanel token={token} res={detail} rules={list.data.rules} flash={flash} onChanged={changed} openImage={openImage} />
+             : <div className="card empty">Select an artisan to see their record.</div>}
+      </div>
+    </>
+  );
+}
+
+function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
+  if (!res.data) return <div className="card empty">{res.error || "Loading…"}</div>;
+  const { artisan: a, jobs, reviews, reports } = res.data;
+  const name = a.user.name;
+  async function patch(body, msg) { try { await api(`/api/admin/artisans/${a.id}`, { method: "PATCH", token, body }); flash(msg); onChanged(); } catch (e) { flash(e.message); } }
+  function suspend() { const r = window.prompt("Reason for suspending (admins only)"); if (r === null) return; patch({ suspended: true, reason: r.trim() }, `${name} suspended and hidden from customers`); }
+  function pro() {
+    if (a.isPro) return patch({ isPro: false }, "Pro listing removed");
+    const days = window.prompt("Grant Pro listing for how many days?", "30"); if (!days) return;
+    const d = new Date(); d.setDate(d.getDate() + Number(days)); patch({ isPro: true, proExpiresAt: d.toISOString() }, "Pro listing granted");
+  }
+  async function viewId() { try { const d = await api(`/api/admin/artisans/${a.id}/id-document`, { token }); d.idDocumentUrl ? openImage(d.idDocumentUrl) : flash("No ID on file"); } catch (e) { flash(e.message); } }
+  const topLine = a.badge === "TOP_RATED" ? "Earned" : a.jobsCompleted < rules.minJobs ? `Not eligible: ${a.jobsCompleted} of ${rules.minJobs} jobs` : `Not eligible: rating ${Number(a.rating).toFixed(1)} of ${rules.minRating}`;
+  return (
+    <div className="card" style={{ border: "2px solid var(--green)" }}>
+      <div className="panel-top"><Avatar name={name} size={52} /><div><h3>{name}</h3><span className="soft">{tradeLabel(a.trade)} · {a.area} · {a.jobsCompleted} jobs · {Number(a.rating).toFixed(1)} ★</span></div></div>
+      {a.suspended && <div className="panel-warn">Suspended {a.suspendedAt ? fmtDate(a.suspendedAt) : ""}{a.suspendedReason ? ` · ${a.suspendedReason}` : ""}. Hidden from customers.</div>}
+      <div className="stack">
+        {a.suspended ? <button className="btn btn-primary wide" onClick={() => patch({ suspended: false }, `${name} reactivated`)}>Reactivate artisan</button>
+                     : <button className="btn btn-danger wide" onClick={suspend}>Suspend artisan</button>}
+        <button className="btn wide" onClick={() => patch({ skillVerified: !a.skillVerified }, a.skillVerified ? "Skill Verified removed" : "Skill Verified granted")}>{a.skillVerified ? "Revoke Skill Verified" : "Grant Skill Verified"}</button>
+        <button className="btn wide" onClick={viewId}>View ID document</button>
+      </div>
+      <div className="counts"><div className="count"><b>{jobs.length}</b><span>Jobs</span></div><div className="count"><b>{reviews.length}</b><span>Reviews</span></div><div className="count"><b>{reports.length}</b><span>Reports</span></div></div>
+      <div className="h4">Verification</div>
+      <div className="vrow"><span>Vetted (identity)</span><b className="good">Verified</b></div>
+      <div className="vrow"><span>Skill Verified</span><b className={a.skillVerified ? "good" : "soft"}>{a.skillVerified ? "Verified" : "Not verified"}</b></div>
+      <div className="vrow"><span>Top Rated</span><b className={a.badge === "TOP_RATED" ? "good" : "soft"}>{topLine}</b></div>
+      <div className="vrow"><span>Pro listing</span><span><b className={a.isPro ? "good" : "soft"}>{a.isPro ? "On" : "Off"}</b> <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={pro}>{a.isPro ? "Remove" : "Grant"}</button></span></div>
+      <div className="h4">Recent jobs</div>
+      {jobs.slice(0, 5).map((j) => <div className="mini" key={j.id}><span className="t">{j.student.name} · {j.job}</span><ReqPill status={j.status} /></div>)}
+      {!jobs.length && <p className="soft">No jobs yet.</p>}
+      <div className="h4">Reports against</div>
+      {reports.slice(0, 4).map((r) => <div className="mini" key={r.id}><span className="t">{r.reason} · {r.reporter.name}</span><span className="soft">{fmtDate(r.createdAt)}</span></div>)}
+      {!reports.length && <p className="soft">None.</p>}
+    </div>
+  );
+}
+
+/* ============ customers ============ */
+function Customers({ token }) {
+  const res = useFetch(token, "/api/admin/customers");
+  const [sel, setSel] = useState(null); const [q, setQ] = useState(""); const [chip, setChip] = useState("all");
+  const detail = useFetch(token, sel ? `/api/admin/customers/${sel}` : null);
+  const w = wait(res); if (w) return w;
+  const all = res.data.customers;
+  const flagged = all.filter((c) => c.reportsAgainst > 0).length;
+  const rows = all.filter((c) => (chip === "all" || c.reportsAgainst > 0) && match(q, c.name, c.email, c.area));
+  const cur = all.find((c) => c.id === sel);
+  return (
+    <>
+      <Head title="Customers" sub={`${all.length} accounts · ${all.filter((c) => c.role === "ARTISAN").length} are also artisans`} right={<SearchBox value={q} onChange={setQ} placeholder="Search by name, email or area" />} />
+      <Chips value={chip} onChange={setChip} items={[["all", "All", all.length], ["flagged", "Flagged", flagged]]} />
+      <div className="split">
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Customer</th><th>Email</th><th>Area</th><th>Requests</th><th>Reports</th><th>Status</th></tr></thead>
+          <tbody>{rows.map((c) => (
+            <tr key={c.id} className={"row" + (sel === c.id ? " sel" : "")} onClick={() => setSel(c.id)}>
+              <td><div className="who"><Avatar name={c.name} /><div><b>{c.name}</b><small>Joined {new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</small></div></div></td>
+              <td>{c.email}</td><td>{c.area || "—"}</td><td>{c.requests}</td><td className={c.reportsAgainst ? "bad" : ""}>{c.reportsAgainst}</td>
+              <td><span className={"pill " + (c.reportsAgainst ? "p-amber" : "p-green")}>{c.reportsAgainst ? "Flagged" : "Active"}</span></td>
+            </tr>))}</tbody>
+        </table>{!rows.length && <div className="empty">No customers match.</div>}</div>
+        {cur ? (
+          <div className="card" style={{ border: "2px solid var(--green)" }}>
+            <div className="panel-top"><Avatar name={cur.name} size={52} /><div><h3>{cur.name}</h3><span className="soft">{cur.area || "—"} · {cur.email}</span></div></div>
+            <div className="counts"><div className="count"><b>{cur.requests}</b><span>Requests</span></div><div className="count"><b>{cur.completed}</b><span>Completed</span></div><div className="count"><b>{cur.reportsAgainst}</b><span>Reports</span></div></div>
+            <div className="h4">Recent requests</div>
+            {detail.data ? detail.data.requests.slice(0, 6).map((r) => <div className="mini" key={r.id}><span className="t">{shortId(r.id)} · {tradeLabel(r.artisanProfile.trade)}</span><ReqPill status={r.status} /></div>) : <p className="soft">Loading…</p>}
+            {detail.data && !detail.data.requests.length && <p className="soft">No requests yet.</p>}
+          </div>
+        ) : <div className="card empty">Select a customer to see their activity.</div>}
+      </div>
+    </>
+  );
+}
+
+/* ============ requests / jobs ============ */
+function Requests({ token }) {
+  const res = useFetch(token, "/api/admin/requests");
+  const [chip, setChip] = useState("all"); const [q, setQ] = useState("");
+  const w = wait(res); if (w) return w;
+  const all = res.data.requests;
+  const lab = (r) => (REQ_STATUS[r.status] || [r.status])[0];
+  const n = (l) => all.filter((r) => lab(r) === l).length;
+  const rows = all.filter((r) => (chip === "all" || lab(r) === chip) && match(q, shortId(r.id), r.student.name, tradeLabel(r.artisanProfile.trade), r.artisanProfile.user.name));
+  return (
+    <>
+      <Head title="Service requests" sub="Monitor every request from first message to completion" right={<SearchBox value={q} onChange={setQ} placeholder="Search request ID, customer or service" />} />
+      <Chips value={chip} onChange={setChip} items={[["all", "All", all.length], ...["Pending", "Accepted", "In Progress", "Completed", "Cancelled"].map((l) => [l, l, n(l)])]} />
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Request</th><th>Customer</th><th>Service</th><th>Location</th><th>Selected artisan</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.id}><td><b className="good">{shortId(r.id)}</b></td><td>{r.student.name}</td><td>{tradeLabel(r.artisanProfile.trade)}</td><td>{r.student.area || "—"}</td><td><b>{r.artisanProfile.user.name}</b></td><td><ReqPill status={r.status} /></td><td>{relDay(r.createdAt)}</td></tr>))}</tbody>
+      </table>{!rows.length && <div className="empty">No requests here.</div>}</div>
+      <p className="soft" style={{ marginTop: 10 }}>Showing {rows.length} of {all.length} · most recently updated first</p>
+    </>
+  );
+}
+
+function health(r) {
+  const h = (Date.now() - new Date(r.updatedAt).getTime()) / 36e5;
+  if ((r.status === "ACCEPTED" && h > 24) || (r.status === "CONFIRMED" && h > 72)) return ["Needs attention", "p-amber"];
+  return ["On track", "p-green"];
+}
+function ActiveJobs({ token }) {
+  const res = useFetch(token, "/api/admin/requests");
+  const [q, setQ] = useState("");
+  const w = wait(res); if (w) return w;
+  const jobs = res.data.requests.filter((r) => r.status === "ACCEPTED" || r.status === "CONFIRMED");
+  const prog = jobs.filter((r) => r.status === "CONFIRMED").length;
+  const attn = jobs.filter((r) => health(r)[0] === "Needs attention").length;
+  const rows = jobs.filter((r) => match(q, shortId(r.id), r.student.name, r.artisanProfile.user.name, tradeLabel(r.artisanProfile.trade)));
+  const Card = ({ l, n, s, tone }) => <div className={"stat" + (tone ? " " + tone : "")}><div className="stat-l">{l}</div><div className="stat-n">{n}</div><div className="stat-s">{s}</div></div>;
+  return (
+    <>
+      <Head title="Active jobs" sub="Jobs accepted or in progress right now" right={<SearchBox value={q} onChange={setQ} placeholder="Search job, artisan or customer" />} />
+      <div className="stats">
+        <Card l="Active jobs" n={jobs.length} s="Accepted or in progress" />
+        <Card l="In progress" n={prog} s="Booking confirmed" />
+        <Card l="Accepted, not started" n={jobs.length - prog} s="Waiting for the customer" />
+        <Card l="Needs attention" n={attn} s="No movement for too long" tone="amber" />
+      </div>
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Job</th><th>Service</th><th>Artisan</th><th>Customer</th><th>Progress</th><th>Last update</th><th>Health</th></tr></thead>
+        <tbody>{rows.map((r) => { const step = r.status === "CONFIRMED" ? 3 : 2; const [ht, hc] = health(r); return (
+          <tr key={r.id}><td><b className="good">{shortId(r.id)}</b></td><td>{tradeLabel(r.artisanProfile.trade)}</td><td>{r.artisanProfile.user.name}</td><td>{r.student.name}</td>
+            <td><div className="prog"><small><span>{step === 3 ? "In progress" : "Accepted"}</span><span>{step} of 4</span></small><i><b style={{ width: (step / 4) * 100 + "%" }} /></i></div></td>
+            <td>{ago(r.updatedAt)}</td><td><span className={"pill " + hc}>{ht}</span></td></tr>); })}</tbody>
+      </table>{!rows.length && <div className="empty">No active jobs right now.</div>}</div>
+      <div className="callout"><b>Health:</b> "Needs attention" means a job was accepted but not booked for over 24 hours, or has been in progress for over 3 days without an update.</div>
+    </>
+  );
+}
+
+function Completed({ token, statsRes }) {
+  const res = useFetch(token, "/api/admin/requests?status=COMPLETED");
+  const reps = useFetch(token, "/api/admin/reports");
+  const [q, setQ] = useState("");
+  const w = wait(res); if (w) return w;
+  const done = res.data.requests;
+  const s = statsRes.data ? statsRes.data.stats : null;
+  const now = Date.now(), wk = 7 * 864e5;
+  const thisWk = done.filter((r) => now - new Date(r.updatedAt).getTime() < wk).length;
+  const lastWk = done.filter((r) => { const d = now - new Date(r.updatedAt).getTime(); return d >= wk && d < 2 * wk; }).length;
+  const rated = done.filter((r) => r.rating);
+  const avg = rated.length ? (rated.reduce((a, r) => a + r.rating, 0) / rated.length).toFixed(1) : "—";
+  const rate = s && s.completedJobs + s.cancelledJobs ? Math.round((s.completedJobs / (s.completedJobs + s.cancelledJobs)) * 100) + "%" : "—";
+  const disputed = new Set(reps.data ? reps.data.reports.filter((r) => r.status === "NEW" || r.status === "INVESTIGATING").map((r) => r.requestId) : []);
+  const rows = done.filter((r) => match(q, shortId(r.id), r.student.name, r.artisanProfile.user.name, tradeLabel(r.artisanProfile.trade)));
+  const Card = ({ l, n, sub }) => <div className="stat"><div className="stat-l">{l}</div><div className="stat-n">{n}</div><div className="stat-s">{sub}</div></div>;
+  return (
+    <>
+      <Head title="Completed jobs" sub="Jobs confirmed by the customer. These feed every artisan's track record."
+        right={<button className="btn" onClick={() => downloadCsv([["Job", "Service", "Artisan", "Customer", "Completed", "Rating"], ...rows.map((r) => [shortId(r.id), tradeLabel(r.artisanProfile.trade), r.artisanProfile.user.name, r.student.name, fmtDateLong(r.updatedAt), r.rating || ""])], "completed-jobs.csv")}>Export CSV</button>} />
+      <div className="stats">
+        <Card l="Completed (latest 300)" n={done.length} sub={s ? `${s.completedJobs} all time` : ""} />
+        <Card l="This week" n={thisWk} sub={`${lastWk} last week`} />
+        <Card l="Average rating" n={avg} sub={`From ${plural(rated.length, "review")}`} />
+        <Card l="Completion rate" n={rate} sub="Completed vs cancelled" />
+      </div>
+      <div style={{ marginBottom: 16 }}><SearchBox value={q} onChange={setQ} placeholder="Search job, artisan or customer" /></div>
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Job</th><th>Service</th><th>Artisan</th><th>Customer</th><th>Completed</th><th>Rating</th><th>Track record</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.id}><td><b className="good">{shortId(r.id)}</b></td><td>{tradeLabel(r.artisanProfile.trade)}</td><td>{r.artisanProfile.user.name}</td><td>{r.student.name}</td><td>{fmtDate(r.updatedAt)}</td><td><b>{r.rating ? Number(r.rating).toFixed(1) : "Not rated"}</b></td>
+            <td><span className={"pill " + (disputed.has(r.id) ? "p-red" : r.rating ? "p-green" : "p-amber")}>{disputed.has(r.id) ? "Disputed" : r.rating ? "Counted" : "Awaiting review"}</span></td></tr>))}</tbody>
+      </table>{!rows.length && <div className="empty">No completed jobs yet.</div>}</div>
+    </>
+  );
+}
+
+/* ============ reviews ============ */
+function Reviews({ token, flash, refreshStats }) {
+  const res = useFetch(token, "/api/admin/reviews");
+  const [chip, setChip] = useState("all");
+  const w = wait(res); if (w) return w;
+  const all = res.data.reviews;
+  const n = (s) => all.filter((r) => r.reviewStatus === s).length;
+  const rows = all.filter((r) => chip === "all" ? r.reviewStatus !== "REMOVED" : r.reviewStatus === chip);
+  async function set(r, status) {
+    let reason; if (status === "FLAGGED") { reason = window.prompt("Why flag this review?"); if (reason === null) return; }
+    try { await api(`/api/admin/reviews/${r.id}`, { method: "PATCH", token, body: { status, reason } }); flash("Review updated"); res.reload(); refreshStats(); } catch (e) { flash(e.message); }
+  }
+  const tone = { PUBLISHED: ["Published", "p-green"], FLAGGED: ["Flagged", "p-amber"], REMOVED: ["Removed", "p-red"] };
+  return (
+    <>
+      <Head title="Reviews" sub="Reviews exist only for completed jobs. Admins moderate, they never edit." />
+      <Chips value={chip} onChange={setChip} items={[["all", "All", all.length - n("REMOVED")], ["FLAGGED", "Flagged", n("FLAGGED")], ["REMOVED", "Removed", n("REMOVED")]]} />
+      {rows.map((r) => { const [t, c] = tone[r.reviewStatus]; return (
+        <div className="revcard" key={r.id}>
+          <div className="revhead">
+            <div className="who"><Avatar name={r.student.name} /><div><b>{firstLast(r.student.name)} reviewed {r.artisanProfile.user.name}</b><small className="soft">{tradeLabel(r.artisanProfile.trade)} · {shortId(r.id)} · {fmtDate(r.updatedAt)}</small></div></div>
+            <div><b style={{ color: "#8A5A12" }}>{r.rating}.0 ★</b> <span className={"pill " + c}>{t}</span></div>
+          </div>
+          <div className="revtext">{r.reviewText || <span className="soft">No written review.</span>}</div>
+          <div className="revact">
+            {r.reviewFlagReason && <span className="revwhy">{r.reviewFlagReason}. Hidden from customers until you decide.</span>}
+            {r.reviewStatus === "PUBLISHED" && <><button className="btn btn-sm" onClick={() => set(r, "FLAGGED")}>Flag</button><button className="btn btn-sm btn-danger" onClick={() => set(r, "REMOVED")}>Remove review</button></>}
+            {r.reviewStatus === "FLAGGED" && <><button className="btn btn-sm" onClick={() => set(r, "PUBLISHED")}>Keep published</button><button className="btn btn-sm btn-danger" onClick={() => set(r, "REMOVED")}>Remove review</button></>}
+            {r.reviewStatus === "REMOVED" && <button className="btn btn-sm" onClick={() => set(r, "PUBLISHED")}>Restore</button>}
+          </div>
+        </div>); })}
+      {!rows.length && <div className="empty">Nothing here.</div>}
+    </>
+  );
+}
+
+/* ============ reports ============ */
+const reasonTone = (r) => /fraud|show up/i.test(r) ? "p-red" : /unavailable/i.test(r) ? "p-blue" : /poor/i.test(r) ? "p-amber" : "p-grey";
+const REP_WORD = { NEW: "New", INVESTIGATING: "Investigating", RESOLVED: "Resolved", DISMISSED: "Dismissed" };
+
+function Reports({ token, flash, refreshStats }) {
+  const list = useFetch(token, "/api/admin/reports");
+  const [sel, setSel] = useState(null); const [chip, setChip] = useState("open");
+  const reports = list.data ? list.data.reports : [];
+  const open = reports.filter((r) => r.status === "NEW" || r.status === "INVESTIGATING");
+  const rows = chip === "open" ? open : reports;
+  useEffect(() => { if (!sel && rows.length) setSel(rows[0].id); }, [list.data]);
+  const w = wait(list); if (w) return w;
+  const changed = () => { list.reload(); refreshStats(); };
+  return (
+    <>
+      <Head title="Reports and complaints" sub={`${open.length} open · customers and artisans can both report`} />
+      <Chips value={chip} onChange={setChip} items={[["open", "Open", open.length], ["all", "All", reports.length]]} />
+      <div className="split rep">
+        <div className="rep-list">
+          {rows.map((r) => (
+            <button key={r.id} className={"rep-item" + (sel === r.id ? " on" : "")} onClick={() => setSel(r.id)}>
+              <div className="rep-top"><span className={"pill " + reasonTone(r.reason)}>{r.reason}</span><span className="soft">{ago(r.createdAt)}</span></div>
+              <div className="rep-t">{r.reportedName}, {r.reportedRole === "artisan" ? tradeLabel(r.trade) : "Customer"} · {shortId(r.requestId)}</div>
+              <div className="rep-b"><span className="soft">Reported by {r.reporterRole} {r.reporterName}</span><span className={"s-" + r.status.toLowerCase()}>{REP_WORD[r.status]}</span></div>
+            </button>))}
+          {!rows.length && <div className="card empty">No reports here.</div>}
+        </div>
+        {sel ? <ReportDetail key={sel} token={token} id={sel} flash={flash} onChanged={changed} /> : <div className="card empty">Select a report.</div>}
+      </div>
+    </>
+  );
+}
+
+function ReportDetail({ token, id, flash, onChanged }) {
+  const res = useFetch(token, `/api/admin/reports/${id}`);
+  if (!res.data) return <div className="card empty">{res.error || "Loading…"}</div>;
+  const { report: r, artisan, messages, priorReports, recentReports } = res.data;
+  const closed = r.status === "RESOLVED" || r.status === "DISMISSED";
+  async function act(status, ask) {
+    let note = ""; if (ask) { const v = window.prompt(ask); if (v === null) return; note = v; }
+    try { await api(`/api/admin/reports/${id}`, { method: "PATCH", token, body: { status, note } }); flash("Report updated"); res.reload(); onChanged(); } catch (e) { flash(e.message); }
+  }
+  async function suspend() {
+    const reason = window.prompt("Reason for suspending (admins only)", `Report: ${r.reason}`); if (reason === null) return;
+    try { await api(`/api/admin/artisans/${artisan.id}`, { method: "PATCH", token, body: { suspended: true, reason: reason.trim() } }); flash(`${artisan.name} suspended`); res.reload(); onChanged(); } catch (e) { flash(e.message); }
+  }
+  return (
+    <div className="card" style={{ border: "2px solid var(--green)" }}>
+      <div className="rep-top"><span className={"pill " + reasonTone(r.reason)}>{r.reason}</span><span className={"pill " + (closed ? "p-green" : r.status === "NEW" ? "p-red" : "p-amber")}>{REP_WORD[r.status]}</span></div>
+      <h2 style={{ marginTop: 12 }}>Report {shortId(r.id, "RP")} · Request {shortId(r.requestId)}</h2>
+      <div className="kv" style={{ marginTop: 14 }}>
+        <div><label>Reported by</label><b>{r.reporterName} ({r.reporterRole})</b></div>
+        <div><label>Reported</label><b>{r.reportedName} ({r.reportedRole})</b></div>
+        <div><label>Request</label><b>{r.job}</b></div>
+      </div>
+      {r.reportedRole === "artisan" && <div style={{ marginTop: 14 }}><label className="lbl">Artisan record</label><b>{artisan.jobsCompleted} jobs · {Number(artisan.rating).toFixed(1)} ★ · {plural(priorReports, "prior report")}</b></div>}
+      <div className="stmt"><b>{r.reporterRole === "artisan" ? "Artisan" : "Customer"} statement:</b> {r.note ? `"${r.note}"` : <span className="soft">No details were added.</span>}</div>
+      <div className="h4">Timeline from the request log</div>
+      <ul className="tl">
+        {messages.map((m) => <li key={m.id}><time>{fmtTime(m.createdAt)}</time><span>{m.senderType === "SYSTEM" ? m.text : `${m.senderType === "CUSTOMER" ? "Customer" : "Artisan"}: "${m.text}"`}</span></li>)}
+        <li><time>{fmtTime(r.createdAt)}</time><span><b>Report filed: {r.reason}</b></span></li>
+      </ul>
+      {r.reportedRole === "artisan" && recentReports > 0 && <div className="callout"><b>Pattern:</b> {artisan.name} has {plural(recentReports, "other report")} in the last 30 days.</div>}
+      {r.resolutionNote && <p className="soft" style={{ marginTop: 14 }}>Resolution note: {r.resolutionNote}</p>}
+      <div className="acts">
+        {!closed && r.status === "NEW" && <button className="btn" onClick={() => act("INVESTIGATING")}>Start investigating</button>}
+        {!closed && <button className="btn btn-primary" onClick={() => act("RESOLVED", "Resolution note (optional)")}>Resolve report</button>}
+        {!closed && r.reportedRole === "artisan" && !artisan.suspended && <button className="btn btn-danger" onClick={suspend}>Suspend artisan</button>}
+        {!closed && <button className="btn" onClick={() => act("DISMISSED", "Why are you dismissing this? (optional)")}>Dismiss</button>}
+        {closed && <span className="soft">This report is closed.</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ============ verification ============ */
+function Verification({ token, flash, go, refreshStats }) {
+  const res = useFetch(token, "/api/admin/verification");
+  const w = wait(res); if (w) return w;
+  const d = res.data;
+  const queue = [
+    ...d.applications.map((a) => ({ key: "a" + a.id, name: a.user.name, sub: `${tradeLabel(a.trade)} · ${a.user.area || "—"}`, check: "Identity", ev: docsLabel(a), at: a.createdAt, open: () => go("applications", a.id) })),
+    ...d.skillQueue.map((a) => ({ key: "s" + a.id, name: a.user.name, sub: `${tradeLabel(a.trade)} · ${a.area}`, check: "Skill", ev: `${plural(a._count.photos, "portfolio photo")}`, at: a.createdAt, open: () => go("artisans", a.id) })),
+  ];
+  async function recompute() { try { const r = await api("/api/admin/badges/recompute", { method: "POST", token }); flash(r.changed ? `Top Rated updated for ${plural(r.changed, "artisan")}` : "Everyone is already correct"); res.reload(); refreshStats(); } catch (e) { flash(e.message); } }
+  const Card = ({ pill, cls, n, text }) => <div className="card"><span className={"pill " + cls}>{pill}</span><div className="stat-n" style={{ marginTop: 10 }}>{n} <small style={{ fontSize: 14, fontWeight: 500 }} className="soft">artisans</small></div><p className="soft" style={{ margin: 0 }}>{text}</p></div>;
+  return (
+    <>
+      <Head title="Verification" sub="Three badges, three different standards. Vetted and Skill Verified are granted by people. Top Rated is earned from the record." />
+      <div className="grid2" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))", marginBottom: 16 }}>
+        <Card pill="Vetted" cls="p-green" n={d.counts.vetted} text="Identity and contact verified at approval. Needed to appear to customers." />
+        <Card pill="Skill Verified" cls="p-blue" n={d.counts.skill} text="Trade confirmed through certificates, references or a reviewed portfolio." />
+        <Card pill="Top Rated" cls="p-amber" n={d.counts.top} text="Earned from the track record. Never granted by hand." />
+      </div>
+      <div className="two">
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Artisan</th><th>Check</th><th>Evidence</th><th>Waiting</th><th></th></tr></thead>
+          <tbody>{queue.map((i) => (
+            <tr key={i.key}><td><div className="who"><Avatar name={i.name} /><div><b>{i.name}</b><small>{i.sub}</small></div></div></td><td><span className={"pill " + (i.check === "Identity" ? "p-green" : "p-blue")}>{i.check}</span></td><td>{i.ev}</td><td>{waitLabel(i.at)}</td><td><button className="btn btn-primary btn-sm" onClick={i.open}>Check</button></td></tr>))}</tbody>
+        </table>{!queue.length && <div className="empty">Verification queue is clear.</div>}</div>
+        <div className="stack">
+          <div className="card" style={{ background: "#FCF3DC" }}>
+            <h3>Top Rated rules</h3>
+            <p className="soft">Calculated by the system. Admins cannot grant the badge by hand.</p>
+            <div className="vrow"><span>Completed jobs</span><b>{d.rules.minJobs} or more</b></div>
+            <div className="vrow"><span>Average rating</span><b>{d.rules.minRating} or higher</b></div>
+            <button className="btn wide" style={{ marginTop: 12 }} onClick={recompute}>Recalculate Top Rated now</button>
+          </div>
+          <div className="card">
+            <h3>Currently suspended</h3>
+            {d.suspended.map((s) => <div className="mini" key={s.id}><span className="t"><b>{s.user.name}</b> · {s.suspendedReason || "No reason recorded"}</span><span className="soft">{s.suspendedAt ? fmtDate(s.suspendedAt) : ""}</span></div>)}
+            {!d.suspended.length && <p className="soft">Nobody is suspended.</p>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ settings (read only) ============ */
+function Settings({ statsRes, user }) {
+  const rules = statsRes.data ? statsRes.data.rules : null;
+  const order = ["Trade match", "Availability", "Distance", "Verification", "Rating", "Jobs completed"];
+  return (
+    <>
+      <Head title="Settings" sub="Rules that shape matching and trust. Read-only for now." />
+      <div className="grid2">
+        <div className="card"><h3>Matching priority</h3><p className="soft">Order is fixed. Applied when the new request flow ships.</p>{order.map((o, i) => <div className="vrow" key={o}><span>{i + 1}. {o}</span></div>)}<p className="soft" style={{ marginTop: 12 }}>Unavailable and suspended artisans are never matched.</p></div>
+        <div className="card"><h3>Top Rated thresholds</h3><p className="soft">An artisan must meet every line. One strong job is never enough.</p>
+          <div className="vrow"><span>Completed jobs</span><b>{rules ? rules.minJobs : "—"}</b></div><div className="vrow"><span>Average rating</span><b>{rules ? rules.minRating : "—"}</b></div>
+          <p className="soft" style={{ marginTop: 12 }}>Edit these in <code>config/badgeRules.js</code> on the backend.</p></div>
+        <div className="card"><h3>Service categories</h3><div className="badges" style={{ marginTop: 10 }}>{["ELECTRICIAN", "PLUMBER", "TAILOR", "PHONE_REPAIR"].map((t) => <span key={t} className="pill p-grey">{tradeLabel(t)}</span>)}</div><p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p></div>
+        <div className="card"><h3>Product scope</h3><div className="vrow"><span>Payments</span><b className="soft">Out of scope for the MVP</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Not yet</b></div><div className="vrow"><span>Signed in as</span><b>{user.email}</b></div></div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
