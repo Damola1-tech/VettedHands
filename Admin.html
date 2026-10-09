@@ -582,6 +582,11 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
     const days = window.prompt("Grant Pro listing for how many days?", "30"); if (!days) return;
     const d = new Date(); d.setDate(d.getDate() + Number(days)); patch({ isPro: true, proExpiresAt: d.toISOString() }, "Pro listing granted");
   }
+  async function delist() {
+    if (!window.confirm(`Permanently delist ${name}? This cannot be undone. Suspending is usually better.`)) return;
+    if (window.prompt("Type DELIST to confirm") !== "DELIST") return;
+    try { await api(`/api/admin/artisans/${a.id}`, { method: "DELETE", token }); flash(`${name} delisted`); onChanged(); } catch (e) { flash(e.message); }
+  }
   async function viewId() { try { const d = await api(`/api/admin/artisans/${a.id}/id-document`, { token }); d.idDocumentUrl ? openImage(d.idDocumentUrl) : flash("No ID on file"); } catch (e) { flash(e.message); } }
   const topLine = a.badge === "TOP_RATED" ? "Earned" : a.jobsCompleted < rules.minJobs ? `Not eligible: ${a.jobsCompleted} of ${rules.minJobs} jobs` : `Not eligible: rating ${Number(a.rating).toFixed(1)} of ${rules.minRating}`;
   return (
@@ -593,6 +598,7 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
                      : <button className="btn btn-danger wide" onClick={suspend}>Suspend artisan</button>}
         <button className="btn wide" onClick={() => patch({ skillVerified: !a.skillVerified }, a.skillVerified ? "Skill Verified removed" : "Skill Verified granted")}>{a.skillVerified ? "Revoke Skill Verified" : "Grant Skill Verified"}</button>
         <button className="btn wide" onClick={viewId}>View ID document</button>
+        <button className="btn btn-danger wide" onClick={delist}>Delist permanently</button>
       </div>
       <div className="counts"><div className="count"><b>{jobs.length}</b><span>Jobs</span></div><div className="count"><b>{reviews.length}</b><span>Reviews</span></div><div className="count"><b>{reports.length}</b><span>Reports</span></div></div>
       <div className="h4">Verification</div>
