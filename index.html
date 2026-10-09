@@ -85,6 +85,18 @@ function Icon({ name, size = 18, color, strokeWidth = 2, fill = "none", stroke =
     </svg>
   );
 }
+Object.assign(ICON_PATHS, {
+  laptop: <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>,
+  paintRoller: <><rect width="16" height="6" x="2" y="2" rx="2"/><path d="M10 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect width="4" height="6" x="8" y="16" rx="1"/></>,
+  sparkle: <><line x1="12" y1="3" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="21"/><line x1="3" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="21" y2="12"/></>,
+  chevronDown: <polyline points="6 9 12 15 18 9"/>,
+  arrowRight: <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
+});
+const Laptop = (p) => <Icon name="laptop" {...p} />;
+const PaintRoller = (p) => <Icon name="paintRoller" {...p} />;
+const Sparkle = (p) => <Icon name="sparkle" {...p} />;
+const ChevronDown = (p) => <Icon name="chevronDown" {...p} />;
+const ArrowRight = (p) => <Icon name="arrowRight" {...p} />;
 const Search = (p) => <Icon name="search" {...p} />;
 const Bell = (p) => <Icon name="bell" {...p} />;
 const MapPin = (p) => <Icon name="mapPin" {...p} />;
@@ -523,6 +535,10 @@ function MainApp({ auth, intent }) {
             onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
             onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
             onOpenWizard={() => setView("wizard")}
+            onOpenRequests={() => goNav("requests")}
+            onOpenMe={() => goNav("profile")}
+            hasAlerts={requests.some((r) => r.status === "PENDING" || r.status === "ACCEPTED")}
+            flash={flash}
             onLogout={logout} />
         )}
         {view === "wizard" && (
@@ -544,7 +560,7 @@ function MainApp({ auth, intent }) {
         {view === "browse" && (
           <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
             area={area} setArea={setArea} filtered={artisans}
-            onBack={() => { setView("home"); setNavTab("home"); }} onOpenProfile={(a) => openArtisanProfile(a, "browse")} />
+            onBack={() => { setTradeFilter(null); setView("home"); setNavTab("home"); }} onOpenProfile={(a) => openArtisanProfile(a, "browse")} />
         )}
         {view === "artisanProfile" && selectedArtisan && (
           <ArtisanProfileView artisan={selectedArtisan} canRequest={selectedArtisan.user.id !== user.id}
@@ -593,41 +609,43 @@ function MainApp({ auth, intent }) {
 }
 
 /* ---------------- Home ---------------- */
-function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, setQuery, onlineNow, filtered, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onLogout }) {
+const homeExtraTrades = [
+  { id: "LAPTOP_REPAIR", label: "Laptop Repair", icon: Laptop },
+  { id: "PAINTER", label: "Painter", icon: PaintRoller },
+  { id: "CARPENTER", label: "Carpenter", icon: Hammer },
+  { id: "CLEANER", label: "Cleaner", icon: Sparkle },
+];
+const homeTrades = [...trades, ...homeExtraTrades.filter((e) => !trades.some((t) => t.id === e.id))];
+const HOME_TINTS = [["#E3EFE9", "#0F4D3A"], ["#FBEBC8", "#8A5A12"], ["#DDE9F4", "#1F5A8A"], ["#F6E1DA", "#9A3B26"], ["#ECE7D8", "#4A4636"]];
+function tintFor(id = "") { let h = 0; for (const c of id) h += c.charCodeAt(0); return HOME_TINTS[h % HOME_TINTS.length]; }
+function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+
+function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineNow, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onOpenRequests, onOpenMe, hasAlerts, flash }) {
+  const first = user.name.split(" ")[0];
+  const live = trades.map((t) => t.id);
+  const here = area === "All areas" ? "Ado-Ekiti" : `${area}, Ado-Ekiti`;
   return (
-    <div className="screen">
-      <div className="hero">
-        <div className="hero-top">
-          <div className="hero-brand"><span className="brand-mark"><ShieldCheck size={16} /></span><span className="brand-name">VettedHands</span></div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="hero-greet">Hi, {user.name.split(" ")[0]}</span>
-            <button className="hero-iconbtn" onClick={onLogout} title="Log out"><LogOut size={16} /></button>
-          </div>
+    <div className="screen hm">
+      <div className="hm-top">
+        <h1 className="hm-greet">{greeting()},<br />{first}</h1>
+        <div className="hm-top-r">
+          <button className="hm-bell" onClick={onOpenRequests} aria-label="Requests"><Bell size={22} />{hasAlerts && <span className="hm-bell-dot" />}</button>
+          <button className="hm-me" onClick={onOpenMe} aria-label="Profile">{initials(user.name)}</button>
         </div>
-        <div className="hero-title">Find a vetted hand</div>
-        <div className="hero-search"><Search size={16} /><input placeholder="Search a trade or name…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
       </div>
+      <label className="hm-loc">
+        <MapPin size={17} /><span>{here}</span><ChevronDown size={16} />
+        <select value={area} onChange={(e) => setArea(e.target.value)} aria-label="Area">{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+      </label>
 
-      <div className="qa-row">
-        {trades.map((t) => { const I = t.icon; return (
-          <button key={t.id} className="qa" onClick={() => onPickTrade(t.id)}>
-            <span className="qa-icon"><I size={22} /></span>
-            <span className="qa-label">{t.id === "PHONE_REPAIR" ? "Repair" : t.label}</span>
-          </button>
-        ); })}
-        <button className="qa" onClick={onSeeAll}>
-          <span className="qa-icon" style={{ fontSize: 24, fontWeight: 700 }}>+</span>
-          <span className="qa-label">More</span>
-        </button>
+      <div className="hm-card">
+        <h2>What do you need help with?</h2>
+        <p>Describe the job once. We'll find vetted artisans who are free near you.</p>
+        <button className="hm-card-btn" onClick={onOpenWizard}>Request a service <ArrowRight size={18} /></button>
       </div>
-
-      <button className="wizard-cta" onClick={onOpenWizard}>
-        <span className="wizard-cta-q">What do you need help with?</span>
-        <span className="wizard-cta-sub">Tell us the problem, we'll match you with a vetted artisan nearby</span>
-      </button>
 
       {isArtisan && user.artisanProfile && (
-        <div className="section" style={{ marginTop: 12 }}>
+        <div className="section">
           <div className="dash-card">
             <div className="dash-header">
               <div className="avatar avatar--lg" style={{ background: colorFor(user.id) }}>{initials(user.name)}</div>
@@ -657,23 +675,39 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, query, 
         </div>
       )}
 
-      <div className="area-row"><MapPin size={13} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((a) => <option key={a} value={a}>{a}</option>)}</select></div>
-      <div className="section">
-        <div className="section-head"><span>Online now</span></div>
-        <div className="status-row">
-          {onlineNow.map((a) => (
-            <button key={a.id} className="status-item" onClick={() => onOpenProfile(a)}>
-              <div className="status-ring"><div className="avatar avatar--md" style={{ background: colorFor(a.id) }}>{initials(a.user.name)}</div></div>
-              <div className="status-name">{a.user.name.split(" ")[0]}</div>
-            </button>
-          ))}
-          {onlineNow.length === 0 && <div className="empty-sub" style={{ padding: "4px 0" }}>No one online right now.</div>}
-        </div>
+      <h3 className="hm-h">Popular services</h3>
+      <div className="hm-grid">
+        {homeTrades.map((t) => { const I = t.icon; const ok = live.includes(t.id); return (
+          <button key={t.id} className={"hm-tile" + (ok ? "" : " hm-tile--soon")}
+            onClick={() => (ok ? onPickTrade(t.id) : flash(`${t.label} is coming soon to Ado-Ekiti`))}>
+            <I size={24} />
+            <span>{t.label}</span>
+          </button>
+        ); })}
       </div>
-      <div className="section section--flush">
-        <div className="section-head"><span>Top vetted near you</span><button className="see-all" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
-        <div className="feed">{filtered.slice(0, 4).map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}</div>
+
+      <div className="hm-sec-head"><h3 className="hm-h">Available near you</h3><span>Ready today</span></div>
+      <div className="hm-list">
+        {onlineNow.slice(0, 3).map((a) => { const [bg, fg] = tintFor(a.id); return (
+          <button key={a.id} className="hm-ac" onClick={() => onOpenProfile(a)}>
+            <div className="hm-ac-top">
+              <span className="hm-ac-av" style={{ background: bg, color: fg }}>{initials(a.user.name)}</span>
+              <div className="hm-ac-id">
+                <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" /></div>
+                <div className="hm-ac-trade">{tradeLabel(a.trade)}</div>
+              </div>
+              <span className="hm-on"><i />Available now</span>
+            </div>
+            <div className="hm-ac-meta">
+              <b><Star size={13} fill="#B5651D" stroke="none" /> {fmtStars(a.rating)}</b>
+              <span>{a.jobsCompleted} jobs completed</span>
+              <span><MapPin size={13} /> {a.area}</span>
+            </div>
+          </button>
+        ); })}
+        {onlineNow.length === 0 && <div className="hm-empty">No one is available right now. <button onClick={onSeeAll}>Browse all artisans</button></div>}
       </div>
+      {onlineNow.length > 0 && <button className="hm-all" onClick={onSeeAll}>See all artisans <ChevronRight size={15} /></button>}
     </div>
   );
 }
@@ -1522,6 +1556,45 @@ function Style() {
       .acard, .review-item, .feed--scroll > .req-card { border-radius:16px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
       .primary-btn, .action-btn { box-shadow:0 8px 16px -10px rgba(31,58,52,.55); }
       .primary-btn:disabled { box-shadow:none; }
+
+      /* ===== Home (new design) ===== */
+      .hm { padding:calc(22px + env(safe-area-inset-top)) 20px 28px; }
+      .hm-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+      .hm-greet { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:30px; line-height:1.08; letter-spacing:-0.02em; margin:0; color:var(--ink); }
+      .hm-top-r { display:flex; align-items:center; gap:12px; padding-top:4px; }
+      .hm-bell { position:relative; width:40px; height:40px; background:none; border:none; color:var(--ink); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .hm-bell-dot { position:absolute; top:6px; right:7px; width:11px; height:11px; border-radius:50%; background:#C98A1B; border:2px solid var(--bg); }
+      .hm-me { width:46px; height:46px; border-radius:50%; background:#E3EFE9; color:var(--primary); border:none; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:16px; cursor:pointer; }
+      .hm-loc { position:relative; display:inline-flex; align-items:center; gap:9px; margin-top:16px; align-self:flex-start; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:11px 16px; font-weight:700; font-size:15px; color:var(--primary); cursor:pointer; }
+      .hm-loc select { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; font-size:16px; }
+      .hm-card { margin-top:22px; background:var(--primary); color:#fff; border-radius:22px; padding:24px 22px; }
+      .hm-card h2 { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:27px; line-height:1.1; margin:0 0 10px; }
+      .hm-card p { margin:0 0 20px; font-size:16px; line-height:1.45; color:rgba(255,255,255,.8); }
+      .hm-card-btn { width:100%; background:#fff; color:var(--primary); border:none; border-radius:14px; padding:16px; font-family:inherit; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; }
+      .hm .section { padding:0; margin-top:16px; }
+      .hm-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:22px; margin:28px 0 14px; color:var(--ink); }
+      .hm-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+      .hm-tile { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px 4px 12px; min-height:92px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:10px; font-family:inherit; font-size:12px; font-weight:700; color:var(--primary); text-align:center; line-height:1.2; cursor:pointer; }
+      .hm-tile--soon { opacity:.6; }
+      .hm-sec-head { display:flex; align-items:baseline; justify-content:space-between; margin:28px 0 14px; }
+      .hm-sec-head .hm-h { margin:0; }
+      .hm-sec-head span { color:var(--ink-soft); font-size:14px; }
+      .hm-list { display:flex; flex-direction:column; gap:12px; }
+      .hm-ac { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; text-align:left; font-family:inherit; cursor:pointer; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
+      .hm-ac-top { display:flex; align-items:center; gap:14px; }
+      .hm-ac-av { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:18px; flex-shrink:0; }
+      .hm-ac-id { flex:1; min-width:0; }
+      .hm-ac-name { display:flex; align-items:center; gap:6px; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:18px; line-height:1.15; color:var(--ink); }
+      .hm-ac-trade { color:var(--ink-soft); font-size:14px; margin-top:3px; }
+      .hm-on { display:inline-flex; align-items:center; gap:7px; background:#E3EFE9; color:var(--primary); border-radius:999px; padding:7px 12px; font-size:12.5px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+      .hm-on i { width:8px; height:8px; border-radius:50%; background:var(--success); }
+      .hm-ac-meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; margin-top:14px; font-size:14px; color:var(--ink-soft); }
+      .hm-ac-meta b { color:var(--ink); display:inline-flex; align-items:center; gap:4px; }
+      .hm-ac-meta span { display:inline-flex; align-items:center; gap:4px; }
+      .hm-empty { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:22px; text-align:center; color:var(--ink-soft); }
+      .hm-empty button { background:none; border:none; color:var(--primary); font-weight:700; font-family:inherit; cursor:pointer; text-decoration:underline; }
+      .hm-all { margin:16px auto 0; background:none; border:none; color:var(--primary); font-family:inherit; font-size:14.5px; font-weight:700; display:flex; align-items:center; gap:3px; cursor:pointer; }
+      @media (max-width:360px) { .hm-greet { font-size:26px; } .hm-tile { font-size:11px; } .hm-on { font-size:11.5px; padding:6px 9px; } }
 
       /* Login / loading screens: dark branded background */
       .phone > .screen--center { background:linear-gradient(160deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; }
