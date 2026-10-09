@@ -331,6 +331,8 @@ function MainApp({ auth, intent }) {
   const [prefillJob, setPrefillJob] = useState("");
   const [toast, setToast] = useState(null);
   const [convoFrom, setConvoFrom] = useState(null);
+  const [trackFrom, setTrackFrom] = useState(null);
+  const [applyOpen, setApplyOpen] = useState(intent === "artisan");
   const [otherReadAt, setOtherReadAt] = useState(null);
   const [readIds, setReadIds] = useState(() => { try { return JSON.parse(localStorage.getItem("vh_notif_read_" + user.id) || "[]"); } catch (e) { return []; } });
 
@@ -424,6 +426,7 @@ function MainApp({ auth, intent }) {
     } catch (e) { /* photos just won't show */ }
   }
   function goNav(tab) {
+    setApplyOpen(false);
     setNavTab(tab === "browse" ? "home" : tab);
     if (tab === "home") setView("home");
     else if (tab === "browse") { setTradeFilter(null); setView("browse"); }
@@ -447,6 +450,11 @@ function MainApp({ auth, intent }) {
     } else {
       setView("request");
     }
+  }
+  function openTrack(requestId, from = null) {
+    setTrackFrom(from);
+    setActiveRequestId(requestId);
+    setView("track");
   }
   async function openConversation(requestId, from = null) {
     setConvoFrom(from);
@@ -506,12 +514,14 @@ function MainApp({ auth, intent }) {
       const d = await api(`/api/requests/${requestId}/complete`, { method: "PATCH", token, body: { rating, reviewText } });
       setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
       flash("Job marked complete");
+      return true;
     } catch (e) { fail(e); }
   }
   async function reportRequest(requestId, reason, note) {
     try {
       await api(`/api/requests/${requestId}/report`, { method: "POST", token, body: { reason, note } });
       flash("Reported to VettedHands");
+      return true;
     } catch (e) { fail(e); }
   }
   async function toggleOnline(next) {
@@ -593,8 +603,29 @@ function MainApp({ auth, intent }) {
           <RequestSentView artisan={activeRequest.artisanProfile} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => openConversation(activeRequest.id)} />
         )}
         {view === "requestsList" && (
-          <RequestsListView requests={requests} user={user} onOpen={openConversation}
+          <RequestsListView requests={requests} user={user} onOpen={(id) => openTrack(id)}
+            onRequestService={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
+            onCheckAvailability={() => goNav("profile")}
             onRespond={respondToRequest} />
+        )}
+        {view === "track" && activeRequest && (
+          <TrackView request={activeRequest} user={user}
+            onBack={() => setView(trackFrom === "notifications" ? "notifications" : "requestsList")}
+            onMessage={() => openConversation(activeRequest.id, "track")}
+            onConfirm={() => confirmRequest(activeRequest.id)}
+            onRespond={(status) => respondToRequest(activeRequest.id, status)}
+            onReview={() => setView("review")}
+            onReport={() => setView("report")} />
+        )}
+        {view === "review" && activeRequest && (
+          <ReviewView request={activeRequest}
+            onClose={() => setView("track")}
+            onSubmit={async (rating, text) => { const ok = await completeRequest(activeRequest.id, rating, text); if (ok) setView("track"); }} />
+        )}
+        {view === "report" && activeRequest && (
+          <ReportView request={activeRequest} user={user}
+            onClose={() => setView("track")}
+            onSubmit={async (reason, note) => { const ok = await reportRequest(activeRequest.id, reason, note); if (ok) setView("track"); }} />
         )}
         {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={(id) => openConversation(id)} />}
         {view === "notifications" && (
@@ -605,7 +636,7 @@ function MainApp({ auth, intent }) {
         )}
         {view === "conversation" && activeRequest && (
           <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user} otherReadAt={otherReadAt}
-            onBack={() => setView(convoFrom === "notifications" ? "notifications" : navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
+            onBack={() => setView(convoFrom === "track" ? "track" : convoFrom === "notifications" ? "notifications" : navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
             onSend={(text) => sendMessage(activeRequest.id, text)}
             onConfirm={() => confirmRequest(activeRequest.id)}
             onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
@@ -613,8 +644,14 @@ function MainApp({ auth, intent }) {
             onRespond={(status) => respondToRequest(activeRequest.id, status)}
             onPoll={pollConversation} />
         )}
-        {view === "userProfile" && (
-          <UserProfileView startWithForm={intent === "artisan"} user={user} isArtisan={isArtisan} application={application}
+        {view === "userProfile" && !isArtisan && !applyOpen && (
+          <CustomerProfileView user={user} requests={requests} application={application}
+            onGoRequests={() => goNav("requests")}
+            onBecomeArtisan={() => setApplyOpen(true)}
+            onLogout={logout} />
+        )}
+        {view === "userProfile" && (isArtisan || applyOpen) && (
+          <UserProfileView startWithForm={applyOpen} user={user} isArtisan={isArtisan} application={application}
             incomingCount={requests.filter((r) => r.status === "PENDING").length} myReviews={myReviews}
             onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
@@ -771,7 +808,7 @@ function timeAgo(d) {
   if (days === 1) return "Yesterday";
   if (days < 14) return `${days} days ago`;
   if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
-  return `${Math.floor(days / 30)} months ago`;
+  return `${Math.floor(days / 30)} months ago`; 
 }
 
 function ArtisanProfileView({ artisan: a, canRequest, summary, onBack, onRequest }) {
@@ -1146,7 +1183,317 @@ function statusMeta(status) {
   return map[status] || { label: status, cls: "" };
 }
 
-function RequestsListView({ requests, user, onOpen, onRespond }) {
+/* ---------------- Requests tab (new design) ---------------- */
+function pillFor(r, artisanSide) {
+  const s = r.status;
+  if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
+  if (s === "ACCEPTED") return ["Accepted", "blue"];
+  if (s === "CONFIRMED") return ["In progress", "green"];
+  if (s === "COMPLETED") return ["Completed", "dark"];
+  if (s === "DECLINED") return ["Declined", "red"];
+  return ["Closed", "grey"];
+}
+function reqBucket(r, meId) {
+  if (r.status === "COMPLETED") return "completed";
+  if (r.status === "DECLINED" || r.status === "CLOSED") return "cancelled";
+  if (r.status === "PENDING" && r.artisanProfile.user.id === meId) return "new";
+  return "active";
+}
+
+function RequestsListView({ requests, user, onOpen, onRespond, onRequestService, onCheckAvailability }) {
+  const isArtisan = user.role === "ARTISAN";
+  const tabs = isArtisan
+    ? [["new", "New"], ["active", "Active"], ["past", "Past"]]
+    : [["active", "Active"], ["completed", "Completed"], ["cancelled", "Cancelled"]];
+  const bucketOf = (r) => { const b = reqBucket(r, user.id); return isArtisan && (b === "completed" || b === "cancelled") ? "past" : b; };
+  const [tab, setTab] = useState(isArtisan && requests.some((r) => bucketOf(r) === "new") ? "new" : "active");
+  const count = (k) => requests.filter((r) => bucketOf(r) === k).length;
+  const rows = requests.filter((r) => bucketOf(r) === tab);
+  return (
+    <div className="screen rq">
+      <h1 className="rq-h">{isArtisan ? "Requests" : "My requests"}</h1>
+      <div className="rq-seg">
+        {tabs.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}<small>{count(k)}</small></button>)}
+      </div>
+      <div className="rq-list">
+        {rows.map((r) => {
+          const artisanSide = r.artisanProfile.user.id === user.id;
+          const other = artisanSide ? r.student : r.artisanProfile.user;
+          const [label, cls] = pillFor(r, artisanSide);
+          const t = trades.find((x) => x.id === r.artisanProfile.trade);
+          const I = t ? t.icon : Hammer;
+          return (
+            <div key={r.id} className="rq-card">
+              <div className="rq-head">
+                <span className="rq-ic"><I size={22} /></span>
+                <span className="rq-title">{tradeLabel(r.artisanProfile.trade)}</span>
+                <span className={"rq-pill rq-pill--" + cls}>{label}</span>
+              </div>
+              <dl className="rq-rows">
+                <div><dt>{artisanSide ? "Customer" : "Artisan"}</dt><dd>{other.name}</dd></div>
+                <div><dt>When</dt><dd>{r.when}</dd></div>
+                {r.area && <div><dt>Location</dt><dd>{r.area}</dd></div>}
+              </dl>
+              <p className="rq-job">{r.hasImage && <Camera size={13} style={{ marginRight: 5, verticalAlign: "-2px" }} />}{r.job}</p>
+              {artisanSide && r.status === "PENDING" && (
+                <div className="rq-acts">
+                  <button className="d" onClick={() => onRespond(r.id, "DECLINED")}>Decline</button>
+                  <button className="a" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
+                </div>
+              )}
+              <div className="rq-foot">
+                <button className="rq-link" onClick={() => onOpen(r.id)}>{r.status === "CONFIRMED" ? "Track job" : "View status"}<ChevronRight size={18} /></button>
+              </div>
+            </div>
+          );
+        })}
+        {rows.length === 0 && (
+          <div className="rf-empty">
+            <div className="rf-empty-ic"><ClipboardList size={26} /></div>
+            {isArtisan ? (
+              <>
+                <b>{tab === "new" ? "No new service requests." : "Nothing here yet."}</b>
+                <p>Requests arrive when you are marked available. Keep your availability on and your portfolio fresh to be matched more often.</p>
+                <button className="rq-cta" onClick={onCheckAvailability}>Check availability</button>
+              </>
+            ) : (
+              <>
+                <b>{tab === "active" ? "No active requests yet." : "Nothing here yet."}</b>
+                <p>When you need an electrician, tailor or phone repairer, tell us the job and we'll find vetted artisans near you.</p>
+                <button className="rq-cta" onClick={onRequestService}>Request a service</button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {!isArtisan && tab === "active" && rows.length > 0 && <p className="rq-note">Finished jobs move to the Completed tab.</p>}
+    </div>
+  );
+}
+
+/* ---------------- Request tracking ---------------- */
+function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onReview, onReport }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const ap = r.artisanProfile;
+  const artisanSide = ap.user.id === user.id;
+  const other = artisanSide ? r.student : ap.user;
+  const first = other.name.split(" ")[0];
+  const s = r.status;
+  const ended = s === "DECLINED" || s === "CLOSED";
+  const done = ended || s === "PENDING" ? 1 : s === "COMPLETED" ? 5 : 2;
+  const current = s === "PENDING" ? 1 : s === "CONFIRMED" ? 2 : -1;
+  const [label, cls] = pillFor(r, artisanSide);
+  const [bg, fg] = tintFor(other.id || r.id);
+  const head = ended
+    ? (s === "DECLINED" ? `${artisanSide ? "You" : first} declined this request` : "This request was closed")
+    : s === "PENDING" ? (artisanSide ? `${first} is waiting for your reply` : `Waiting for ${first} to reply`)
+    : s === "ACCEPTED" ? (artisanSide ? `You accepted ${first}'s request` : `${first} accepted your request`)
+    : s === "CONFIRMED" ? (artisanSide ? `You're working on ${first}'s job` : `${first} is working on your job`)
+    : "Job completed and reviewed";
+  const sub = `${tradeLabel(ap.trade)}${r.area ? " · " + r.area : ""} · ${r.when}`;
+  const steps = [
+    ["Request sent", `${dayLabel(r.createdAt)}, ${clockTime(r.createdAt)} · ${artisanSide ? "From " + r.student.name : "Sent to " + ap.user.name}`],
+    ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "Closed: another artisan was booked" : "Request accepted"],
+    ["Job in progress", s === "CONFIRMED" ? "Booking confirmed, work under way" : done > 2 ? "Booking was confirmed" : "Starts when the booking is confirmed"],
+    ["Job completed", s === "COMPLETED" ? "Marked complete and confirmed" : artisanSide ? "The customer confirms when it is done" : "You confirm when the job is done"],
+    [artisanSide ? "Customer review" : "Review artisan", r.rating ? `Rated ${r.rating} out of 5` : "Rate the work and help others hire with confidence"],
+  ];
+  return (
+    <div className="screen tk">
+      <div className="tk-top"><button className="tk-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button><span>Request {reqCode(r.id)}</span></div>
+      <span className={"rq-pill tk-pill rq-pill--" + cls}><i />{label}</span>
+      <h1 className="tk-h">{head}</h1>
+      <p className="tk-sub">{sub}</p>
+
+      <div className="tk-card">
+        {steps.map(([t, d], i) => (
+          <div key={t} className={"tk-step " + (i < done ? "tk-step--done" : i === current ? "tk-step--now" : "tk-step--todo")}>
+            <span className="tk-dot">{i < done && <Check size={20} strokeWidth={3} />}</span>
+            <div className="tk-st"><b>{t}</b><span>{d}</span></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="tk-actions">
+        {artisanSide && s === "PENDING" && (
+          <div className="rq-acts" style={{ marginTop: 0 }}>
+            <button className="d" onClick={() => onRespond("DECLINED")}>Decline</button>
+            <button className="a" onClick={() => onRespond("ACCEPTED")}>Accept</button>
+          </div>
+        )}
+        {!artisanSide && s === "ACCEPTED" && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Confirm booking with {first}</button>}
+        {confirming && (
+          <div className="tk-confirm">
+            <p>Confirming closes any other open requests you sent for this same job.</p>
+            <div className="rq-acts" style={{ marginTop: 0 }}>
+              <button className="d" onClick={() => setConfirming(false)}>Cancel</button>
+              <button className="a" disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); setConfirming(false); }}>{busy ? "Confirming…" : "Yes, confirm"}</button>
+            </div>
+          </div>
+        )}
+        {!artisanSide && s === "CONFIRMED" && <button className="tk-btn" onClick={onReview}>Mark complete &amp; review</button>}
+      </div>
+
+      <div className="tk-card">
+        <div className="tk-ac">
+          <span className="tk-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+          <div><b>{other.name}</b><span>{artisanSide ? "Customer" : `Vetted · ${fmtStars(ap.rating)} ★ · ${ap.jobsCompleted} jobs completed`}</span></div>
+        </div>
+        <button className="tk-msg" onClick={onMessage}><MessageCircle size={20} /> Message {artisanSide ? "customer" : "artisan"}</button>
+        {!artisanSide && !ended && s !== "COMPLETED" && (
+          <div className="tk-lock">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+            <span>You can review {first} once the booking is confirmed and the job is done.</span>
+          </div>
+        )}
+      </div>
+      {!ended && <button className="tk-report" onClick={onReport}>Report a problem with this job</button>}
+    </div>
+  );
+}
+
+/* ---------------- Review ---------------- */
+function ReviewView({ request: r, onClose, onSubmit }) {
+  const [rating, setRating] = useState(5);
+  const [tags, setTags] = useState([]);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const who = r.artisanProfile.user;
+  const first = who.name.split(" ")[0];
+  const [bg, fg] = tintFor(who.id || r.id);
+  const WORDS = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
+  const GOOD = ["On time", "Clean work", "Fair price", "Explained clearly", "Good communication", "Went the extra mile"];
+  const toggle = (t) => setTags((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]));
+  async function submit() {
+    if (busy) return;
+    setBusy(true);
+    try { await onSubmit(rating, text.trim() || tags.join(", ")); } finally { setBusy(false); }
+  }
+  return (
+    <div className="screen rv">
+      <div className="rv-top"><button className="tk-back" onClick={onClose} aria-label="Close"><X size={22} /></button><span>Review · Request {reqCode(r.id)}</span></div>
+      <div className="rv-banner"><Check size={18} strokeWidth={3} /> Your review marks this job complete</div>
+      <h1 className="rv-h">How was {first}'s work?</h1>
+      <p className="rv-sub">Your honest review helps the next customer hire with confidence, and builds {first}'s track record.</p>
+      <div className="rv-who">
+        <span className="tk-av" style={{ background: bg, color: fg }}>{initials(who.name)}</span>
+        <div><b>{who.name}</b><small>{tradeLabel(r.artisanProfile.trade)} · {r.job.slice(0, 32)}{r.job.length > 32 ? "…" : ""}</small></div>
+      </div>
+      <div className="rv-stars">
+        <p>Tap to rate</p>
+        <div className="rv-starrow">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} onClick={() => setRating(n)} aria-label={n + " stars"}><Star size={40} fill={n <= rating ? "#B5651D" : "none"} stroke={n <= rating ? "#B5651D" : "#C9BFAB"} /></button>
+          ))}
+        </div>
+        <div className="rv-word">{WORDS[rating]}</div>
+      </div>
+      <div className="rv-label">What went well?</div>
+      <div className="rv-chips">
+        {GOOD.map((t) => <button key={t} type="button" className={"rv-chip" + (tags.includes(t) ? " on" : "")} onClick={() => toggle(t)}>{t}</button>)}
+      </div>
+      <div className="rv-label">Write a review <small>(optional)</small></div>
+      <textarea className="rf-text" rows={4} maxLength={500} value={text} onChange={(e) => setText(e.target.value)} placeholder="Tell others how the job went." />
+      <button className="rv-submit" disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Submit review"}</button>
+      <p className="rv-foot">Reviews are public with your first name and last initial. Something went wrong with the job? <button className="rv-link" onClick={onClose}>Go back and report a problem</button> instead.</p>
+    </div>
+  );
+}
+
+/* ---------------- Report a problem ---------------- */
+function ReportView({ request: r, user, onClose, onSubmit }) {
+  const artisanSide = r.artisanProfile.user.id === user.id;
+  const other = artisanSide ? r.student : r.artisanProfile.user;
+  const [bg, fg] = tintFor(other.id || r.id);
+  const opts = artisanSide
+    ? [["Customer unavailable", "Nobody was there or they did not answer"], ["Rude or unsafe behaviour", "Threats, harassment or an unsafe place"], ["Fraud or suspicious behaviour", "Asked to work outside the app, fake request"], ["Other", "Something else we should know"]]
+    : [["Artisan didn't show up", "They accepted but never arrived"], ["Poor service", "The work was unfinished or not as agreed"], ["Fraud or suspicious behaviour", "Asked for money outside the app, fake ID, threats"], ["Other", "Something else we should know"]];
+  const [reason, setReason] = useState(opts[0][0]);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    if (busy) return;
+    setBusy(true);
+    try { await onSubmit(reason, note.trim()); } finally { setBusy(false); }
+  }
+  return (
+    <div className="screen rv">
+      <div className="rv-top"><button className="tk-back" onClick={onClose} aria-label="Back"><ArrowLeft size={22} /></button><span>Report · Request {reqCode(r.id)}</span></div>
+      <h1 className="rv-h" style={{ marginTop: 14 }}>Report a problem</h1>
+      <p className="rv-sub">Tell us what went wrong with this job. Our team reviews every report and may contact you.</p>
+      <div className="rv-who">
+        <span className="tk-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+        <div><b>{other.name} · {tradeLabel(r.artisanProfile.trade)}</b><small>{r.when}{r.area ? " · " + r.area : ""}</small></div>
+      </div>
+      <div className="rv-label" style={{ marginTop: 22 }}>What happened?</div>
+      {opts.map(([t, d]) => (
+        <button key={t} type="button" className={"rp-opt" + (reason === t ? " on" : "")} onClick={() => setReason(t)}>
+          <span className="rp-radio" />
+          <span><b>{t}</b><em>{d}</em></span>
+        </button>
+      ))}
+      <div className="rv-label" style={{ marginTop: 22 }}>Tell us more</div>
+      <textarea className="rf-text" rows={4} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you expect, and what happened instead?" />
+      <div className="rp-warn"><AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 1 }} /><span>In danger or facing a crime? Call the police first on <b>112</b>. VettedHands reports are not an emergency service.</span></div>
+      <button className="rv-submit" style={{ marginTop: 0 }} disabled={busy} onClick={submit}>{busy ? "Submitting…" : "Submit report"}</button>
+    </div>
+  );
+}
+
+/* ---------------- Customer profile ---------------- */
+function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onLogout }) {
+  const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
+  const completed = requests.filter((r) => r.status === "COMPLETED").length;
+  const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
+  const rows = [
+    [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
+    [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
+    [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} left on completed jobs`, onGoRequests],
+    [MessageCircle, "Help & support", "Message the VettedHands team", () => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("VettedHands support")}`; }],
+  ];
+  return (
+    <div className="screen cp">
+      <h1 className="cp-h">Profile</h1>
+      <div className="cp-card">
+        <span className="cp-av">{initials(user.name)}</span>
+        <div className="cp-id"><b>{user.name}</b><span>{user.area ? user.area + ", Ado-Ekiti" : "Ado-Ekiti"}</span><span>{user.email}</span></div>
+      </div>
+      <div className="cp-menu">
+        {rows.map(([I, t, d, fn]) => (
+          <button key={t} className="cp-row" onClick={fn}>
+            <I size={22} />
+            <div><b>{t}</b><span>{d}</span></div>
+            <ChevronRight size={18} />
+          </button>
+        ))}
+      </div>
+      {!application && (
+        <div className="cp-cta">
+          <h2>Have a skill people need?</h2>
+          <p>Apply to become a vetted artisan. Our team reviews every application before you appear to customers.</p>
+          <button onClick={onBecomeArtisan}>Become an artisan</button>
+        </div>
+      )}
+      {application && application.status === "PENDING" && (
+        <div className="cp-cta">
+          <h2>Application under review</h2>
+          <p>We're checking your details. You'll become an artisan once an admin approves it.</p>
+          {application.infoRequestNote && <p>VettedHands needs more info: "{application.infoRequestNote}"</p>}
+        </div>
+      )}
+      {application && application.status === "REJECTED" && (
+        <div className="cp-cta">
+          <h2>Application not approved</h2>
+          <p>Your application wasn't approved this time. Reach out to support if you have questions.</p>
+        </div>
+      )}
+      <button className="cp-out" onClick={onLogout}>Sign out</button>
+    </div>
+  );
+}
+
+function RequestsListViewOld({ requests, user, onOpen, onRespond }) {
   return (
     <div className="screen">
       <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Your requests</div></div>
@@ -2264,6 +2611,130 @@ function Style() {
       .ap-cta button { width:100%; background:var(--primary); color:#fff; border:none; border-radius:14px; padding:17px; font-family:inherit; font-size:16.5px; font-weight:700; cursor:pointer; }
       .ap-cta button:disabled { opacity:.5; }
       .ap-note { text-align:center; color:var(--ink-soft); font-size:13px; margin-top:8px; }
+
+      /* ===== Requests list ===== */
+      .rq { padding:calc(22px + env(safe-area-inset-top)) 20px 28px; }
+      .rq-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:32px; letter-spacing:-0.02em; margin:0 0 18px; }
+      .rq-seg { display:flex; background:#E9E2D0; border-radius:14px; padding:5px; margin-bottom:16px; }
+      .rq-seg button { flex:1; border:none; background:transparent; padding:12px 6px; border-radius:10px; font-family:inherit; font-size:15px; font-weight:700; color:var(--ink-soft); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; }
+      .rq-seg button.on { background:var(--surface); color:var(--primary); box-shadow:0 1px 3px rgba(20,32,27,.12); }
+      .rq-seg small { font-size:13px; font-weight:700; background:#EDE5D1; color:var(--ink-soft); border-radius:999px; padding:1px 8px; }
+      .rq-seg button.on small { background:#E3EFE9; color:var(--primary); }
+      .rq-list { display:flex; flex-direction:column; gap:14px; }
+      .rq-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
+      .rq-head { display:flex; align-items:center; gap:12px; }
+      .rq-ic { width:46px; height:46px; border-radius:14px; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .rq-title { flex:1; min-width:0; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:20px; }
+      .rq-pill { flex-shrink:0; border-radius:999px; padding:7px 14px; font-size:13.5px; font-weight:700; white-space:nowrap; }
+      .rq-pill--green { background:#E3EFE9; color:var(--primary); }
+      .rq-pill--dark { background:var(--primary); color:#fff; }
+      .rq-pill--amber { background:#FBEBC8; color:#8A5A12; }
+      .rq-pill--blue { background:#DDE9F4; color:#1F5A8A; }
+      .rq-pill--red { background:#F8E1DB; color:#A8402D; }
+      .rq-pill--grey { background:#ECE7D8; color:var(--ink-soft); }
+      .rq-rows { margin:14px 0 0; display:flex; flex-direction:column; gap:7px; }
+      .rq-rows div { display:flex; gap:14px; font-size:15px; }
+      .rq-rows dt { width:78px; flex-shrink:0; color:var(--ink-soft); }
+      .rq-rows dd { margin:0; color:var(--ink); font-weight:600; min-width:0; }
+      .rq-job { margin:10px 0 0; color:var(--ink-soft); font-size:14.5px; line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+      .rq-acts { display:flex; gap:10px; margin-top:14px; }
+      .rq-acts button { flex:1; padding:14px; border-radius:12px; font-family:inherit; font-size:15.5px; font-weight:700; cursor:pointer; }
+      .rq-acts button:disabled { opacity:.5; }
+      .rq-acts .a { background:var(--primary); color:#fff; border:none; }
+      .rq-acts .d { background:var(--surface); color:var(--ink-soft); border:1.5px solid var(--line); }
+      .rq-foot { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+      .rq-link { background:none; border:none; padding:0; width:100%; display:flex; justify-content:space-between; align-items:center; font-family:inherit; font-size:16px; font-weight:700; color:var(--primary); cursor:pointer; }
+      .rq-cta { background:var(--primary); color:#fff; border:none; border-radius:14px; padding:14px 26px; font-family:inherit; font-size:15.5px; font-weight:700; cursor:pointer; }
+      .rq-note { text-align:center; color:var(--ink-soft); font-size:14px; line-height:1.5; margin:22px 10px 0; }
+
+      /* ===== Tracking ===== */
+      .tk { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
+      .tk-top { display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:15px; font-weight:600; }
+      .tk-back { background:none; border:none; color:var(--ink); width:40px; height:40px; margin-left:-10px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .tk-pill { display:inline-flex; align-items:center; gap:8px; margin-top:12px; align-self:flex-start; }
+      .tk-pill i { width:8px; height:8px; border-radius:50%; background:currentColor; }
+      .tk-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:31px; line-height:1.08; letter-spacing:-0.02em; margin:16px 0 8px; }
+      .tk-sub { color:var(--ink-soft); font-size:15.5px; line-height:1.45; margin:0 0 20px; }
+      .tk-card { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:22px 18px; margin-bottom:16px; }
+      .tk-step { display:flex; gap:16px; position:relative; padding-bottom:22px; }
+      .tk-step:last-child { padding-bottom:0; }
+      .tk-step:not(:last-child)::before { content:""; position:absolute; left:19px; top:42px; bottom:-2px; width:2px; background:#D9D1BD; }
+      .tk-step--done:not(:last-child)::before { background:var(--primary); }
+      .tk-dot { width:40px; height:40px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:2px solid #CFC6B0; background:var(--surface); color:#fff; position:relative; z-index:1; }
+      .tk-step--done .tk-dot { background:var(--primary); border-color:var(--primary); }
+      .tk-step--now .tk-dot { border-color:var(--primary); }
+      .tk-step--now .tk-dot::after { content:""; width:12px; height:12px; border-radius:50%; background:var(--primary); }
+      .tk-st b { display:block; font-size:17px; color:var(--ink); }
+      .tk-st span { display:block; color:var(--ink-soft); font-size:14.5px; line-height:1.4; margin-top:3px; }
+      .tk-step--now .tk-st b { color:var(--primary); }
+      .tk-step--todo .tk-st b, .tk-step--todo .tk-st span { color:#A39B88; }
+      .tk-actions { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+      .tk-actions:empty { display:none; }
+      .tk-btn, .rv-submit { width:100%; background:var(--primary); color:#fff; border:none; border-radius:14px; padding:17px; font-family:inherit; font-size:16.5px; font-weight:700; cursor:pointer; }
+      .rv-submit:disabled, .tk-btn:disabled { opacity:.5; cursor:default; }
+      .tk-confirm { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; }
+      .tk-confirm p { margin:0 0 12px; color:var(--ink-soft); font-size:15px; line-height:1.45; }
+      .tk-ac { display:flex; align-items:center; gap:14px; }
+      .tk-av { width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:19px; flex-shrink:0; }
+      .tk-ac b { display:block; font-family:'Bricolage Grotesque',sans-serif; font-size:19px; }
+      .tk-ac span { display:block; color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
+      .tk-msg { width:100%; margin-top:16px; background:var(--primary); color:#fff; border:none; border-radius:14px; padding:16px; font-family:inherit; font-size:16.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer; }
+      .tk-lock { display:flex; gap:12px; align-items:center; background:#F3EEDF; border-radius:12px; padding:14px; margin-top:12px; color:var(--ink-soft); font-size:14.5px; line-height:1.4; }
+      .tk-report { display:block; margin:20px auto 0; background:none; border:none; color:var(--danger); font-family:inherit; font-size:15.5px; font-weight:600; cursor:pointer; }
+
+      /* ===== Review and report ===== */
+      .rv { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
+      .rv-top { display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:15px; font-weight:600; }
+      .rv-banner { display:flex; align-items:center; gap:10px; background:#E3EFE9; color:var(--primary); border-radius:12px; padding:13px 16px; font-weight:700; font-size:15px; margin:14px 0 22px; }
+      .rv-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:33px; line-height:1.06; letter-spacing:-0.02em; margin:0 0 10px; }
+      .rv-sub { color:var(--ink-soft); font-size:16px; line-height:1.45; margin:0 0 20px; }
+      .rv-who { display:flex; align-items:center; gap:14px; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:14px; }
+      .rv-who .tk-av { width:52px; height:52px; font-size:17px; }
+      .rv-who b { display:block; font-size:17px; }
+      .rv-who small { display:block; color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
+      .rv-stars { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:20px; text-align:center; margin-bottom:22px; }
+      .rv-stars p { margin:0 0 12px; font-weight:700; }
+      .rv-starrow { display:flex; justify-content:center; gap:12px; }
+      .rv-starrow button { background:none; border:none; padding:0; cursor:pointer; }
+      .rv-word { margin-top:12px; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:20px; color:var(--primary); }
+      .rv-label { font-weight:700; font-size:16px; margin:0 0 12px; }
+      .rv-label small { font-weight:500; color:var(--ink-soft); font-size:15px; }
+      .rv-chips { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:22px; }
+      .rv-chip { background:var(--surface); border:1.5px solid var(--line); border-radius:999px; padding:11px 16px; font-family:inherit; font-size:15px; font-weight:600; color:var(--ink); cursor:pointer; }
+      .rv-chip.on { background:#E3EFE9; border-color:var(--primary); color:var(--primary); }
+      .rv-submit { margin-top:18px; }
+      .rv-foot { text-align:center; color:var(--ink-soft); font-size:14px; line-height:1.5; margin:16px 6px 0; }
+      .rv-link { background:none; border:none; padding:0; color:var(--danger); font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+      .rp-opt { display:flex; gap:14px; align-items:flex-start; width:100%; text-align:left; background:var(--surface); border:1.5px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; font-family:inherit; cursor:pointer; }
+      .rp-opt.on { background:#E3EFE9; border-color:var(--primary); }
+      .rp-radio { width:26px; height:26px; border-radius:50%; border:2px solid #A9A28F; flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; }
+      .rp-opt.on .rp-radio { border-color:var(--primary); }
+      .rp-opt.on .rp-radio::after { content:""; width:12px; height:12px; border-radius:50%; background:var(--primary); }
+      .rp-opt b { display:block; font-size:17px; color:var(--ink); }
+      .rp-opt em { display:block; font-style:normal; color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
+      .rp-warn { display:flex; gap:12px; background:#F8E3DD; color:var(--danger); border-radius:14px; padding:14px; font-size:14.5px; line-height:1.45; margin:18px 0; }
+
+      /* ===== Customer profile ===== */
+      .cp { padding:calc(22px + env(safe-area-inset-top)) 20px 28px; }
+      .cp-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:32px; letter-spacing:-0.02em; margin:0 0 18px; }
+      .cp-card { background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:20px; display:flex; align-items:center; gap:18px; margin-bottom:16px; }
+      .cp-av { width:76px; height:76px; border-radius:50%; background:#E3EFE9; color:var(--primary); font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:26px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .cp-id { min-width:0; }
+      .cp-id b { display:block; font-family:'Bricolage Grotesque',sans-serif; font-size:23px; font-weight:800; line-height:1.1; margin-bottom:5px; }
+      .cp-id span { display:block; color:var(--ink-soft); font-size:15px; line-height:1.4; word-break:break-all; }
+      .cp-menu { background:var(--surface); border:1px solid var(--line); border-radius:20px; overflow:hidden; margin-bottom:16px; }
+      .cp-row { display:flex; align-items:center; gap:16px; width:100%; text-align:left; background:var(--surface); border:none; border-bottom:1px solid var(--line); padding:18px 16px; font-family:inherit; cursor:pointer; color:var(--primary); }
+      .cp-row:last-child { border-bottom:none; }
+      .cp-row div { flex:1; min-width:0; }
+      .cp-row b { display:block; font-size:17px; color:var(--ink); }
+      .cp-row span { display:block; color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
+      .cp-row > svg:last-child { color:var(--ink-soft); }
+      .cp-cta { background:var(--primary); color:#fff; border-radius:22px; padding:24px 22px; margin-top:8px; }
+      .cp-cta h2 { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:25px; line-height:1.1; margin:0 0 10px; }
+      .cp-cta p { margin:0 0 18px; font-size:16px; line-height:1.45; color:rgba(255,255,255,.8); }
+      .cp-cta p:last-child { margin-bottom:0; }
+      .cp-cta button { width:100%; background:#fff; color:var(--primary); border:none; border-radius:14px; padding:16px; font-family:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+      .cp-out { display:block; margin:26px auto 0; background:none; border:none; color:var(--danger); font-family:inherit; font-size:16.5px; font-weight:600; cursor:pointer; }
 
       @media (max-width: 480px) {
         .app { padding: 0; }
