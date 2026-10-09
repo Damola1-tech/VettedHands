@@ -696,8 +696,8 @@ function ActiveJobs({ token }) {
       <Head title="Active jobs" sub="Jobs accepted or in progress right now" right={<SearchBox value={q} onChange={setQ} placeholder="Search job, artisan or customer" />} />
       <div className="stats">
         <Card l="Active jobs" n={jobs.length} s="Accepted or in progress" />
-        <Card l="In progress" n={prog} s="Booking confirmed" />
-        <Card l="Accepted, not started" n={jobs.length - prog} s="Waiting for the customer" />
+        <Card l="In progress" n={prog} s="Artisan started the job" />
+        <Card l="Accepted, not started" n={jobs.length - prog} s="Waiting for the artisan to start" />
         <Card l="Needs attention" n={attn} s="No movement for too long" tone="amber" />
       </div>
       <div className="tbl-wrap"><table>
@@ -707,7 +707,7 @@ function ActiveJobs({ token }) {
             <td><div className="prog"><small><span>{step === 3 ? "In progress" : "Accepted"}</span><span>{step} of 4</span></small><i><b style={{ width: (step / 4) * 100 + "%" }} /></i></div></td>
             <td>{ago(r.updatedAt)}</td><td><span className={"pill " + hc}>{ht}</span></td></tr>); })}</tbody>
       </table>{!rows.length && <div className="empty">No active jobs right now.</div>}</div>
-      <div className="callout"><b>Health:</b> "Needs attention" means a job was accepted but not booked for over 24 hours, or has been in progress for over 3 days without an update.</div>
+      <div className="callout"><b>Health:</b> "Needs attention" means a job was accepted but not started for over 24 hours, or has been in progress for over 3 days without an update.</div>
     </>
   );
 }

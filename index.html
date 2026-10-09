@@ -110,6 +110,12 @@ const ArrowRight = (p) => <Icon name="arrowRight" {...p} />;
 Object.assign(ICON_PATHS, { check: <polyline points="20 6 9 17 4 12" /> });
 const Check = (p) => <Icon name="check" {...p} />;
 Object.assign(ICON_PATHS, {
+  helpCircle: <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+  barChart: <><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></>,
+});
+const HelpCircle = (p) => <Icon name="helpCircle" {...p} />;
+const BarChart = (p) => <Icon name="barChart" {...p} />;
+Object.assign(ICON_PATHS, {
   mic: <><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></>,
   play: <polygon points="7 4 19 12 7 20 7 4" fill="currentColor"/>,
   pause: <><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></>,
@@ -430,6 +436,33 @@ function MainApp({ auth, intent }) {
     return () => clearInterval(id);
   }, []);
 
+  // Applicants: check the application every 20s. When it is approved, reload the account so the artisan app appears without logging out.
+  useEffect(() => {
+    if (isArtisan || isAdmin) return;
+    const id = setInterval(async () => {
+      try {
+        const d = await api("/api/applications/me", { token });
+        setApplication(d.application);
+        if (d.application && d.application.status === "APPROVED") {
+          const me = await api("/api/auth/me", { token });
+          if (me.user.role === "ARTISAN") setUser(me.user);
+        }
+      } catch (e) { /* silent */ }
+    }, 20000);
+    return () => clearInterval(id);
+  }, [isArtisan]);
+  // Artisans: one-time welcome, and reload the profile numbers whenever a job completes.
+  const myDoneCount = requests.filter((r) => r.status === "COMPLETED" && r.artisanProfile && r.artisanProfile.user.id === user.id).length;
+  useEffect(() => {
+    if (!isArtisan) return;
+    api("/api/auth/me", { token }).then((d) => setUser(d.user)).catch(() => {});
+  }, [isArtisan, myDoneCount]);
+  useEffect(() => {
+    if (!isArtisan) return;
+    const key = "vh_welcomed_" + user.id;
+    if (!localStorage.getItem(key)) { localStorage.setItem(key, "1"); setView("welcome"); setNavTab("home"); }
+  }, [isArtisan]);
+
   const onlineNow = artisans.filter((a) => a.online);
   const activeRequest = requests.find((r) => r.id === activeRequestId);
   const notifications = useMemo(() => buildNotifications(requests, user), [requests, user.id]);
@@ -472,14 +505,16 @@ function MainApp({ auth, intent }) {
       setRequests((prev) => [d.request, ...prev]);
       setActiveRequestId(d.request.id);
       setWiz({ ...blankWiz });
-      setView("requestSent");
+      setTrackFrom("home");
+      setView("track");
     } catch (e) { fail(e); }
   }
   async function requestFromProfile() {
     if (profileOrigin === "wizard" && wiz.problem.trim().length >= 10) {
       await sendRequest(selectedArtisan.id, wiz.problem.trim(), whenText(wiz), null, wiz.image, wiz.area);
     } else {
-      setView("request");
+      setWiz({ ...blankWiz, trade: selectedArtisan.trade, direct: selectedArtisan });
+      setView("wizard");
     }
   }
   function openTrack(requestId, from = null) {
@@ -555,6 +590,14 @@ function MainApp({ auth, intent }) {
       return true;
     } catch (e) { fail(e); }
   }
+  async function jobAction(requestId, action) {
+    try {
+      const d = await api(`/api/requests/${requestId}/${action}`, { method: "PATCH", token });
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, ...d.request } : r)));
+      flash(action === "start" ? "Job started" : "Marked done. Waiting for the customer to confirm");
+      return true;
+    } catch (e) { fail(e); }
+  }
   async function reportRequest(requestId, reason, note) {
     try {
       await api(`/api/requests/${requestId}/report`, { method: "POST", token, body: { reason, note } });
@@ -582,6 +625,7 @@ function MainApp({ auth, intent }) {
       const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined, idDocument } });
       setApplication(d.application);
       flash("Application submitted for review");
+      setApplyOpen(false);
     } catch (e) { fail(e); }
   }
   async function addArtisanPhoto(url) {
@@ -600,7 +644,22 @@ function MainApp({ auth, intent }) {
   return (
     <>
       <div className="content">
-        {view === "home" && (
+        {view === "welcome" && isArtisan && user.artisanProfile && (
+          <VettedWelcome user={user} onOpen={() => { setView("home"); setNavTab("home"); }} />
+        )}
+        {view === "help" && (
+          <HelpView onBack={() => setView("userProfile")} onReport={() => goNav("requests")} />
+        )}
+        {view === "trackRecord" && isArtisan && user.artisanProfile && (
+          <TrackRecordView user={user} requests={requests} myReviews={myReviews} onBack={() => setView("userProfile")} />
+        )}
+        {view === "home" && isArtisan && user.artisanProfile && (
+          <ArtisanHome user={user} requests={requests} myReviews={myReviews}
+            onToggleOnline={toggleOnline} onOpenNotifs={() => setView("notifications")} hasAlerts={unreadNotifs > 0}
+            onOpenMe={() => goNav("profile")} onRespond={respondToRequest}
+            onOpenTrack={(id) => openTrack(id)} onOpenRequests={() => goNav("requests")} />
+        )}
+        {view === "home" && !(isArtisan && user.artisanProfile) && (
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
             requests={requests} myReviews={myReviews}
             onlineNow={onlineNow} filtered={artisans} onOpenProfile={(a) => openArtisanProfile(a, "home")}
@@ -615,7 +674,8 @@ function MainApp({ auth, intent }) {
         )}
         {view === "wizard" && (
           <RequestFlow wiz={wiz} setWiz={setWiz} meId={user.id}
-            onBack={() => { setView("home"); setNavTab("home"); setWiz({ ...blankWiz }); }}
+            onBack={() => { if (wiz.direct) { setView("artisanProfile"); } else { setView("home"); setNavTab("home"); setWiz({ ...blankWiz }); } }}
+            onSendDirect={() => sendRequest(wiz.direct.id, wiz.problem.trim(), whenText(wiz), null, wiz.image, wiz.area)}
             onSelectArtisan={(a) => openArtisanProfile(a, "wizard")} />
         )}
         {view === "browse" && (
@@ -643,16 +703,19 @@ function MainApp({ auth, intent }) {
         {view === "requestsList" && (
           <RequestsListView requests={requests} user={user} onOpen={(id) => openTrack(id)}
             onRequestService={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
-            onCheckAvailability={() => goNav("profile")}
+            onCheckAvailability={() => goNav("home")}
+            onJob={jobAction}
             onRespond={respondToRequest} />
         )}
         {view === "track" && activeRequest && (
           <TrackView request={activeRequest} user={user}
-            onBack={() => setView(trackFrom === "notifications" ? "notifications" : "requestsList")}
+            onBack={() => setView(trackFrom === "notifications" ? "notifications" : trackFrom === "home" ? "home" : "requestsList")}
             onMessage={() => openConversation(activeRequest.id, "track")}
             onConfirm={() => confirmRequest(activeRequest.id)}
             onRespond={(status) => respondToRequest(activeRequest.id, status)}
             onReview={() => setView("review")}
+            onStart={() => jobAction(activeRequest.id, "start")}
+            onDone={() => jobAction(activeRequest.id, "done")}
             onReport={() => setView("report")} />
         )}
         {view === "review" && activeRequest && (
@@ -682,15 +745,25 @@ function MainApp({ auth, intent }) {
             onRespond={(status) => respondToRequest(activeRequest.id, status)}
             onPoll={pollConversation}
             onViewJob={() => openTrack(activeRequest.id)}
+            onOpenReport={() => setView("report")}
             onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
           <CustomerProfileView user={user} requests={requests} application={application}
             onGoRequests={() => goNav("requests")}
             onBecomeArtisan={() => setApplyOpen(true)}
+            onHelp={() => setView("help")}
             onLogout={logout} />
         )}
-        {view === "userProfile" && (isArtisan || applyOpen) && (
+        {view === "userProfile" && isArtisan && user.artisanProfile && (
+          <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews}
+            onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
+            onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onLogout={logout} />
+        )}
+        {view === "userProfile" && !isArtisan && applyOpen && (
+          <ApplyView user={user} onBack={() => setApplyOpen(false)} onApply={applyAsArtisan} />
+        )}
+        {false && (
           <UserProfileView startWithForm={applyOpen} user={user} isArtisan={isArtisan} application={application}
             incomingCount={requests.filter((r) => r.status === "PENDING").length} myReviews={myReviews}
             onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge}
@@ -851,7 +924,7 @@ function timeAgo(d) {
   return `${Math.floor(days / 30)} months ago`; 
 }
 
-function ArtisanProfileView({ artisan: a, canRequest, summary, onBack, onRequest }) {
+function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, onBack, onRequest }) {
   const [busy, setBusy] = useState(false);
   const st = a.stats || null;
   const first = a.user.name.split(" ")[0];
@@ -872,8 +945,9 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, onBack, onRequest
   }
   return (
     <div className="screen ap">
+      {banner && <div className="ap-banner">{banner}</div>}
       <div className="ap-hero">
-        <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+        {onBack ? <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button> : <div style={{ height: 12 }} />}
         <div className="ap-id">
           <span className="ap-av">{initials(a.user.name)}</span>
           <div>
@@ -961,6 +1035,7 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, onBack, onRequest
           {summary && <div className="ap-note">Sends your request: {summary}</div>}
         </div>
       ) : <div style={{ height: 24 }} />}
+      {footer}
     </div>
   );
 }
@@ -972,7 +1047,7 @@ const WHEN_OPTIONS = [
   { id: "tomorrow", label: "Tomorrow", sub: "Morning", short: "Tomorrow" },
   { id: "date", label: "Pick a date", sub: "Choose day and time", short: "Scheduled" },
 ];
-const SORTS = [["best", "Best match"], ["area", "Distance"] ["rating", "Rating"], ["jobs", "Jobs completed"]];
+const SORTS = [["best", "Best match"], ["area", "Distance"], ["rating", "Rating"], ["jobs", "Jobs completed"]];
 
 function whenText(w) {
   if (w.when === "today") return "Today afternoon";
@@ -997,9 +1072,15 @@ function matchScore(a, area) {
   return s;
 }
 
-function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan }) {
+function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan, onSendDirect }) {
   const set = (patch) => setWiz((w) => ({ ...w, ...patch }));
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  async function sendDirect() {
+    if (sending) return;
+    setSending(true);
+    try { await onSendDirect(); } finally { setSending(false); }
+  }
   const formOk = wiz.trade && wiz.problem.trim().length >= 10 && (wiz.when !== "date" || !!wiz.whenDate);
 
   async function pickPhoto(e) {
@@ -1033,17 +1114,17 @@ function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan }) {
     <div className="screen rf">
       <div className="rf-top">
         <button className="rf-back" onClick={() => (wiz.step === 2 ? set({ step: 1 }) : onBack())} aria-label="Back"><ArrowLeft size={22} /></button>
-        <span>New request · Step {wiz.step} of 2</span>
+        <span>{wiz.direct ? "New request" : `New request · Step ${wiz.step} of 2`}</span>
       </div>
 
       {wiz.step === 1 ? (
         <>
-          <h1 className="rf-h">What do you need help with?</h1>
-          <p className="rf-sub">The clearer the job, the better the match.</p>
+          <h1 className="rf-h">{wiz.direct ? `Request ${wiz.direct.user.name.split(" ")[0]}` : "What do you need help with?"}</h1>
+          <p className="rf-sub">{wiz.direct ? "Describe the job so they can quote and prepare." : "The clearer the job, the better the match."}</p>
 
-          <div className="rf-label">Service category</div>
+          {!wiz.direct && <div className="rf-label">Service category</div>}
           <div className="rf-chips">
-            {trades.map((t) => <button key={t.id} type="button" className={"rf-chip" + (wiz.trade === t.id ? " on" : "")} onClick={() => set({ trade: t.id })}>{t.label}</button>)}
+            {(wiz.direct ? [] : trades).map((t) => <button key={t.id} type="button" className={"rf-chip" + (wiz.trade === t.id ? " on" : "")} onClick={() => set({ trade: t.id })}>{t.label}</button>)}
           </div>
 
           <div className="rf-label">Describe the job</div>
@@ -1086,7 +1167,7 @@ function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan }) {
 
           <div className="rf-bar">
             <div className="rf-note"><ShieldCheck size={16} /> Only vetted artisans are matched. No payment needed to request.</div>
-            <button className="rf-go" disabled={!formOk || photoBusy} onClick={search}>Find trusted artisans</button>
+            <button className="rf-go" disabled={!formOk || photoBusy || sending} onClick={wiz.direct ? sendDirect : search}>{wiz.direct ? (sending ? "Sending…" : `Send request to ${wiz.direct.user.name.split(" ")[0]}`) : "Find trusted artisans"}</button>
           </div>
         </>
       ) : (
@@ -1228,7 +1309,7 @@ function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
   if (s === "ACCEPTED") return ["Accepted", "blue"];
-  if (s === "CONFIRMED") return ["In progress", "green"];
+  if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : ["In progress", "green"];
   if (s === "COMPLETED") return ["Completed", "dark"];
   if (s === "DECLINED") return ["Declined", "red"];
   return ["Closed", "grey"];
@@ -1240,7 +1321,7 @@ function reqBucket(r, meId) {
   return "active";
 }
 
-function RequestsListView({ requests, user, onOpen, onRespond, onRequestService, onCheckAvailability }) {
+function RequestsListView({ requests, user, onOpen, onRespond, onRequestService, onCheckAvailability, onJob }) {
   const isArtisan = user.role === "ARTISAN";
   const tabs = isArtisan
     ? [["new", "New"], ["active", "Active"], ["past", "Past"]]
@@ -1281,6 +1362,8 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
                   <button className="a" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
                 </div>
               )}
+              {artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "start")}>Start job</button></div>}
+              {artisanSide && r.status === "CONFIRMED" && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "done")}>Mark completed</button></div>}
               <div className="rq-foot">
                 <button className="rq-link" onClick={() => onOpen(r.id)}>{r.status === "CONFIRMED" ? "Track job" : "View status"}<ChevronRight size={18} /></button>
               </div>
@@ -1312,8 +1395,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
 }
 
 /* ---------------- Request tracking ---------------- */
-function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onReview, onReport }) {
-  const [confirming, setConfirming] = useState(false);
+function TrackView({ request: r, user, onBack, onMessage, onRespond, onStart, onDone, onReview, onReport }) {
   const [busy, setBusy] = useState(false);
   const ap = r.artisanProfile;
   const artisanSide = ap.user.id === user.id;
@@ -1321,22 +1403,28 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   const first = other.name.split(" ")[0];
   const s = r.status;
   const ended = s === "DECLINED" || s === "CLOSED";
-  const done = ended || s === "PENDING" ? 1 : s === "COMPLETED" ? 5 : 2;
-  const current = s === "PENDING" ? 1 : s === "CONFIRMED" ? 2 : -1;
+  const working = s === "CONFIRMED" && !r.artisanDoneAt;
+  const waitingConfirm = s === "CONFIRMED" && !!r.artisanDoneAt;
+  const done = ended || s === "PENDING" ? 1 : s === "ACCEPTED" || working ? 2 : waitingConfirm ? 3 : 5;
+  const current = ended ? -1 : s === "PENDING" ? 1 : s === "ACCEPTED" || working ? 2 : waitingConfirm ? 3 : -1;
   const [label, cls] = pillFor(r, artisanSide);
   const [bg, fg] = tintFor(other.id || r.id);
-  const head = ended
-    ? (s === "DECLINED" ? `${artisanSide ? "You" : first} declined this request` : "This request was closed")
-    : s === "PENDING" ? (artisanSide ? `${first} is waiting for your reply` : `Waiting for ${first} to reply`)
-    : s === "ACCEPTED" ? (artisanSide ? `You accepted ${first}'s request` : `${first} accepted your request`)
-    : s === "CONFIRMED" ? (artisanSide ? `You're working on ${first}'s job` : `${first} is working on your job`)
-    : "Job completed and reviewed";
+  async function run(fn) { if (busy) return; setBusy(true); try { await fn(); } finally { setBusy(false); } }
+  let head;
+  if (s === "DECLINED") head = artisanSide ? "You declined this request" : `${first} declined this request`;
+  else if (s === "CLOSED") head = "This request was closed";
+  else if (s === "PENDING") head = artisanSide ? `${first} is waiting for your reply` : `Waiting for ${first} to reply`;
+  else if (s === "ACCEPTED") head = artisanSide ? `Start ${first}'s job when you're ready` : `${first} accepted your request`;
+  else if (working) head = artisanSide ? `You're working on ${first}'s job` : `${first} is working on your job`;
+  else if (waitingConfirm) head = artisanSide ? `Waiting for ${first} to confirm` : `${first} marked the job done`;
+  else head = r.rating ? "Job completed and reviewed" : "Job completed";
   const sub = `${tradeLabel(ap.trade)}${r.area ? " · " + r.area : ""} · ${r.when}`;
+  const startedTxt = r.startedAt ? `Started ${dayLabel(r.startedAt)}, ${clockTime(r.startedAt)}` : s === "COMPLETED" ? "Work finished" : "Work under way";
   const steps = [
     ["Request sent", `${dayLabel(r.createdAt)}, ${clockTime(r.createdAt)} · ${artisanSide ? "From " + r.student.name : "Sent to " + ap.user.name}`],
-    ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "Closed: another artisan was booked" : "Request accepted"],
-    ["Job in progress", s === "CONFIRMED" ? "Booking confirmed, work under way" : done > 2 ? "Booking was confirmed" : "Starts when the booking is confirmed"],
-    ["Job completed", s === "COMPLETED" ? "Marked complete and confirmed" : artisanSide ? "The customer confirms when it is done" : "You confirm when the job is done"],
+    ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "The request was closed" : "Request accepted"],
+    ["Job in progress", s === "ACCEPTED" ? (artisanSide ? "Tap Start job when you begin" : `Starts when ${first} begins the job`) : working || waitingConfirm || s === "COMPLETED" ? startedTxt : "Starts once the artisan begins"],
+    ["Job completed", s === "COMPLETED" ? "Marked done and confirmed" : waitingConfirm ? (artisanSide ? "Waiting for the customer to confirm" : `${first} marked it done. Confirm it to review`) : artisanSide ? "You mark it done, the customer confirms" : `${first} marks it done, you confirm`],
     [artisanSide ? "Customer review" : "Review artisan", r.rating ? `Rated ${r.rating} out of 5` : "Rate the work and help others hire with confidence"],
   ];
   return (
@@ -1362,17 +1450,9 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
             <button className="a" onClick={() => onRespond("ACCEPTED")}>Accept</button>
           </div>
         )}
-        {!artisanSide && s === "ACCEPTED" && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Confirm booking with {first}</button>}
-        {confirming && (
-          <div className="tk-confirm">
-            <p>Confirming closes any other open requests you sent for this same job.</p>
-            <div className="rq-acts" style={{ marginTop: 0 }}>
-              <button className="d" onClick={() => setConfirming(false)}>Cancel</button>
-              <button className="a" disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); setConfirming(false); }}>{busy ? "Confirming…" : "Yes, confirm"}</button>
-            </div>
-          </div>
-        )}
-        {!artisanSide && s === "CONFIRMED" && <button className="tk-btn" onClick={onReview}>Mark complete &amp; review</button>}
+        {artisanSide && s === "ACCEPTED" && <button className="tk-btn" disabled={busy} onClick={() => run(onStart)}>{busy ? "Starting…" : "Start job"}</button>}
+        {artisanSide && working && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
+        {!artisanSide && waitingConfirm && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
       </div>
 
       <div className="tk-card">
@@ -1384,7 +1464,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
         {!artisanSide && !ended && s !== "COMPLETED" && (
           <div className="tk-lock">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-            <span>You can review {first} once the booking is confirmed and the job is done.</span>
+            <span>You can review {first} once they mark the job done and you confirm it.</span>
           </div>
         )}
       </div>
@@ -1482,7 +1562,7 @@ function ReportView({ request: r, user, onClose, onSubmit }) {
 }
 
 /* ---------------- Customer profile ---------------- */
-function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onLogout }) {
+function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onHelp, onLogout }) {
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
@@ -1491,7 +1571,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onBeco
     [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
     [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
     [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoRequests],
-    [Settings, "Settings", "Notifications, language, help and support", () => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("VettedHands support")}`; }],
+    [HelpCircle, "Help and support", "Answers, badges and how to reach us", onHelp],
   ];
   return (
     <div className="screen cp">
@@ -1568,6 +1648,369 @@ function RequestsListViewOld({ requests, user, onOpen, onRespond }) {
   );
 }
 
+/* ---------------- Artisan side ---------------- */
+const TOP_RULES = { minJobs: 25, minRating: 4.7 };
+const MIN_PORTFOLIO = 3;
+
+function repeatStats(requests, meId) {
+  const per = {};
+  for (const r of requests) {
+    if (r.status === "COMPLETED" && r.artisanProfile && r.student && r.artisanProfile.user.id === meId) per[r.student.id] = (per[r.student.id] || 0) + 1;
+  }
+  const ids = Object.keys(per);
+  const rep = ids.filter((k) => per[k] > 1);
+  return { total: ids.length, repeat: rep.length, repeatIds: new Set(rep) };
+}
+
+function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests }) {
+  const ap = user.artisanProfile;
+  const first = user.name.split(" ")[0];
+  const [busy, setBusy] = useState(false);
+  const rs = repeatStats(requests, user.id);
+  const fresh = requests.filter((r) => r.status === "PENDING" && r.artisanProfile.user.id === user.id);
+  async function setOnline(next) {
+    if (busy || next === ap.online) return;
+    setBusy(true);
+    try { await onToggleOnline(next); } finally { setBusy(false); }
+  }
+  return (
+    <div className="screen ah">
+      <div className="hm-top">
+        <div>
+          <h1 className="hm-greet">Hi, {first}</h1>
+          <div className="ah-pills">
+            <span className="ah-pill">Vetted</span>
+            {ap.skillVerified && <span className="ah-pill ah-pill--b">Skill Verified</span>}
+            {ap.badge === "TOP_RATED" && <span className="ah-pill ah-pill--a">Top Rated</span>}
+          </div>
+        </div>
+        <div className="hm-top-r">
+          <button className="hm-bell" onClick={onOpenNotifs} aria-label="Notifications"><Bell size={22} />{hasAlerts && <span className="hm-bell-dot" />}</button>
+          <button className="hm-me" onClick={onOpenMe} aria-label="Profile">{initials(user.name)}</button>
+        </div>
+      </div>
+
+      <div className={"ah-avail" + (ap.online ? "" : " ah-avail--off")}>
+        <div className="ah-avail-top">
+          <div>
+            <div className="ah-avail-t"><i />{ap.online ? "Available for jobs" : "Unavailable"}</div>
+            <p>{ap.online ? `Customers near ${ap.area} can see you and send requests.` : "Customers can't see you or send requests right now."}</p>
+          </div>
+          <button className={"toggle" + (ap.online ? " toggle--on" : "")} disabled={busy} onClick={() => setOnline(!ap.online)} aria-label="Toggle availability"><span className="toggle-knob" /></button>
+        </div>
+        <div className="ah-seg">
+          <button className={ap.online ? "on" : ""} onClick={() => setOnline(true)}>Available</button>
+          <button className={!ap.online ? "on" : ""} onClick={() => setOnline(false)}>Unavailable</button>
+        </div>
+        <small>Only you control this. We never mark you available on your behalf.</small>
+      </div>
+
+      <div className="ah-stats">
+        <div><b>{ap.jobsCompleted}</b><span>Jobs completed</span></div>
+        <div><b>{fmtStars(ap.rating)}</b><span>Rating</span></div>
+        <div><b>{rs.repeat}</b><span>Repeat customers</span></div>
+      </div>
+
+      <div className="ah-head"><h2>New requests</h2>{fresh.length > 0 && <span className="ah-new">{fresh.length} new</span>}</div>
+      {fresh.length === 0 && (
+        <div className="rf-empty" style={{ marginTop: 0 }}>
+          <div className="rf-empty-ic"><ClipboardList size={26} /></div>
+          <b>No new service requests.</b>
+          <p>Requests arrive when you are marked available. Keep your availability on and your portfolio fresh to be matched more often.</p>
+          <button className="rf-ghost" onClick={onOpenRequests}>View all requests</button>
+        </div>
+      )}
+      {fresh.map((r) => (
+        <div key={r.id} className="ah-req">
+          <button className="ah-req-main" onClick={() => onOpenTrack(r.id)}>
+            <b>{tradeLabel(ap.trade)}</b>
+            <span className="ah-req-who">{shortName(r.student.name)} · {r.when}</span>
+            <p>{r.job}</p>
+            <span className="ah-req-loc"><MapPin size={14} /> {r.area || "Location not given"}{r.hasImage ? " · 1 photo" : ""}</span>
+          </button>
+          <div className="rq-acts">
+            <button className="d" onClick={() => onRespond(r.id, "DECLINED")}>Decline</button>
+            <button className="a" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
+          </div>
+        </div>
+      ))}
+      {myReviews.length > 0 && (
+        <>
+          <div className="ah-head"><h2>Latest review</h2></div>
+          <div className="review-item">
+            <div className="review-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={13} fill={i < myReviews[0].rating ? "#B5651D" : "none"} stroke={i < myReviews[0].rating ? "#B5651D" : "#C9BFAB"} />)}</div>
+            <div className="review-text">"{myReviews[0].reviewText}"</div>
+            <div className="review-author">{shortName(myReviews[0].student.name)}</div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout }) {
+  const ap = user.artisanProfile;
+  const rs = repeatStats(requests, user.id);
+  const photos = ap.photos || [];
+  const me = { ...ap, user: { id: user.id, name: user.name }, reviews: myReviews, stats: { repeatCustomers: rs.repeat, totalCustomers: rs.total, reviewCount: myReviews.length, minJobs: TOP_RULES.minJobs, minRating: TOP_RULES.minRating } };
+  const footer = (
+    <div className="ao">
+      <div className="ao-card">
+        <h3>Manage portfolio</h3>
+        <div className="photo-picker">
+          {photos.map((p) => (
+            <div key={p.id} style={{ position: "relative" }}>
+              <img src={p.url} className="photo-thumb" alt="" style={{ objectFit: "cover" }} />
+              <button onClick={() => onRemovePhoto(p.id)} aria-label="Remove photo" style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", background: "var(--danger)", color: "#fff", border: "2px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={11} /></button>
+            </div>
+          ))}
+          {photos.length < 6 && (
+            <label className="photo-add" style={{ cursor: "pointer" }}>
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) onAddPhoto(await fileToDataUrl(f)); }} />
+              <Camera size={16} /> Add
+            </label>
+          )}
+        </div>
+        <p>Customers see these as Recent work. Up to 6 photos.</p>
+      </div>
+      <div className="ao-menu">
+        <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
+      </div>
+      <button className="ao-out" onClick={onLogout}>Sign out</button>
+    </div>
+  );
+  return <ArtisanProfileView artisan={me} canRequest={false} banner="This is how customers see you" footer={footer} />;
+}
+
+function TrackRecordView({ user, requests, myReviews, onBack }) {
+  const ap = user.artisanProfile;
+  const done = requests.filter((r) => r.status === "COMPLETED" && r.artisanProfile.user.id === user.id);
+  const rated = done.filter((r) => r.rating);
+  const avg = rated.length ? rated.reduce((n, r) => n + r.rating, 0) / rated.length : 0;
+  const rs = repeatStats(requests, user.id);
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    return { key: d.getFullYear() + "-" + d.getMonth(), label: d.toLocaleDateString("en-US", { month: "short" }), n: 0 };
+  });
+  for (const r of done) {
+    const d = new Date(r.updatedAt);
+    const m = months.find((x) => x.key === d.getFullYear() + "-" + d.getMonth());
+    if (m) m.n++;
+  }
+  const maxN = Math.max(1, ...months.map((m) => m.n));
+  const dist = [5, 4, 3, 2, 1].map((s) => ({ s, n: rated.filter((r) => r.rating === s).length }));
+  const maxD = Math.max(1, ...dist.map((d) => d.n));
+  const top = ap.badge === "TOP_RATED";
+  const jobsOk = ap.jobsCompleted >= TOP_RULES.minJobs;
+  const ratingOk = Number(ap.rating) >= TOP_RULES.minRating;
+  const Chk = ({ ok, label, val }) => <div className={"trk-chk" + (ok ? "" : " trk-chk--no")}>{ok ? <Check size={18} /> : <Clock size={18} />}<span>{label}</span><b>{val}</b></div>;
+  return (
+    <div className="screen trk">
+      <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+      <h1 className="trk-h">Your track record</h1>
+      <p className="trk-sub">Your reputation on VettedHands, built one completed job at a time. Customers see this on your profile.</p>
+      <div className="trk-tiles">
+        <div className="trk-tile trk-tile--g"><b>{ap.jobsCompleted}</b><strong>Jobs completed</strong><span>Counts only jobs the customer confirmed</span></div>
+        <div className="trk-tile"><b>{fmtStars(avg || ap.rating)}</b><strong>Average rating</strong><span>From {plural2(rated.length, "review")}</span></div>
+        <div className="trk-tile"><b>{rs.repeat}</b><strong>Repeat customers</strong><span>Customers who hired you again</span></div>
+        <div className="trk-tile"><b>{myReviews.length}</b><strong>Latest reviews</strong><span>Shown on your profile</span></div>
+      </div>
+
+      <div className="trk-card">
+        <h3>Jobs completed per month</h3>
+        <div className="trk-months">
+          {months.map((m) => <div className="trk-m" key={m.key}><b>{m.n}</b><i style={{ height: Math.max(4, (m.n / maxN) * 90) + "px" }} /><span>{m.label}</span></div>)}
+        </div>
+      </div>
+
+      <div className="trk-card">
+        <h3>Rating breakdown</h3>
+        {dist.map((d) => <div className="trk-dist" key={d.s}><span style={{ width: 34 }}>{d.s} ★</span><span className="trk-dist-t"><i style={{ width: (d.n / maxD) * 100 + "%" }} /></span><b>{d.n}</b></div>)}
+      </div>
+
+      <div className="trk-top">
+        <div className="trk-top-h"><b>Top Rated</b><span className={"trk-pill" + (top ? "" : " trk-pill--no")}>{top ? "Earned" : "Not yet"}</span></div>
+        <p>Top Rated is never automatic. It needs a real record, and it can be lost if standards slip.</p>
+        <Chk ok={jobsOk} label={`Completed jobs (min. ${TOP_RULES.minJobs})`} val={ap.jobsCompleted} />
+        <Chk ok={ratingOk} label={`Average rating (min. ${TOP_RULES.minRating})`} val={fmtStars(ap.rating)} />
+      </div>
+
+      <div className="trk-card">
+        <h3>Recent jobs</h3>
+        {done.slice(0, 4).map((r) => (
+          <div className="trk-job" key={r.id}>
+            <div><b>{r.job.length > 30 ? r.job.slice(0, 30) + "…" : r.job}</b><small>{shortName(r.student.name)} · {listTime(r.updatedAt)}</small></div>
+            <div className="trk-job-r"><b>{r.rating ? Number(r.rating).toFixed(1) + " ★" : "No rating"}</b><small>{rs.repeatIds.has(r.student.id) ? "Repeat customer" : r.rating ? "Reviewed" : "Awaiting review"}</small></div>
+          </div>
+        ))}
+        {done.length === 0 && <p className="trk-sub" style={{ margin: 0 }}>You haven't completed any jobs yet. Your first completed job starts your track record.</p>}
+      </div>
+
+      {myReviews.slice(0, 2).map((r) => (
+        <div key={r.id} className="review-item" style={{ marginBottom: 12 }}>
+          <div className="review-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={13} fill={i < r.rating ? "#B5651D" : "none"} stroke={i < r.rating ? "#B5651D" : "#C9BFAB"} />)}</div>
+          <div className="review-text">"{r.reviewText}"</div>
+          <div className="review-author">{shortName(r.student.name)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
+
+function ApplyView({ user, onBack, onApply }) {
+  const [trade, setTrade] = useState(null);
+  const [years, setYears] = useState("");
+  const [phone, setPhone] = useState("");
+  const [about, setAbout] = useState("");
+  const [social, setSocial] = useState("");
+  const [photos, setPhotos] = useState([]);
+  const [idDoc, setIdDoc] = useState(null);
+  const [upBusy, setUpBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  const missing = !trade ? "Choose your trade" : phone.trim().length < 7 ? "Add your phone number" : about.trim().length < 10 ? "Describe your service (10+ characters)" : photos.length < MIN_PORTFOLIO ? `Add at least ${MIN_PORTFOLIO} work photos` : !idDoc ? "Upload your ID" : null;
+  async function addPhotos(e) {
+    const files = Array.from(e.target.files || []).slice(0, 6 - photos.length);
+    e.target.value = "";
+    if (!files.length) return;
+    setUpBusy(true);
+    try { const urls = await Promise.all(files.map((f) => fileToDataUrl(f))); setPhotos((p) => [...p, ...urls].slice(0, 6)); }
+    finally { setUpBusy(false); }
+  }
+  async function pickId(e) {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    setUpBusy(true);
+    try { setIdDoc(await fileToDataUrl(f, 1400, 0.8)); } finally { setUpBusy(false); }
+  }
+  async function submit() {
+    if (missing || sending) return;
+    setSending(true);
+    const y = parseInt(years, 10);
+    const bio = (y > 0 ? `${y} ${y === 1 ? "year" : "years"}' experience. ` : "") + about.trim();
+    try { await onApply(trade, bio, photos, phone.trim(), social.trim(), idDoc); } finally { setSending(false); }
+  }
+  return (
+    <div className="screen rf">
+      <div className="rf-top"><button className="rf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button><span>Artisan application</span></div>
+      <h1 className="rf-h">Turn your skill into opportunities.</h1>
+      <p className="rf-sub">Join VettedHands and get discovered by people looking for trusted professionals.</p>
+      <div className="apl-info"><b>How approval works</b>1. Submit your details and documents. 2. Our team reviews them, usually within 3 working days. 3. Once approved, your profile becomes vetted and you can go available.</div>
+
+      <div className="rf-label">Full name</div>
+      <input className="apl-in apl-ro" value={user.name} readOnly />
+      <div className="rf-label">Phone / WhatsApp</div>
+      <input className="apl-in" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. 0803 000 0000" />
+      <div className="rf-label">Trade</div>
+      <div className="rf-chips">{trades.map((t) => <button key={t.id} type="button" className={"rf-chip" + (trade === t.id ? " on" : "")} onClick={() => setTrade(t.id)}>{t.label}</button>)}</div>
+      <div className="rf-label">Years of experience</div>
+      <input className="apl-in" type="number" min="0" max="60" value={years} onChange={(e) => setYears(e.target.value)} placeholder="e.g. 5" />
+      <div className="rf-label">Location</div>
+      <input className="apl-in apl-ro" value={`${user.area || "Ado-Ekiti"}, Ado-Ekiti`} readOnly />
+      <div className="rf-label">About your service</div>
+      <textarea className="rf-text" rows={4} maxLength={500} value={about} onChange={(e) => setAbout(e.target.value)} placeholder="What you do, what you are best at, and how you work." />
+      <div className="rf-count"><span /><span>{about.length} / 500</span></div>
+
+      <div className="rf-label">Portfolio / work photos <small>(at least {MIN_PORTFOLIO})</small></div>
+      <div className="rf-photo">
+        {photos.map((p, i) => (
+          <div className="rf-thumb" key={i}><img src={p} alt="" /><button type="button" onClick={() => setPhotos((x) => x.filter((_, j) => j !== i))} aria-label="Remove photo"><X size={12} /></button></div>
+        ))}
+        {photos.length < 6 && <label className="rf-add"><input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={addPhotos} /><span>{upBusy ? "…" : "+"}</span>Add</label>}
+      </div>
+
+      <div className="rf-label">Identity</div>
+      <div className="rf-photo">
+        {idDoc ? <div className="rf-thumb"><img src={idDoc} alt="" /><button type="button" onClick={() => setIdDoc(null)} aria-label="Remove ID"><X size={12} /></button></div>
+          : <label className="rf-add"><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickId} /><span>{upBusy ? "…" : "+"}</span>ID</label>}
+        <p>National ID, driver's license or voter's card. Clear photo, all four corners visible.</p>
+      </div>
+      <div className="rf-label">Social media username <small>(optional)</small></div>
+      <input className="apl-in" value={social} onChange={(e) => setSocial(e.target.value)} placeholder="e.g. @tunde_electrics" />
+      <p className="apl-help">Documents are seen only by the VettedHands review team.</p>
+
+      <div className="rf-bar">
+        {missing && <div className="rf-note">{missing}</div>}
+        <button className="rf-go" disabled={!!missing || upBusy || sending} onClick={submit}>{sending ? "Submitting…" : "Submit application"}</button>
+      </div>
+    </div>
+  );
+}
+
+function VettedWelcome({ user, onOpen }) {
+  const ap = user.artisanProfile;
+  const first = user.name.split(" ")[0];
+  const checks = [[true, "Identity verified"], [(ap.photos || []).length >= 3, "Upload at least 3 work photos"], [!!ap.online, "Set yourself available"]];
+  const items = [
+    [Zap, "Artisan dashboard", "See new requests, accept or decline, and mark jobs done."],
+    [ShieldCheck, "Availability control", "You decide when you appear to customers. We never switch it on for you."],
+    [BarChart, "Track record", "Every completed job builds your rating and reputation."],
+  ];
+  return (
+    <div className="screen wl">
+      <div className="wl-hero">
+        <span className="wl-ic"><ShieldCheck size={30} /></span>
+        <h1>You're vetted, {first}.</h1>
+        <p>Your application was approved. Customers near {ap.area} can now find you for {tradeLabel(ap.trade).toLowerCase()} jobs.</p>
+        <div className="ap-pills"><span className="ap-pill">Vetted</span>{ap.skillVerified && <span className="ap-pill ap-pill--b">Skill Verified</span>}</div>
+      </div>
+      <div className="wl-body">
+        <h2 className="wl-h">What's new in your app</h2>
+        {items.map(([I, t, d]) => <div className="wl-card" key={t}><span className="wl-ic2"><I size={22} /></span><div><b>{t}</b><span>{d}</span></div></div>)}
+        <h2 className="wl-h" style={{ marginTop: 26 }}>Get ready for your first job</h2>
+        {checks.map(([ok, t]) => <div className="wl-chk" key={t}><span className={"wl-box" + (ok ? " on" : "")}>{ok && <Check size={18} strokeWidth={3} />}</span>{t}</div>)}
+        <button className="rf-go" style={{ marginTop: 22 }} onClick={onOpen}>Open artisan dashboard</button>
+      </div>
+    </div>
+  );
+}
+
+const FAQ = [
+  ["How does VettedHands find artisans for me?", "You describe the job once. We match by trade, who is available now, area, verification, rating and jobs completed, then show you the best fits."],
+  ["What do the badges mean?", "badges"],
+  ["Why can I not review yet?", "Reviews unlock after the artisan marks the job done and you confirm it. That keeps every review tied to real work."],
+  ["Do I pay through the app?", "Not yet. You agree the price with the artisan and pay them directly after the work is done. Do not pay in advance for a job that has not started, and never share your PIN or bank login."],
+  ["An artisan did not show up. What now?", "Open the job under Requests and tap Report a problem with this job. Our team reviews every report."],
+  ["Can I send a voice note instead of typing?", "Yes. Open a chat and tap the microphone to record a short voice note."],
+  ["How do I become an artisan?", "Go to Profile and tap Become an artisan. Our team reviews every application, usually within 3 working days."],
+];
+function HelpView({ onBack, onReport }) {
+  const [open, setOpen] = useState(0);
+  return (
+    <div className="screen hp">
+      <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+      <h1 className="trk-h">How can we help?</h1>
+      <p className="trk-sub">Quick answers first. A real person is one tap away.</p>
+      <div className="hp-list">
+        {FAQ.map(([q, a], i) => (
+          <div key={q}>
+            <button className={"hp-q" + (open === i ? " open" : "")} onClick={() => setOpen(open === i ? -1 : i)}><span>{q}</span><ChevronDown size={20} /></button>
+            {open === i && (
+              <div className="hp-a">
+                {a === "badges" ? (<>
+                  <div><b>Vetted.</b> Identity and phone checked, and the application approved by our team. Required to appear to customers at all.</div>
+                  <div><b>Skill Verified.</b> Trade and skill confirmed from certificates, references or portfolio.</div>
+                  <div><b>Top Rated.</b> Earned from the record: {TOP_RULES.minJobs}+ completed jobs and a {TOP_RULES.minRating}+ average rating. Calculated by the system, never granted by hand.</div>
+                </>) : a}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="hp-more">
+        <h2>Still need help?</h2>
+        <p>Email us and a real person will reply.</p>
+        <button className="w" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("VettedHands support")}`; }}>Message support</button>
+        <button className="o" onClick={onReport}>Report a problem with a job</button>
+      </div>
+      <div className="hp-emg"><AlertTriangle size={20} style={{ flexShrink: 0 }} /><span>In an emergency call <b>112</b>. VettedHands support is not an emergency service.</span></div>
+    </div>
+  );
+}
+
 /* ---------------- Chat helpers ---------------- */
 const reqCode = (id) => "VH-" + String(id).slice(0, 4).toUpperCase();
 function shortName(name = "") { const p = name.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; }
@@ -1607,8 +2050,9 @@ function buildNotifications(requests, me) {
     const base = { requestId: r.id, time: r.updatedAt || r.createdAt };
     const add = (status, extra) => out.push({ ...base, id: r.id + ":" + status, ...extra });
     if (!artisanSide) {
-      if (r.status === "ACCEPTED") add("ACCEPTED", { kind: "ok", title: `${first} accepted your request`, text: "You can message them and confirm the booking." });
-      if (r.status === "CONFIRMED") add("CONFIRMED", { kind: "job", title: "Your booking is confirmed", text: `${other.name} is booked for ${reqCode(r.id)}.` });
+      if (r.status === "ACCEPTED") add("ACCEPTED", { kind: "ok", title: `${first} accepted your request`, text: "They'll start the job soon. You can message them while you wait." });
+      if (r.status === "CONFIRMED" && !r.artisanDoneAt) add("STARTED", { kind: "job", title: `${first} started your job`, text: `${reqCode(r.id)} is in progress.` });
+      if (r.status === "CONFIRMED" && r.artisanDoneAt) add("DONE", { kind: "review", title: `${first} marked the job done`, text: "Confirm it and leave a review." });
       if (r.status === "COMPLETED") add("COMPLETED", r.rating
         ? { kind: "ok", title: "Job completed", text: `Thanks for reviewing ${first}.` }
         : { kind: "review", title: `Time to review ${first}`, text: `Your ${r.job.slice(0, 40)} job is complete. Share how it went.` });
@@ -1616,7 +2060,7 @@ function buildNotifications(requests, me) {
       if (r.status === "CLOSED") add("CLOSED", { kind: "flag", title: "Request closed", text: "You booked another artisan for this job." });
     } else {
       if (r.status === "PENDING") add("PENDING", { kind: "job", title: `New request from ${first}`, text: r.job });
-      if (r.status === "CONFIRMED") add("CONFIRMED", { kind: "ok", title: `${first} confirmed the booking`, text: r.job });
+      if (r.status === "CONFIRMED" && r.artisanDoneAt) add("DONE", { kind: "ok", title: `Waiting for ${first} to confirm`, text: r.job });
       if (r.status === "COMPLETED") add("COMPLETED", { kind: "review", title: `Job completed for ${first}`, text: r.rating ? `They rated you ${r.rating} out of 5.` : "Waiting for their review." });
     }
     const m = r.lastMessage;
@@ -1774,11 +2218,8 @@ function VoiceBubble({ src, secs, mine }) {
     </div>
   );
 }
-function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll, onViewJob, onSendVoice }) {
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onViewJob, onOpenReport, onSendVoice }) {
   const [text, setText] = useState("");
-  const [confirming, setConfirming] = useState(false);
-  const [showComplete, setShowComplete] = useState(false);
-  const [showReport, setShowReport] = useState(false);
   const vr = useRecorder(60);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [vErr, setVErr] = useState(null);
@@ -1789,12 +2230,10 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   }
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
-  // Poll for new messages/status while this conversation is open. No websockets yet.
   useEffect(() => {
     const id = setInterval(() => { onPoll(request.id); }, 4000);
     return () => clearInterval(id);
   }, [request.id]);
-  const meta = statusMeta(request.status);
   const iAmArtisanSide = request.artisanProfile.user.id === user.id;
   const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
   const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
@@ -1802,6 +2241,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const [bg, fg] = tintFor(other.id || request.id);
   const online = request.artisanProfile.online;
   const sub = iAmArtisanSide ? "Customer" : `${tradeLabel(request.artisanProfile.trade)}${typeof online === "boolean" ? (online ? " · Online" : " · Offline") : ""}`;
+  const [label] = pillFor(request, iAmArtisanSide);
   const quick = iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["I'm at the gate", "Running a bit late", "Thank you!"];
   function send(t) { const v = t.trim(); if (v) { onSend(v); setText(""); } }
   let lastDay = null;
@@ -1815,9 +2255,9 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
           <div className="cv-name">{other.name}{!iAmArtisanSide && <ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />}</div>
           <div className="cv-sub">{sub}</div>
         </div>
-        {canAct && <button className="cv-flag" onClick={() => setShowReport(true)} aria-label="Report a problem"><Flag size={21} /></button>}
+        {canAct && <button className="cv-flag" onClick={onOpenReport} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
-      <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {meta.label}</span><b>View job <ChevronRight size={15} /></b></button>
+      <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {label}</span><b>View job <ChevronRight size={15} /></b></button>
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
       {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" />}
 
@@ -1844,33 +2284,6 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         )}
         <div ref={bottomRef} />
       </div>
-
-      {iAmArtisanSide && canAct && request.status === "PENDING" && (
-        <div className="settle-actions" style={{ margin: "10px 16px 0" }}>
-          <button className="ghost-btn" onClick={() => onRespond("DECLINED")}>Decline</button>
-          <button className="settle-btn" onClick={() => onRespond("ACCEPTED")}>Accept</button>
-        </div>
-      )}
-
-      {!iAmArtisanSide && canAct && request.status === "ACCEPTED" && !confirming && (
-        <button className="action-btn" onClick={() => setConfirming(true)}>Confirm booking with {other.name.split(" ")[0]}</button>
-      )}
-      {confirming && (
-        <div className="inline-confirm">
-          <div className="inline-confirm-text">This closes any other pending requests for this same job. Confirm?</div>
-          <div className="settle-actions">
-            <button className="ghost-btn" onClick={() => setConfirming(false)}>Cancel</button>
-            <button className="settle-btn" onClick={() => { onConfirm(); setConfirming(false); }}>Yes, confirm</button>
-          </div>
-        </div>
-      )}
-
-      {!iAmArtisanSide && canAct && request.status === "CONFIRMED" && !showComplete && (
-        <button className="action-btn" onClick={() => setShowComplete(true)}>Mark job complete & rate</button>
-      )}
-      {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t) => { onComplete(r, t); setShowComplete(false); }} />}
-
-      {showReport && <ReportForm reasons={iAmArtisanSide ? reportReasonsArtisan : reportReasonsCustomer} onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
 
       {canAct && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
       {vr.recording && (
@@ -2544,7 +2957,8 @@ function Style() {
 .cv-rec span { flex:1; color:var(--ink-soft); font-size:14px; }
 .cv-mic { width:48px; height:48px; border-radius:50%; background:#E3EFE9; color:var(--primary); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .cv-mic:disabled { opacity:.5; }
-.cv-verr { text-align:center; color:var(--danger); font-size:13px; padding:6px 14px 0; background:var(--bg); } min-height:240px; overflow-y:auto; background:#EFE9DA; padding:16px 14px; display:flex; flex-direction:column; gap:6px; }
+.cv-verr { text-align:center; color:var(--danger); font-size:13px; padding:6px 14px 0; background:var(--bg); }
+      .cv-msgs { flex:1; min-height:240px; overflow-y:auto; background:#EFE9DA; padding:16px 14px; display:flex; flex-direction:column; gap:6px; }
       .cv-day { align-self:center; margin:6px 0; }
       .cv-day span { background:#E1D9C5; color:var(--ink-soft); font-size:12.5px; font-weight:600; padding:4px 12px; border-radius:999px; }
       .cv-sys { align-self:center; text-align:center; font-size:12.5px; color:var(--ink-soft); max-width:300px; line-height:1.4; margin:4px 0 8px; }
@@ -2869,6 +3283,120 @@ function Style() {
       .cp-cta p:last-child { margin-bottom:0; }
       .cp-cta button { width:100%; background:#fff; color:var(--primary); border:none; border-radius:14px; padding:16px; font-family:inherit; font-size:16px; font-weight:700; cursor:pointer; }
       .cp-out { display:block; margin:26px auto 0; background:none; border:none; color:var(--danger); font-family:inherit; font-size:16.5px; font-weight:600; cursor:pointer; }
+
+            /* ===== Artisan home ===== */
+      .ah { padding:calc(22px + env(safe-area-inset-top)) 20px 28px; }
+      .ah-pills { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+      .ah-pill { background:#E3EFE9; color:var(--primary); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:700; }
+      .ah-pill--b { background:#DDE9F4; color:#1F5A8A; }
+      .ah-pill--a { background:#FBEBC8; color:#8A5A12; }
+      .ah-avail { margin-top:20px; background:var(--primary); color:#fff; border-radius:22px; padding:20px; }
+      .ah-avail--off { background:#3F4F4A; }
+      .ah-avail-top { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; }
+      .ah-avail-t { display:flex; align-items:center; gap:10px; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:22px; }
+      .ah-avail-t i { width:11px; height:11px; border-radius:50%; background:#5FE0A0; }
+      .ah-avail--off .ah-avail-t i { background:#B9B2A2; }
+      .ah-avail p { margin:8px 0 0; color:rgba(255,255,255,.8); font-size:15px; line-height:1.4; }
+      .ah-seg { display:flex; background:rgba(255,255,255,.14); border-radius:14px; padding:4px; margin-top:16px; }
+      .ah-seg button { flex:1; border:none; background:transparent; color:rgba(255,255,255,.8); padding:12px 8px; border-radius:10px; font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; }
+      .ah-seg button.on { background:#fff; color:var(--primary); }
+      .ah-avail small { display:block; margin-top:12px; color:rgba(255,255,255,.7); font-size:13px; line-height:1.4; }
+      .ah-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:16px; }
+      .ah-stats div { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px 6px; text-align:center; display:flex; flex-direction:column; gap:4px; }
+      .ah-stats b { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:28px; color:var(--primary); }
+      .ah-stats span { font-size:12.5px; color:var(--ink-soft); }
+      .ah-head { display:flex; align-items:center; justify-content:space-between; margin:26px 0 14px; }
+      .ah-head h2 { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:24px; margin:0; }
+      .ah-new { background:var(--primary); color:#fff; border-radius:999px; padding:6px 14px; font-size:13.5px; font-weight:700; }
+      .ah-req { background:var(--surface); border:1.5px solid var(--primary); border-radius:18px; padding:16px; margin-bottom:14px; }
+      .ah-req-main { display:block; width:100%; text-align:left; background:none; border:none; padding:0; font-family:inherit; cursor:pointer; color:inherit; }
+      .ah-req-main b { font-family:'Bricolage Grotesque',sans-serif; font-size:21px; }
+      .ah-req-who { display:block; color:var(--ink-soft); font-size:14.5px; margin-top:3px; }
+      .ah-req-main p { margin:10px 0; font-size:15.5px; line-height:1.45; }
+      .ah-req-loc { display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:14px; }
+
+      /* ===== Own profile, track record, apply, welcome, help ===== */
+      .ap-banner { background:#FBEBC8; color:#7A4F0C; text-align:center; font-weight:700; font-size:14px; padding:calc(10px + env(safe-area-inset-top)) 16px 10px; }
+      .ao { padding:0 20px 28px; margin-top:26px; }
+      .ao-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:14px; }
+      .ao-card h3 { font-family:'Bricolage Grotesque',sans-serif; font-size:20px; margin:0 0 12px; }
+      .ao-card p { margin:10px 0 0; color:var(--ink-soft); font-size:14px; }
+      .ao-menu { background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; margin-bottom:16px; }
+      .ao-row { display:flex; align-items:center; gap:14px; width:100%; text-align:left; background:var(--surface); border:none; border-bottom:1px solid var(--line); padding:16px; font-family:inherit; font-size:16px; font-weight:700; color:var(--ink); cursor:pointer; }
+      .ao-row:last-child { border-bottom:none; }
+      .ao-row span { flex:1; }
+      .ao-row svg:first-child { color:var(--primary); }
+      .ao-out { display:block; margin:8px auto 0; background:none; border:none; color:var(--danger); font-family:inherit; font-size:16.5px; font-weight:600; cursor:pointer; }
+      .trk, .hp { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
+      .trk-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:31px; line-height:1.08; letter-spacing:-0.02em; margin:6px 0 8px; }
+      .trk-sub { color:var(--ink-soft); font-size:15.5px; line-height:1.45; margin:0 0 18px; }
+      .trk-tiles { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+      .trk-tile { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; }
+      .trk-tile--g { background:#E3EFE9; border-color:#CFE3D9; }
+      .trk-tile b { display:block; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:34px; line-height:1; }
+      .trk-tile--g b { color:var(--primary); }
+      .trk-tile strong { display:block; font-size:15px; margin-top:8px; }
+      .trk-tile span { display:block; color:var(--ink-soft); font-size:13px; margin-top:2px; line-height:1.35; }
+      .trk-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:16px; }
+      .trk-card h3 { font-family:'Bricolage Grotesque',sans-serif; font-size:20px; margin:0 0 14px; }
+      .trk-months { display:flex; align-items:flex-end; gap:10px; height:150px; }
+      .trk-m { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:6px; }
+      .trk-m i { width:100%; border-radius:8px 8px 0 0; background:var(--primary); }
+      .trk-m b { font-size:13px; }
+      .trk-m span { font-size:12.5px; color:var(--ink-soft); }
+      .trk-dist { display:flex; align-items:center; gap:12px; margin-bottom:10px; font-size:15px; font-weight:600; }
+      .trk-dist-t { flex:1; height:10px; background:#EEE7D5; border-radius:999px; overflow:hidden; }
+      .trk-dist-t i { display:block; height:100%; background:#B5651D; border-radius:999px; }
+      .trk-top { background:#FDF4DD; border:1px solid #EFD9A0; border-radius:18px; padding:18px; margin-bottom:16px; }
+      .trk-top-h { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+      .trk-top-h b { font-family:'Bricolage Grotesque',sans-serif; font-size:21px; }
+      .trk-pill { border-radius:999px; padding:6px 14px; font-size:13px; font-weight:700; background:#B5651D; color:#fff; }
+      .trk-pill--no { background:#ECE7D8; color:var(--ink-soft); }
+      .trk-top p { color:var(--ink-soft); font-size:14.5px; line-height:1.45; margin:10px 0 12px; }
+      .trk-chk { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:15px; }
+      .trk-chk span { flex:1; }
+      .trk-chk svg { color:var(--primary); }
+      .trk-chk--no svg { color:#A39B88; }
+      .trk-job { display:flex; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); }
+      .trk-job:last-child { border-bottom:none; }
+      .trk-job b { display:block; font-size:16px; }
+      .trk-job small { color:var(--ink-soft); font-size:13.5px; }
+      .trk-job-r { text-align:right; flex-shrink:0; }
+      .trk-job-r b { color:#8A5A12; }
+      .trk-job-r small { display:block; }
+      .apl-info { background:#E3EFE9; color:var(--primary); border-radius:14px; padding:16px; font-size:14.5px; line-height:1.5; margin-bottom:6px; }
+      .apl-info b { display:block; margin-bottom:4px; }
+      .apl-in { width:100%; border:1.5px solid var(--line); border-radius:14px; padding:14px; font-family:inherit; font-size:16px; background:var(--surface); color:var(--ink); }
+      .apl-in:focus { outline:none; border-color:var(--primary); }
+      .apl-ro { background:#EFEADB; color:var(--ink-soft); }
+      .apl-help { color:var(--ink-soft); font-size:13.5px; margin:10px 0 0; }
+      .wl-hero { background:linear-gradient(135deg,#0F4D3A,#0A3A2B); color:#F4EFE0; padding:calc(28px + env(safe-area-inset-top)) 22px 28px; }
+      .wl-ic { width:64px; height:64px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; }
+      .wl-hero h1 { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:36px; line-height:1.05; margin:20px 0 10px; }
+      .wl-hero p { color:rgba(244,239,224,.8); font-size:16.5px; line-height:1.5; margin:0 0 16px; }
+      .wl-body { padding:22px 20px 28px; }
+      .wl-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:24px; margin:0 0 12px; }
+      .wl-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:12px; display:flex; gap:14px; }
+      .wl-ic2 { width:46px; height:46px; border-radius:14px; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .wl-card b { display:block; font-size:16.5px; }
+      .wl-card div span { display:block; color:var(--ink-soft); font-size:14.5px; line-height:1.4; margin-top:2px; }
+      .wl-chk { display:flex; align-items:center; gap:14px; padding:10px 0; font-size:16px; }
+      .wl-box { width:30px; height:30px; border-radius:8px; border:1.5px solid #BFB69F; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#fff; }
+      .wl-box.on { background:var(--primary); border-color:var(--primary); }
+      .hp-list { background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
+      .hp-q { width:100%; display:flex; justify-content:space-between; align-items:center; gap:12px; background:none; border:none; border-bottom:1px solid var(--line); padding:18px 16px; text-align:left; font-family:inherit; font-size:16.5px; font-weight:700; color:var(--ink); cursor:pointer; }
+      .hp-q svg { transition:transform .15s; flex-shrink:0; color:var(--ink-soft); }
+      .hp-q.open svg { transform:rotate(180deg); }
+      .hp-a { padding:14px 16px 6px; color:var(--ink-soft); font-size:15.5px; line-height:1.5; border-bottom:1px solid var(--line); }
+      .hp-a div { margin-bottom:10px; }
+      .hp-a b { color:var(--ink); }
+      .hp-more { background:var(--primary); color:#fff; border-radius:22px; padding:22px; margin-top:20px; }
+      .hp-more h2 { font-family:'Bricolage Grotesque',sans-serif; font-size:24px; margin:0 0 6px; }
+      .hp-more p { margin:0 0 14px; color:rgba(255,255,255,.8); }
+      .hp-more button { width:100%; border-radius:14px; padding:15px; font-family:inherit; font-size:16px; font-weight:700; cursor:pointer; margin-top:10px; }
+      .hp-more .w { background:#fff; color:var(--primary); border:none; }
+      .hp-more .o { background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,.5); }
+      .hp-emg { display:flex; gap:12px; background:#F8E3DD; color:var(--danger); border-radius:14px; padding:14px; margin-top:16px; font-size:14.5px; line-height:1.45; }
 
       @media (max-width: 480px) {
         .app { padding: 0; }
