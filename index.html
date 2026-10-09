@@ -31,15 +31,25 @@ const API_BASE = "https://vettedhands-backend.onrender.com";
 async function api(path, { method = "GET", body, token } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let data = null;
-  try { data = await res.json(); } catch (e) { /* no body */ }
+  let res, data = null;
+  const attempts = method === "GET" ? 3 : 1;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      res = await fetch(`${API_BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    } catch (e) {
+      if (i === attempts - 1) throw new Error("No connection. Check your network and try again.");
+      await new Promise((r) => setTimeout(r, 1500));
+      continue;
+    }
+    data = null;
+    try { data = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok && res.status >= 500 && i < attempts - 1) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+    break;
+  }
   if (!res.ok) {
-    throw new Error((data && data.error) || `Request failed (${res.status})`);
+    const raw = (data && data.error) || "";
+    if (/prisma|database server|invocation/i.test(raw)) throw new Error("Waking up the server. Please try again in a few seconds.");
+    throw new Error(raw || `Request failed (${res.status})`);
   }
   return data;
 }
@@ -99,6 +109,16 @@ const ChevronDown = (p) => <Icon name="chevronDown" {...p} />;
 const ArrowRight = (p) => <Icon name="arrowRight" {...p} />;
 Object.assign(ICON_PATHS, { check: <polyline points="20 6 9 17 4 12" /> });
 const Check = (p) => <Icon name="check" {...p} />;
+Object.assign(ICON_PATHS, {
+  mic: <><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></>,
+  play: <polygon points="7 4 19 12 7 20 7 4" fill="currentColor"/>,
+  pause: <><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></>,
+  trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></>,
+});
+const Mic = (p) => <Icon name="mic" {...p} />;
+const Play = (p) => <Icon name="play" {...p} />;
+const Pause = (p) => <Icon name="pause" {...p} />;
+const Trash = (p) => <Icon name="trash" {...p} />;
 const Search = (p) => <Icon name="search" {...p} />;
 const Bell = (p) => <Icon name="bell" {...p} />;
 const MapPin = (p) => <Icon name="mapPin" {...p} />;
@@ -238,6 +258,7 @@ function AuthScreen({ initialMode, onBack, onLogin, onRegister }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [area, setArea] = useState(areas[1]);
+  const [agree, setAgree] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -273,10 +294,13 @@ function AuthScreen({ initialMode, onBack, onLogin, onRegister }) {
           <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label>
           <label>Password<input required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" /></label>
           {mode === "register" && (
-            <label>Where are you?<select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
+            <label>Where are you? <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
+          )}
+          {mode === "register" && (
+            <label className="auth-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><span>I agree to the Terms of Use and Privacy Policy.</span></label>
           )}
           {err && <div className="auth-err">{err}</div>}
-          <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
+          <button className="auth-submit" disabled={busy || (mode === "register" && !agree)}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
         </form>
         {mode === "register" && (
           <div className="auth-note"><UserIcon size={20} /><span>Everyone starts as a customer. Have a trade? You can apply to become a vetted artisan from your profile.</span></div>
@@ -348,7 +372,14 @@ function MainApp({ auth, intent }) {
   const [wiz, setWiz] = useState(blankWiz);
 
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
-  function fail(err) { flash(err.message || "Something went wrong"); }
+  const lastFail = useRef({ msg: "", at: 0 });
+  function fail(err) {
+    const msg = err.message || "Something went wrong";
+    const now = Date.now();
+    if (lastFail.current.msg === msg && now - lastFail.current.at < 30000) return;
+    lastFail.current = { msg, at: now };
+    flash(msg);
+  }
 
   async function loadArtisans() {
     try {
@@ -492,6 +523,13 @@ function MainApp({ auth, intent }) {
       const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
       setMessages((prev) => [...prev, d.message]);
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: d.message } : r)));
+    } catch (e) { fail(e); }
+  }
+  async function sendVoiceMessage(requestId, audio, audioSecs) {
+    try {
+      const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { audio, audioSecs } });
+      setMessages((prev) => [...prev, d.message]);
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: { ...d.message, audio: undefined } } : r)));
     } catch (e) { fail(e); }
   }
   async function respondToRequest(requestId, status) {
@@ -642,7 +680,9 @@ function MainApp({ auth, intent }) {
             onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
             onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)}
             onRespond={(status) => respondToRequest(activeRequest.id, status)}
-            onPoll={pollConversation} />
+            onPoll={pollConversation}
+            onViewJob={() => openTrack(activeRequest.id)}
+            onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
           <CustomerProfileView user={user} requests={requests} application={application}
@@ -816,8 +856,8 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, onBack, onRequest
   const st = a.stats || null;
   const first = a.user.name.split(" ")[0];
   const top = a.badge === "TOP_RATED";
-  const minJobs = st ? st.minJobs : 15;
-  const minRating = st ? st.minRating : 4.5;
+  const minJobs = st ? st.minJobs : 25;
+  const minRating = st ? st.minRating : 4.7;
   const approved = a.createdAt ? new Date(a.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : null;
   const rows = [
     { ok: true, t: "Identity verified", d: "ID and phone number checked by VettedHands." },
@@ -932,7 +972,7 @@ const WHEN_OPTIONS = [
   { id: "tomorrow", label: "Tomorrow", sub: "Morning", short: "Tomorrow" },
   { id: "date", label: "Pick a date", sub: "Choose day and time", short: "Scheduled" },
 ];
-const SORTS = [["best", "Best match"], ["area", "Same area"], ["rating", "Rating"], ["jobs", "Jobs completed"]];
+const SORTS = [["best", "Best match"], ["area", "Distance"] ["rating", "Rating"], ["jobs", "Jobs completed"]];
 
 function whenText(w) {
   if (w.when === "today") return "Today afternoon";
@@ -1067,7 +1107,7 @@ function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan }) {
 
           {list.length > 0 && (
             <>
-              <div className="rf-info"><ShieldCheck size={18} /><span>Ranked by trade match, availability, area, verification, rating and jobs completed.</span></div>
+              <div className="rf-info"><ShieldCheck size={18} /><span>Ranked by trade match, availability, distance, verification, rating and jobs completed.</span></div>
               <div className="rf-sorts">
                 {SORTS.map(([k, l]) => <button key={k} className={"rf-sort" + (wiz.sort === k ? " on" : "")} onClick={() => set({ sort: k })}>{l}</button>)}
               </div>
@@ -1231,7 +1271,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
               </div>
               <dl className="rq-rows">
                 <div><dt>{artisanSide ? "Customer" : "Artisan"}</dt><dd>{other.name}</dd></div>
-                <div><dt>When</dt><dd>{r.when}</dd></div>
+                <div><dt>Date</dt><dd>{r.when}</dd></div>
                 {r.area && <div><dt>Location</dt><dd>{r.area}</dd></div>}
               </dl>
               <p className="rq-job">{r.hasImage && <Camera size={13} style={{ marginRight: 5, verticalAlign: "-2px" }} />}{r.job}</p>
@@ -1420,8 +1460,8 @@ function ReportView({ request: r, user, onClose, onSubmit }) {
   return (
     <div className="screen rv">
       <div className="rv-top"><button className="tk-back" onClick={onClose} aria-label="Back"><ArrowLeft size={22} /></button><span>Report · Request {reqCode(r.id)}</span></div>
-      <h1 className="rv-h" style={{ marginTop: 14 }}>Report a problem</h1>
-      <p className="rv-sub">Tell us what went wrong with this job. Our team reviews every report and may contact you.</p>
+      <h1 className="rv-h" style={{ marginTop: 14 }}>{artisanSide ? "Report a customer" : "Report a problem"}</h1>
+      <p className="rv-sub">{artisanSide ? "Customer wasn't there, or something felt wrong? Tell us so we can act." : "Tell us what went wrong with this job. Our team reviews every report and may contact you."}</p>
       <div className="rv-who">
         <span className="tk-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
         <div><b>{other.name} · {tradeLabel(r.artisanProfile.trade)}</b><small>{r.when}{r.area ? " · " + r.area : ""}</small></div>
@@ -1446,11 +1486,12 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onBeco
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
+  const waiting = requests.filter((r) => r.status === "CONFIRMED").length;
   const rows = [
     [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
     [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
-    [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} left on completed jobs`, onGoRequests],
-    [MessageCircle, "Help & support", "Message the VettedHands team", () => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("VettedHands support")}`; }],
+    [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoRequests],
+    [Settings, "Settings", "Notifications, language, help and support", () => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("VettedHands support")}`; }],
   ];
   return (
     <div className="screen cp">
@@ -1580,7 +1621,7 @@ function buildNotifications(requests, me) {
     }
     const m = r.lastMessage;
     if (m && m.senderType !== "SYSTEM" && m.senderId !== me.id) {
-      out.push({ ...base, id: `m:${r.id}:${m.id}`, time: m.createdAt, kind: "msg", autoRead: r.unreadCount === 0, title: `${first} sent a message`, text: m.text });
+      out.push({ ...base, id: `m:${r.id}:${m.id}`, time: m.createdAt, kind: "msg", autoRead: r.unreadCount === 0, title: `${first} sent ${m.audioSecs ? "a voice note" : "a message"}`, text: m.audioSecs ? "Voice note · " + fmtSecs(m.audioSecs) : m.text });
     }
   }
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
@@ -1650,14 +1691,14 @@ function MessagesListView({ requests, user, onOpen }) {
         <button className={tab === "active" ? "on" : ""} onClick={() => setTab("active")}>Active jobs</button>
         <button className={tab === "past" ? "on" : ""} onClick={() => setTab("past")}>Past jobs</button>
       </div>
-      <label className="ms-search"><Search size={18} /><input placeholder="Search by name or job" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+      <label className="ms-search"><Search size={18} /><input placeholder={user.role === "ARTISAN" ? "Search by customer or job" : "Search by artisan or job"} value={q} onChange={(e) => setQ(e.target.value)} /></label>
       <div className="ms-list">
         {rows.map(({ r, other, name, at }) => {
           const m = r.lastMessage;
           const unread = r.unreadCount || 0;
           const mine = !!m && m.senderId === user.id;
           const [bg, fg] = tintFor(other.id || r.id);
-          const preview = m ? (m.senderType === "SYSTEM" ? m.text : (mine ? "You: " : "") + m.text) : r.job;
+          const preview = m ? (m.senderType === "SYSTEM" ? m.text : (mine ? "You: " : "") + (m.audioSecs ? "Voice note · " + fmtSecs(m.audioSecs) : m.text)) : r.job;
           return (
             <button key={r.id} className={"ms-row" + (unread ? " ms-row--new" : "")} onClick={() => onOpen(r.id)}>
               <span className="ms-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
@@ -1674,17 +1715,78 @@ function MessagesListView({ requests, user, onOpen }) {
         })}
         {rows.length === 0 && <div className="ms-empty"><b>No conversations here.</b>Chats open when you send or receive a request.</div>}
       </div>
-      <div className="ms-note"><ShieldCheck size={18} /><span>Chats are tied to a job. Keep everything in VettedHands so reports can be investigated.</span></div>
+      <div className="ms-note"><ShieldCheck size={18} /><span>{user.role === "ARTISAN" ? "Replying fast helps your rating. Keep chats inside VettedHands so they count if a report is opened." : "Chats are tied to a job. Keep everything in VettedHands so reports can be investigated."}</span></div>
     </div>
   );
 }
 
 /* ---------------- Conversation ---------------- */
-function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll }) {
+function fmtSecs(s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
+}
+// Tap-to-record. start(onClip) asks for the mic. stop(true) sends the clip, stop(false) throws it away.
+function useRecorder(maxSecs = 60) {
+  const [recording, setRecording] = useState(false);
+  const [secs, setSecs] = useState(0);
+  const rec = useRef(null), chunks = useRef([]), timer = useRef(null), t0 = useRef(0), keep = useRef(true), done = useRef(null);
+  useEffect(() => () => { clearInterval(timer.current); if (rec.current && rec.current.state !== "inactive") { keep.current = false; rec.current.stop(); } }, []);
+  async function start(onClip) {
+    if (!navigator.mediaDevices || !window.MediaRecorder) throw new Error("Voice notes aren't supported on this browser.");
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e) { throw new Error("Allow microphone access to record a voice note."); }
+    const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((m) => MediaRecorder.isTypeSupported(m));
+    const r = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : undefined);
+    chunks.current = []; keep.current = true; done.current = onClip;
+    r.ondataavailable = (e) => { if (e.data && e.data.size) chunks.current.push(e.data); };
+    r.onstop = async () => {
+      clearInterval(timer.current);
+      stream.getTracks().forEach((t) => t.stop());
+      setRecording(false);
+      const len = Math.max(1, Math.round((Date.now() - t0.current) / 1000));
+      if (keep.current && chunks.current.length && done.current) {
+        const type = (r.mimeType || mime || "audio/mp4").split(";")[0];
+        done.current(await blobToDataUrl(new Blob(chunks.current, { type })), len);
+      }
+    };
+    rec.current = r; t0.current = Date.now(); setSecs(0); setRecording(true); r.start();
+    timer.current = setInterval(() => { const s = Math.round((Date.now() - t0.current) / 1000); setSecs(s); if (s >= maxSecs) stop(true); }, 250);
+  }
+  function stop(send) { keep.current = send; if (rec.current && rec.current.state !== "inactive") rec.current.stop(); }
+  return { recording, secs, start, stop };
+}
+function VoiceBubble({ src, secs, mine }) {
+  const ref = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [pos, setPos] = useState(0);
+  const bars = useMemo(() => { let h = 7; for (const c of String(src).slice(-40)) h = (h * 31 + c.charCodeAt(0)) % 9973; return Array.from({ length: 26 }, (_, i) => 6 + ((h * (i + 3) * 7919) % 17)); }, [src]);
+  function toggle() { const a = ref.current; if (!a) return; if (a.paused) a.play().catch(() => {}); else a.pause(); }
+  const total = secs || 0;
+  const frac = total ? Math.min(1, pos / total) : 0;
+  return (
+    <div className={"vn" + (mine ? " vn--me" : "")}>
+      <audio ref={ref} src={src} preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setPos(0); }} onTimeUpdate={(e) => setPos(e.target.currentTime)} />
+      <button type="button" className="vn-play" onClick={toggle} aria-label={playing ? "Pause" : "Play"}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
+      <div className="vn-wave">{bars.map((h, i) => <i key={i} className={i / bars.length < frac ? "on" : ""} style={{ height: h }} />)}</div>
+      <span className="vn-time">{fmtSecs(playing || pos ? pos : total)}</span>
+    </div>
+  );
+}
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll, onViewJob, onSendVoice }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const vr = useRecorder(60);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [vErr, setVErr] = useState(null);
+  async function startVoice() {
+    setVErr(null);
+    try { await vr.start(async (audio, secs) => { setVoiceBusy(true); try { await onSendVoice(audio, secs); } finally { setVoiceBusy(false); } }); }
+    catch (e) { setVErr(e.message); }
+  }
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
   // Poll for new messages/status while this conversation is open. No websockets yet.
@@ -1700,7 +1802,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const [bg, fg] = tintFor(other.id || request.id);
   const online = request.artisanProfile.online;
   const sub = iAmArtisanSide ? "Customer" : `${tradeLabel(request.artisanProfile.trade)}${typeof online === "boolean" ? (online ? " · Online" : " · Offline") : ""}`;
-  const quick = iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["What time will you arrive?", "Please call me", "Thank you!"];
+  const quick = iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["I'm at the gate", "Running a bit late", "Thank you!"];
   function send(t) { const v = t.trim(); if (v) { onSend(v); setText(""); } }
   let lastDay = null;
 
@@ -1715,7 +1817,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         </div>
         {canAct && <button className="cv-flag" onClick={() => setShowReport(true)} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
-      <div className="cv-strip">{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {meta.label}<small>{request.job}</small></div>
+      <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {meta.label}</span><b>View job <ChevronRight size={15} /></b></button>
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
       {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" />}
 
@@ -1730,7 +1832,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
               {showDay && <div className="cv-day"><span>{dayLabel(m.createdAt)}</span></div>}
               {sys ? <div className="cv-sys">{m.text}</div> : (
                 <div className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
-                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them")}>{m.text}</div>
+                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them")}>{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : m.text}</div>
                   <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>
                 </div>
               )}
@@ -1771,11 +1873,20 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       {showReport && <ReportForm reasons={iAmArtisanSide ? reportReasonsArtisan : reportReasonsCustomer} onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
 
       {canAct && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
-      <form className="cv-input" onSubmit={(e) => { e.preventDefault(); send(text); }}>
+      {vr.recording && (
+        <div className="cv-rec">
+          <button type="button" className="cv-rec-x" onClick={() => vr.stop(false)} aria-label="Cancel"><Trash size={18} /></button>
+          <i className="cv-rec-dot" /><b>{fmtSecs(vr.secs)}</b><span>Recording…</span>
+          <button type="button" className="cv-send" onClick={() => vr.stop(true)} aria-label="Send voice note"><Send size={18} /></button>
+        </div>
+      )}
+      {vErr && <div className="cv-verr">{vErr}</div>}
+      <form className="cv-input" style={vr.recording ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
-        <button type="submit" className="cv-send" disabled={!text.trim()} aria-label="Send"><Send size={18} /></button>
+        {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
+        {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
       </form>
-      <div className="cv-safe">Never share your PIN or send money outside VettedHands.</div>
+      <div className="cv-safe">Tap the mic to record a voice note. Never share your PIN or send money outside VettedHands.</div>
     </div>
   );
 }
@@ -1946,7 +2057,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
               <button className="verify-btn" onClick={() => setConfirmingVerify(true)}><Award size={15} /> Get Verified - Top Rated badge</button>
             )}
             {user.artisanProfile.badge !== "TOP_RATED" && (
-              <div className="badge-progress">{user.artisanProfile.jobsCompleted}/15 jobs · {fmtStars(user.artisanProfile.rating)}/4.5 rating needed for Top Rated</div>
+              <div className="badge-progress">{user.artisanProfile.jobsCompleted}/25 jobs · {fmtStars(user.artisanProfile.rating)}/4.7 rating needed for Top Rated</div>
             )}
             {user.artisanProfile.badge !== "TOP_RATED" && confirmingVerify && (
               <div className="inline-confirm">
@@ -2414,7 +2525,26 @@ function Style() {
       .cv-flag { background:none; border:none; color:var(--danger); width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
       .cv-strip { background:#E3EFE9; color:var(--primary); padding:11px 16px; font-size:13.5px; font-weight:700; display:flex; flex-direction:column; gap:2px; }
       .cv-strip small { font-size:12.5px; font-weight:500; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-      .cv-msgs { flex:1; min-height:240px; overflow-y:auto; background:#EFE9DA; padding:16px 14px; display:flex; flex-direction:column; gap:6px; }
+      .cv-strip--row { flex-direction:row; align-items:center; justify-content:space-between; border:none; width:100%; font-family:inherit; text-align:left; cursor:pointer; }
+      .cv-strip--row b { display:inline-flex; align-items:center; gap:2px; font-size:14px; }
+      .vn { display:flex; align-items:center; gap:10px; min-width:210px; }
+.vn-play { width:36px; height:36px; border-radius:50%; border:none; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.vn--me .vn-play { background:#fff; color:var(--primary); }
+.vn-wave { flex:1; display:flex; align-items:center; gap:2px; height:26px; }
+.vn-wave i { width:3px; border-radius:2px; background:#B9CFC6; }
+.vn-wave i.on { background:var(--primary); }
+.vn--me .vn-wave i { background:rgba(255,255,255,.45); }
+.vn--me .vn-wave i.on { background:#fff; }
+.vn-time { font-size:13px; font-variant-numeric:tabular-nums; opacity:.85; flex-shrink:0; }
+.cv-rec { display:flex; align-items:center; gap:12px; background:#F8E3DD; border:1px solid #EBC9BF; border-radius:999px; padding:6px 6px 6px 8px; margin:10px 14px 4px; }
+.cv-rec-x { width:40px; height:40px; border-radius:50%; background:none; border:none; color:var(--danger); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.cv-rec-dot { width:10px; height:10px; border-radius:50%; background:var(--danger); animation:vnpulse 1s infinite; }
+@keyframes vnpulse { 50% { opacity:.25; } }
+.cv-rec b { color:var(--danger); font-variant-numeric:tabular-nums; }
+.cv-rec span { flex:1; color:var(--ink-soft); font-size:14px; }
+.cv-mic { width:48px; height:48px; border-radius:50%; background:#E3EFE9; color:var(--primary); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+.cv-mic:disabled { opacity:.5; }
+.cv-verr { text-align:center; color:var(--danger); font-size:13px; padding:6px 14px 0; background:var(--bg); } min-height:240px; overflow-y:auto; background:#EFE9DA; padding:16px 14px; display:flex; flex-direction:column; gap:6px; }
       .cv-day { align-self:center; margin:6px 0; }
       .cv-day span { background:#E1D9C5; color:var(--ink-soft); font-size:12.5px; font-weight:600; padding:4px 12px; border-radius:999px; }
       .cv-sys { align-self:center; text-align:center; font-size:12.5px; color:var(--ink-soft); max-width:300px; line-height:1.4; margin:4px 0 8px; }
@@ -2492,6 +2622,10 @@ function Style() {
       .auth-submit { background:var(--primary); color:#fff; border:none; border-radius:14px; padding:16px; font-size:16px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:4px; }
       .auth-submit:disabled { opacity:.5; cursor:not-allowed; }
       .auth-note { display:flex; gap:12px; align-items:flex-start; margin-top:22px; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:16px; font-size:14px; line-height:1.5; }
+
+      .auth-form label.auth-agree { flex-direction:row; align-items:center; gap:12px; font-weight:500; color:var(--ink-soft); font-size:15px; }
+.auth-form .auth-agree input { appearance:none; -webkit-appearance:none; width:30px; height:30px; flex-shrink:0; padding:0; border:1.5px solid var(--line); border-radius:8px; background:var(--surface); cursor:pointer; }
+.auth-form .auth-agree input:checked { border-color:var(--primary); background:var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/18px no-repeat; }
 
             /* ===== Request flow ===== */
       .rf { padding:calc(14px + env(safe-area-inset-top)) 20px 0; min-height:0; }
@@ -2589,7 +2723,7 @@ function Style() {
       .ap-vic { width:32px; height:32px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
       .ap-vrow--no .ap-vic { background:#ECE7D8; color:#A39B88; }
       .ap-vrow b { display:block; font-size:16px; }
-      .ap-vrow span { display:block; color:var(--ink-soft); font-size:14px; line-height:1.4; margin-top:2px; }
+      .ap-vrow div span { display:block; color:var(--ink-soft); font-size:14px; line-height:1.4; margin-top:2px; }
       .ap-about { font-size:16.5px; line-height:1.55; margin:0; }
       .ap-work { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
       .ap-work img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:16px; border:1px solid var(--line); }
@@ -2677,7 +2811,7 @@ function Style() {
       .tk-ac { display:flex; align-items:center; gap:14px; }
       .tk-av { width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:19px; flex-shrink:0; }
       .tk-ac b { display:block; font-family:'Bricolage Grotesque',sans-serif; font-size:19px; }
-      .tk-ac span { display:block; color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
+      .tk-ac div span { display:block; color:var(--ink-soft); font-size:14.5px; margin-top:2px; }
       .tk-msg { width:100%; margin-top:16px; background:var(--primary); color:#fff; border:none; border-radius:14px; padding:16px; font-family:inherit; font-size:16.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer; }
       .tk-lock { display:flex; gap:12px; align-items:center; background:#F3EEDF; border-radius:12px; padding:14px; margin-top:12px; color:var(--ink-soft); font-size:14.5px; line-height:1.4; }
       .tk-report { display:block; margin:20px auto 0; background:none; border:none; color:var(--danger); font-family:inherit; font-size:15.5px; font-weight:600; cursor:pointer; }
