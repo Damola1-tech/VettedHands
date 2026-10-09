@@ -97,6 +97,8 @@ const PaintRoller = (p) => <Icon name="paintRoller" {...p} />;
 const Sparkle = (p) => <Icon name="sparkle" {...p} />;
 const ChevronDown = (p) => <Icon name="chevronDown" {...p} />;
 const ArrowRight = (p) => <Icon name="arrowRight" {...p} />;
+Object.assign(ICON_PATHS, { check: <polyline points="20 6 9 17 4 12" /> });
+const Check = (p) => <Icon name="check" {...p} />;
 const Search = (p) => <Icon name="search" {...p} />;
 const Bell = (p) => <Icon name="bell" {...p} />;
 const MapPin = (p) => <Icon name="mapPin" {...p} />;
@@ -324,6 +326,9 @@ function MainApp({ auth, intent }) {
   const [activeRequestId, setActiveRequestId] = useState(null);
   const [prefillJob, setPrefillJob] = useState("");
   const [toast, setToast] = useState(null);
+  const [convoFrom, setConvoFrom] = useState(null);
+  const [otherReadAt, setOtherReadAt] = useState(null);
+  const [readIds, setReadIds] = useState(() => { try { return JSON.parse(localStorage.getItem("vh_notif_read_" + user.id) || "[]"); } catch (e) { return []; } });
 
   const [artisans, setArtisans] = useState([]);
   const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
@@ -395,6 +400,16 @@ function MainApp({ auth, intent }) {
 
   const onlineNow = artisans.filter((a) => a.online);
   const activeRequest = requests.find((r) => r.id === activeRequestId);
+  const notifications = useMemo(() => buildNotifications(requests, user), [requests, user.id]);
+  const unreadNotifs = notifications.filter((n) => notifUnread(n, readIds)).length;
+  const unreadMessages = requests.reduce((n, r) => n + (r.unreadCount || 0), 0);
+  function markRead(ids) {
+    setReadIds((prev) => {
+      const next = [...new Set([...prev, ...ids])].slice(-300);
+      try { localStorage.setItem("vh_notif_read_" + user.id, JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+  }
 
   async function openArtisanProfile(a, origin = "home") {
     setProfileOrigin(origin);
@@ -426,10 +441,13 @@ function MainApp({ auth, intent }) {
       setView("requestSent");
     } catch (e) { fail(e); }
   }
-  async function openConversation(requestId) {
+  async function openConversation(requestId, from = null) {
+    setConvoFrom(from);
     setActiveRequestId(requestId);
     setView("conversation");
-    try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); } catch (e) { fail(e); }
+    setOtherReadAt(null);
+    setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
+    try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); setOtherReadAt(d.otherReadAt || null); } catch (e) { fail(e); }
     const req = requests.find((r) => r.id === requestId);
     if (req && req.hasImage) {
       setRequestImage("loading");
@@ -442,24 +460,23 @@ function MainApp({ auth, intent }) {
   // few seconds and a transient network blip shouldn't spam the user.
   async function pollConversation(requestId) {
     try {
-      const [msgRes, reqRes] = await Promise.all([
-        api(`/api/requests/${requestId}/messages`, { token }),
-        api("/api/requests/mine", { token }),
-      ]);
+      const msgRes = await api(`/api/requests/${requestId}/messages`, { token });
       setMessages(msgRes.messages);
+      setOtherReadAt(msgRes.otherReadAt || null);
+      const reqRes = await api("/api/requests/mine", { token });
+      let list = reqRes.requests;
       if (isArtisan) {
         const incomingRes = await api("/api/requests/incoming", { token });
-        const merged = [...incomingRes.requests, ...reqRes.requests].filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i);
-        setRequests(merged);
-      } else {
-        setRequests(reqRes.requests);
+        list = [...incomingRes.requests, ...reqRes.requests].filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i);
       }
+      setRequests(list.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
     } catch (e) { /* silent — next poll will retry */ }
   }
   async function sendMessage(requestId, text) {
     try {
       const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
       setMessages((prev) => [...prev, d.message]);
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: d.message } : r)));
     } catch (e) { fail(e); }
   }
   async function respondToRequest(requestId, status) {
@@ -535,9 +552,9 @@ function MainApp({ auth, intent }) {
             onPickTrade={(id) => { setTradeFilter(id); setView("browse"); setNavTab("browse"); }}
             onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("browse"); }}
             onOpenWizard={() => setView("wizard")}
-            onOpenRequests={() => goNav("requests")}
+            onOpenRequests={() => setView("notifications")}
             onOpenMe={() => goNav("profile")}
-            hasAlerts={requests.some((r) => r.status === "PENDING" || r.status === "ACCEPTED")}
+            hasAlerts={unreadNotifs > 0}
             flash={flash}
             onLogout={logout} />
         )}
@@ -582,10 +599,16 @@ function MainApp({ auth, intent }) {
           <RequestsListView requests={requests} user={user} onOpen={openConversation}
             onRespond={respondToRequest} />
         )}
-        {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={openConversation} />}
+        {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={(id) => openConversation(id)} />}
+        {view === "notifications" && (
+          <NotificationsView items={notifications} readIds={readIds}
+            onBack={() => setView("home")}
+            onMarkAll={() => markRead(notifications.map((n) => n.id))}
+            onOpen={(n) => { markRead([n.id]); openConversation(n.requestId, "notifications"); }} />
+        )}
         {view === "conversation" && activeRequest && (
-          <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user}
-            onBack={() => setView(navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
+          <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user} otherReadAt={otherReadAt}
+            onBack={() => setView(convoFrom === "notifications" ? "notifications" : navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
             onSend={(text) => sendMessage(activeRequest.id, text)}
             onConfirm={() => confirmRequest(activeRequest.id)}
             onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
@@ -595,14 +618,14 @@ function MainApp({ auth, intent }) {
         )}
         {view === "userProfile" && (
           <UserProfileView startWithForm={intent === "artisan"} user={user} isArtisan={isArtisan} application={application}
-            incomingCount={requests.filter((r) => r.status === "PENDING").length}
+            incomingCount={requests.filter((r) => r.status === "PENDING").length} myReviews={myReviews}
             onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onLogout={logout} onBrowse={() => goNav("browse")} onViewRequests={() => goNav("requests")} />
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
-        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} />
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} />
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -629,7 +652,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
       <div className="hm-top">
         <h1 className="hm-greet">{greeting()},<br />{first}</h1>
         <div className="hm-top-r">
-          <button className="hm-bell" onClick={onOpenRequests} aria-label="Requests"><Bell size={22} />{hasAlerts && <span className="hm-bell-dot" />}</button>
+          <button className="hm-bell" onClick={onOpenRequests} aria-label="Notifications"><Bell size={22} />{hasAlerts && <span className="hm-bell-dot" />}</button>
           <button className="hm-me" onClick={onOpenMe} aria-label="Profile">{initials(user.name)}</button>
         </div>
       </div>
@@ -644,7 +667,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
         <button className="hm-card-btn" onClick={onOpenWizard}>Request a service <ArrowRight size={18} /></button>
       </div>
 
-      {isArtisan && user.artisanProfile && (
+      {false && (
         <div className="section">
           <div className="dash-card">
             <div className="dash-header">
@@ -971,41 +994,167 @@ function RequestsListView({ requests, user, onOpen, onRespond }) {
   );
 }
 
+/* ---------------- Chat helpers ---------------- */
+const reqCode = (id) => "VH-" + String(id).slice(0, 4).toUpperCase();
+function shortName(name = "") { const p = name.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; }
+function clockTime(d) { return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
+function listTime(d) {
+  const x = new Date(d), t = new Date();
+  if (x.toDateString() === t.toDateString()) return clockTime(d);
+  if (x.toDateString() === new Date(t.getTime() - 864e5).toDateString()) return "Yesterday";
+  return x.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function dayLabel(d) {
+  const x = new Date(d), t = new Date();
+  if (x.toDateString() === t.toDateString()) return "Today";
+  if (x.toDateString() === new Date(t.getTime() - 864e5).toDateString()) return "Yesterday";
+  return x.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+// One tick = sent, two ticks = the other person has opened the chat since.
+function Ticks({ read, lead }) {
+  return (
+    <svg width="17" height="11" viewBox="0 0 17 11" fill="none" stroke={read ? "#1B7F5A" : "#A39B88"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ marginLeft: lead ? 0 : 5, marginRight: lead ? 6 : 0, flexShrink: 0 }}>
+      <polyline points="1 6 4 9 10 2" />
+      {read && <polyline points="6 6 9 9 15 2" />}
+    </svg>
+  );
+}
+
+/* ---------------- Notifications ---------------- */
+// Built from the requests and messages the app already loads. Nothing new on the backend.
+function buildNotifications(requests, me) {
+  const out = [];
+  for (const r of requests) {
+    if (!r.artisanProfile || !r.student) continue;
+    const artisanSide = r.artisanProfile.user.id === me.id;
+    const other = artisanSide ? r.student : r.artisanProfile.user;
+    const first = other.name.split(" ")[0];
+    const base = { requestId: r.id, time: r.updatedAt || r.createdAt };
+    const add = (status, extra) => out.push({ ...base, id: r.id + ":" + status, ...extra });
+    if (!artisanSide) {
+      if (r.status === "ACCEPTED") add("ACCEPTED", { kind: "ok", title: `${first} accepted your request`, text: "You can message them and confirm the booking." });
+      if (r.status === "CONFIRMED") add("CONFIRMED", { kind: "job", title: "Your booking is confirmed", text: `${other.name} is booked for ${reqCode(r.id)}.` });
+      if (r.status === "COMPLETED") add("COMPLETED", r.rating
+        ? { kind: "ok", title: "Job completed", text: `Thanks for reviewing ${first}.` }
+        : { kind: "review", title: `Time to review ${first}`, text: `Your ${r.job.slice(0, 40)} job is complete. Share how it went.` });
+      if (r.status === "DECLINED") add("DECLINED", { kind: "flag", title: `${first} declined your request`, text: "Try another artisan near you." });
+      if (r.status === "CLOSED") add("CLOSED", { kind: "flag", title: "Request closed", text: "You booked another artisan for this job." });
+    } else {
+      if (r.status === "PENDING") add("PENDING", { kind: "job", title: `New request from ${first}`, text: r.job });
+      if (r.status === "CONFIRMED") add("CONFIRMED", { kind: "ok", title: `${first} confirmed the booking`, text: r.job });
+      if (r.status === "COMPLETED") add("COMPLETED", { kind: "review", title: `Job completed for ${first}`, text: r.rating ? `They rated you ${r.rating} out of 5.` : "Waiting for their review." });
+    }
+    const m = r.lastMessage;
+    if (m && m.senderType !== "SYSTEM" && m.senderId !== me.id) {
+      out.push({ ...base, id: `m:${r.id}:${m.id}`, time: m.createdAt, kind: "msg", autoRead: r.unreadCount === 0, title: `${first} sent a message`, text: m.text });
+    }
+  }
+  return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
+}
+const notifUnread = (n, readIds) => !n.autoRead && !readIds.includes(n.id);
+
+const NOTIF_STYLE = {
+  msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
+  job: { icon: Zap, bg: "#E3EFE9", fg: "#0F4D3A" },
+  ok: { icon: Check, bg: "#E3EFE9", fg: "#0F4D3A" },
+  review: { icon: Star, bg: "#FBEBC8", fg: "#8A5A12" },
+  flag: { icon: Flag, bg: "#F8E1DB", fg: "#A8402D" },
+};
+
+function NotificationsView({ items, readIds, onBack, onMarkAll, onOpen }) {
+  const today = new Date().toDateString();
+  const groups = [
+    ["Today", items.filter((n) => new Date(n.time).toDateString() === today)],
+    ["Earlier", items.filter((n) => new Date(n.time).toDateString() !== today)],
+  ].filter(([, list]) => list.length);
+  const anyUnread = items.some((n) => notifUnread(n, readIds));
+  return (
+    <div className="screen nf">
+      <div className="nf-top">
+        <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+        {anyUnread && <button className="nf-all" onClick={onMarkAll}>Mark all as read</button>}
+      </div>
+      <h1 className="nf-h">Notifications</h1>
+      {items.length === 0 && <div className="nf-empty"><b>You're all caught up.</b>Updates about your requests and messages show up here.</div>}
+      {groups.map(([label, list]) => (
+        <div key={label}>
+          <div className="nf-label">{label.toUpperCase()}</div>
+          <div className="nf-card">
+            {list.map((n) => { const s = NOTIF_STYLE[n.kind]; const I = s.icon; const unread = notifUnread(n, readIds); return (
+              <button key={n.id} className={"nf-item" + (unread ? " nf-item--new" : "")} onClick={() => onOpen(n)}>
+                <span className="nf-ic" style={{ background: s.bg, color: s.fg }}><I size={20} /></span>
+                <span className="nf-body"><b>{n.title}</b><span>{n.text}</span><small>{listTime(n.time)}</small></span>
+                {unread && <i className="nf-dot" />}
+              </button>
+            ); })}
+          </div>
+        </div>
+      ))}
+      {items.length > 0 && <p className="nf-foot">Email alerts are coming soon.</p>}
+    </div>
+  );
+}
+
 /* ---------------- Messages tab ---------------- */
 function MessagesListView({ requests, user, onOpen }) {
+  const [tab, setTab] = useState("active");
+  const [q, setQ] = useState("");
+  const done = (r) => ["COMPLETED", "DECLINED", "CLOSED"].includes(r.status);
+  const rows = requests
+    .map((r) => {
+      const artisanSide = r.artisanProfile.user.id === user.id;
+      const other = artisanSide ? r.student : r.artisanProfile.user;
+      return { r, other, name: artisanSide ? shortName(other.name) : other.name, at: (r.lastMessage && r.lastMessage.createdAt) || r.updatedAt || r.createdAt };
+    })
+    .filter((x) => (tab === "past" ? done(x.r) : !done(x.r)))
+    .filter((x) => !q.trim() || `${x.other.name} ${x.r.job} ${reqCode(x.r.id)}`.toLowerCase().includes(q.trim().toLowerCase()))
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
   return (
-    <div className="screen">
-      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Messages</div></div>
-      <div className="feed feed--scroll">
-        {requests.length === 0 && <div className="empty"><div className="empty-title">No conversations yet</div></div>}
-        {requests.map((r) => {
-          const iAmArtisanSide = r.artisanProfile.user.id === user.id;
-          const name = iAmArtisanSide ? r.student.name : r.artisanProfile.user.name;
+    <div className="screen ms">
+      <h1 className="ms-h">Messages</h1>
+      <div className="ms-seg">
+        <button className={tab === "active" ? "on" : ""} onClick={() => setTab("active")}>Active jobs</button>
+        <button className={tab === "past" ? "on" : ""} onClick={() => setTab("past")}>Past jobs</button>
+      </div>
+      <label className="ms-search"><Search size={18} /><input placeholder="Search by name or job" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+      <div className="ms-list">
+        {rows.map(({ r, other, name, at }) => {
+          const m = r.lastMessage;
+          const unread = r.unreadCount || 0;
+          const mine = !!m && m.senderId === user.id;
+          const [bg, fg] = tintFor(other.id || r.id);
+          const preview = m ? (m.senderType === "SYSTEM" ? m.text : (mine ? "You: " : "") + m.text) : r.job;
           return (
-            <button key={r.id} className="msg-row" onClick={() => onOpen(r.id)}>
-              <div className="avatar avatar--md" style={{ background: colorFor(r.id) }}>{initials(name)}</div>
-                <div className="msg-main">
-                <div className="msg-top"><span className="msg-name">{name}</span></div>
-                <div className="msg-preview">{r.hasImage && <Camera size={11} style={{ marginRight: 4, verticalAlign: "-1px" }} />}{r.job}</div>
-              </div>
+            <button key={r.id} className={"ms-row" + (unread ? " ms-row--new" : "")} onClick={() => onOpen(r.id)}>
+              <span className="ms-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+              <span className="ms-main">
+                <span className="ms-top"><b>{name}</b><time className={unread ? "new" : ""}>{listTime(at)}</time></span>
+                <span className="ms-sub">{tradeLabel(r.artisanProfile.trade)} · {reqCode(r.id)}</span>
+                <span className="ms-prev">
+                  <span className={"ms-txt" + (unread ? " new" : "")}>{mine && <Ticks lead read={!!m.read} />}<span className="ms-t">{preview}</span></span>
+                  {unread > 0 && <span className="ms-count">{unread}</span>}
+                </span>
+              </span>
             </button>
           );
         })}
+        {rows.length === 0 && <div className="ms-empty"><b>No conversations here.</b>Chats open when you send or receive a request.</div>}
       </div>
+      <div className="ms-note"><ShieldCheck size={18} /><span>Chats are tied to a job. Keep everything in VettedHands so reports can be investigated.</span></div>
     </div>
   );
 }
 
 /* ---------------- Conversation ---------------- */
-function ConversationView({ request, messages, requestImage, user, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll }) {
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onConfirm, onComplete, onReport, onRespond, onPoll }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
-  // Poll for new messages/status while this conversation is open — no websockets yet,
-  // so this is what keeps both sides roughly in sync without a manual refresh.
+  // Poll for new messages/status while this conversation is open. No websockets yet.
   useEffect(() => {
     const id = setInterval(() => { onPoll(request.id); }, 4000);
     return () => clearInterval(id);
@@ -1014,26 +1163,47 @@ function ConversationView({ request, messages, requestImage, user, onBack, onSen
   const iAmArtisanSide = request.artisanProfile.user.id === user.id;
   const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
   const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
+  const readUpTo = otherReadAt ? new Date(otherReadAt).getTime() : 0;
+  const [bg, fg] = tintFor(other.id || request.id);
+  const online = request.artisanProfile.online;
+  const sub = iAmArtisanSide ? "Customer" : `${tradeLabel(request.artisanProfile.trade)}${typeof online === "boolean" ? (online ? " · Online" : " · Offline") : ""}`;
+  const quick = iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["What time will you arrive?", "Please call me", "Thank you!"];
+  function send(t) { const v = t.trim(); if (v) { onSend(v); setText(""); } }
+  let lastDay = null;
 
   return (
-    <div className="screen">
-      <div className="topbar">
-        <button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button>
-        <div className="topbar-title">{other.name}</div>
-        <div className="avatar avatar--sm" style={{ background: colorFor(request.id) }}>{initials(other.name)}</div>
+    <div className="screen cv">
+      <div className="cv-head">
+        <button className="cv-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+        <span className="cv-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+        <div className="cv-who">
+          <div className="cv-name">{other.name}{!iAmArtisanSide && <ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />}</div>
+          <div className="cv-sub">{sub}</div>
+        </div>
+        {canAct && <button className="cv-flag" onClick={() => setShowReport(true)} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
-      <div className="convo-status"><span className={"status-badge " + meta.cls}>{meta.label}</span><span className="convo-job">{request.job}</span></div>
+      <div className="cv-strip">{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {meta.label}<small>{request.job}</small></div>
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
       {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" />}
 
-      <div className="convo-messages">
-        {messages.map((m) => (
-          <div key={m.id} className={"bubble-row " + (m.senderType === "SYSTEM" ? "bubble-row--sys" : m.senderId === user.id ? "bubble-row--me" : "bubble-row--them")}>
-            {m.senderType === "SYSTEM"
-              ? <div className="bubble-sys">{m.text}</div>
-              : <div className={"bubble " + (m.senderId === user.id ? "bubble--me" : "bubble--them")}>{m.text}</div>}
-          </div>
-        ))}
+      <div className="cv-msgs">
+        {messages.map((m) => {
+          const day = new Date(m.createdAt).toDateString();
+          const showDay = day !== lastDay; lastDay = day;
+          const sys = m.senderType === "SYSTEM";
+          const mine = !sys && m.senderId === user.id;
+          return (
+            <React.Fragment key={m.id}>
+              {showDay && <div className="cv-day"><span>{dayLabel(m.createdAt)}</span></div>}
+              {sys ? <div className="cv-sys">{m.text}</div> : (
+                <div className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
+                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them")}>{m.text}</div>
+                  <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
         {request.status === "COMPLETED" && request.rating && (
           <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> Rated {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
         )}
@@ -1065,15 +1235,14 @@ function ConversationView({ request, messages, requestImage, user, onBack, onSen
       )}
       {showComplete && <CompletionForm onCancel={() => setShowComplete(false)} onSubmit={(r, t) => { onComplete(r, t); setShowComplete(false); }} />}
 
-      {canAct && !showReport && (
-        <button className="report-link" onClick={() => setShowReport(true)}><Flag size={13} /> Report a problem</button>
-      )}
       {showReport && <ReportForm reasons={iAmArtisanSide ? reportReasonsArtisan : reportReasonsCustomer} onCancel={() => setShowReport(false)} onSubmit={(reason, note) => { onReport(reason, note); setShowReport(false); }} />}
 
-      <form className="convo-input" onSubmit={(e) => { e.preventDefault(); if (text.trim()) { onSend(text.trim()); setText(""); } }}>
-        <input placeholder="Type a message…" value={text} onChange={(e) => setText(e.target.value)} />
-        <button type="submit" className="send-btn"><Send size={16} /></button>
+      {canAct && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
+      <form className="cv-input" onSubmit={(e) => { e.preventDefault(); send(text); }}>
+        <input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
+        <button type="submit" className="cv-send" disabled={!text.trim()} aria-label="Send"><Send size={18} /></button>
       </form>
+      <div className="cv-safe">Never share your PIN or send money outside VettedHands.</div>
     </div>
   );
 }
@@ -1148,7 +1317,7 @@ function fileToDataUrl(file, maxDim = 1000, quality = 0.7) {
   });
 }
 
-function UserProfileView({ startWithForm, user, isArtisan, application, incomingCount,onApply, onToggleOnline, onSetBadge, onAddPhoto, onRemovePhoto, onLogout, onBrowse, onViewRequests }) {
+function UserProfileView({ startWithForm, user, isArtisan, application, incomingCount, myReviews = [], onApply,onToggleOnline, onSetBadge, onAddPhoto, onRemovePhoto, onLogout, onBrowse, onViewRequests }) {
   const [showForm, setShowForm] = useState(!!startWithForm);
   const [trade, setTrade] = useState(trades[0].id);
   const [bio, setBio] = useState("");
@@ -1180,13 +1349,53 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
 
   return (
     <div className="screen">
-      <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Profile</div></div>
-      <div className="profile-hero">
-        <div className="avatar avatar--lg" style={{ background: "#0F4D3A" }}>{initials(user.name)}</div>
-        <div className="profile-name">{user.name}</div>
-        <div className="profile-trade">{user.email}{user.area ? ` · ${user.area}` : ""}</div>
-        <div className="badge badge--lg" style={{ marginTop: 8 }}>{user.role}</div>
-      </div>
+      {isArtisan && user.artisanProfile ? (
+        <>
+          <div className="pf-hero">
+            <div className="pf-title">Profile</div>
+            <div className="pf-id">
+              <span className="pf-av">{initials(user.name)}</span>
+              <div>
+                <div className="pf-name">{user.name}</div>
+                <div className="pf-trade">{tradeLabel(user.artisanProfile.trade)} · {user.artisanProfile.area}</div>
+              </div>
+            </div>
+            <div className="pf-pills">
+              <span className="pf-pill"><ShieldCheck size={14} /> Vetted Artisan</span>
+              {user.artisanProfile.badge === "TOP_RATED" && <span className="pf-pill pf-pill--gold"><Award size={14} /> Top Rated</span>}
+            </div>
+          </div>
+          <div className="pf-stats">
+            <div className="pf-stat"><b>{fmtStars(user.artisanProfile.rating)}</b><span>Rating</span></div>
+            <div className="pf-stat"><b>{user.artisanProfile.jobsCompleted}</b><span>Jobs completed</span></div>
+            <div className="pf-stat"><b>{incomingCount}</b><span>New requests</span></div>
+          </div>
+          {myReviews.length > 0 && (
+            <div className="section">
+              <div className="section-head"><span>Latest review</span></div>
+              <div className="review-list">
+                {myReviews.slice(0, 1).map((r) => (
+                  <div key={r.id} className="review-item">
+                    <div className="review-stars">{Array.from({ length: 5 }).map((_, i) => <Star key={i} size={12} fill={i < r.rating ? "#B5651D" : "none"} stroke={i < r.rating ? "#B5651D" : "#C9BFAB"} />)}</div>
+                    <div className="review-text">"{r.reviewText}"</div>
+                    <div className="review-author">— {r.student && r.student.name ? r.student.name.split(" ")[0] : "Customer"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="topbar"><div className="topbar-title" style={{ textAlign: "left", paddingLeft: 4 }}>Profile</div></div>
+          <div className="profile-hero">
+            <div className="avatar avatar--lg" style={{ background: "#0F4D3A" }}>{initials(user.name)}</div>
+            <div className="profile-name">{user.name}</div>
+            <div className="profile-trade">{user.email}{user.area ? ` · ${user.area}` : ""}</div>
+            <div className="badge badge--lg" style={{ marginTop: 8 }}>{user.role}</div>
+          </div>
+        </>
+      )}
 
       {isArtisan && user.artisanProfile && (
         <div className="section">
@@ -1306,12 +1515,12 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
 }
 
 /* ---------------- Bottom nav ---------------- */
-function BottomNav({ active, onChange, isArtisan, requestCount }) {
+function BottomNav({ active, onChange, isArtisan, requestCount, messageCount }) {
   const items = [
     { id: "home", label: "Home", icon: Home },
     { id: "browse", label: "Browse", icon: Compass },
     { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
-    { id: "messages", label: "Messages", icon: MessageCircle, badge: requestCount },
+    { id: "messages", label: "Messages", icon: MessageCircle, badge: messageCount },
     { id: "profile", label: "Profile", icon: UserIcon },
   ];
   return (
@@ -1595,6 +1804,103 @@ function Style() {
       .hm-empty button { background:none; border:none; color:var(--primary); font-weight:700; font-family:inherit; cursor:pointer; text-decoration:underline; }
       .hm-all { margin:16px auto 0; background:none; border:none; color:var(--primary); font-family:inherit; font-size:14.5px; font-weight:700; display:flex; align-items:center; gap:3px; cursor:pointer; }
       @media (max-width:360px) { .hm-greet { font-size:26px; } .hm-tile { font-size:11px; } .hm-on { font-size:11.5px; padding:6px 9px; } }
+
+      /* ===== Artisan profile header ===== */
+      .pf-hero { background:linear-gradient(135deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; border-radius:0 0 28px 28px; padding:calc(18px + env(safe-area-inset-top)) 20px 62px; }
+      .pf-title { font-size:15px; font-weight:600; opacity:.8; margin-bottom:18px; }
+      .pf-id { display:flex; align-items:center; gap:16px; }
+      .pf-av { width:76px; height:76px; border-radius:50%; background:#E3EFE9; color:#0F4D3A; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; flex-shrink:0; }
+      .pf-name { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:25px; line-height:1.1; letter-spacing:-0.01em; }
+      .pf-trade { color:rgba(244,239,224,.75); font-size:14.5px; margin-top:5px; }
+      .pf-pills { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+      .pf-pill { display:inline-flex; align-items:center; gap:6px; background:rgba(244,239,224,.14); border-radius:999px; padding:7px 12px; font-size:13px; font-weight:700; }
+      .pf-pill--gold { background:#FBEBC8; color:#8A5A12; }
+      .pf-stats { display:flex; background:var(--surface); border:1px solid var(--line); border-radius:18px; margin:-40px 16px 0; padding:16px 0; box-shadow:0 10px 24px -18px rgba(30,27,22,.35); position:relative; }
+      .pf-stat { flex:1; text-align:center; display:flex; flex-direction:column; gap:3px; }
+      .pf-stat:not(:last-child) { border-right:1px solid var(--line); }
+      .pf-stat b { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:23px; color:var(--primary); }
+      .pf-stat span { font-size:12.5px; color:var(--ink-soft); }
+
+      /* ===== Notifications ===== */
+      .nf { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
+      .nf-top { display:flex; align-items:center; justify-content:space-between; min-height:40px; }
+      .nf-back { background:none; border:none; color:var(--ink); width:40px; height:40px; margin-left:-10px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .nf-all { background:none; border:none; color:var(--primary); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; }
+      .nf-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:32px; letter-spacing:-0.02em; margin:8px 0 22px; }
+      .nf-label { font-size:12px; font-weight:700; letter-spacing:.08em; color:var(--ink-soft); margin:0 0 10px; }
+      .nf-card { background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; margin-bottom:24px; }
+      .nf-item { display:flex; align-items:flex-start; gap:14px; width:100%; text-align:left; background:var(--surface); border:none; border-bottom:1px solid var(--line); padding:16px; font-family:inherit; cursor:pointer; }
+      .nf-item:last-child { border-bottom:none; }
+      .nf-item--new { background:#F3F8F5; }
+      .nf-ic { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .nf-body { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
+      .nf-body b { font-size:16px; color:var(--ink); }
+      .nf-body span { font-size:14.5px; color:var(--ink-soft); line-height:1.4; }
+      .nf-body small { font-size:13px; color:var(--ink-soft); margin-top:2px; }
+      .nf-dot { width:10px; height:10px; border-radius:50%; background:var(--primary); margin-top:6px; flex-shrink:0; }
+      .nf-empty { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:32px 22px; text-align:center; color:var(--ink-soft); line-height:1.5; }
+      .nf-empty b { display:block; color:var(--ink); font-size:17px; margin-bottom:4px; }
+      .nf-foot { text-align:center; color:var(--ink-soft); font-size:13.5px; margin:6px 0 0; }
+
+      /* ===== Messages ===== */
+      .ms { padding:calc(22px + env(safe-area-inset-top)) 20px 28px; }
+      .ms-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:32px; letter-spacing:-0.02em; margin:0 0 18px; }
+      .ms-seg { display:flex; background:#E9E2D0; border-radius:14px; padding:5px; margin-bottom:14px; }
+      .ms-seg button { flex:1; border:none; background:transparent; padding:12px 8px; border-radius:10px; font-family:inherit; font-size:15px; font-weight:700; color:var(--ink-soft); cursor:pointer; }
+      .ms-seg button.on { background:var(--surface); color:var(--primary); box-shadow:0 1px 3px rgba(20,32,27,.12); }
+      .ms-search { display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:13px 14px; color:var(--ink-soft); margin-bottom:16px; }
+      .ms-search input { flex:1; border:none; outline:none; background:transparent; font-family:inherit; font-size:15.5px; color:var(--ink); min-width:0; }
+      .ms-list { background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
+      .ms-row { display:flex; gap:14px; width:100%; text-align:left; background:var(--surface); border:none; border-bottom:1px solid var(--line); padding:16px; font-family:inherit; cursor:pointer; }
+      .ms-row:last-child { border-bottom:none; }
+      .ms-row--new { background:#F3F8F5; }
+      .ms-av { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:18px; flex-shrink:0; }
+      .ms-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+      .ms-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+      .ms-top b { font-size:17px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ms-top time { font-size:13.5px; color:var(--ink-soft); flex-shrink:0; }
+      .ms-top time.new { color:var(--primary); font-weight:700; }
+      .ms-sub { font-size:13px; font-weight:600; color:var(--primary); }
+      .ms-prev { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:2px; }
+      .ms-txt { font-size:15px; color:var(--ink-soft); display:flex; align-items:center; min-width:0; }
+      .ms-txt.new { color:var(--ink); font-weight:700; }
+      .ms-t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+      .ms-count { min-width:24px; height:24px; padding:0 7px; border-radius:999px; background:var(--primary); color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .ms-empty { padding:36px 20px; text-align:center; color:var(--ink-soft); line-height:1.5; }
+      .ms-empty b { display:block; color:var(--ink); margin-bottom:4px; }
+      .ms-note { display:flex; gap:12px; align-items:flex-start; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:16px; margin-top:18px; font-size:14px; line-height:1.5; }
+      .ms-note svg { margin-top:2px; }
+
+      /* ===== Conversation ===== */
+      .cv { padding:0; min-height:0; }
+      .cv-head { display:flex; align-items:center; gap:12px; padding:calc(10px + env(safe-area-inset-top)) 16px 10px 8px; background:var(--bg); }
+      .cv-back { background:none; border:none; color:var(--ink); width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+      .cv-av { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:15px; flex-shrink:0; }
+      .cv-who { flex:1; min-width:0; }
+      .cv-name { display:flex; align-items:center; gap:6px; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:18px; line-height:1.15; }
+      .cv-sub { font-size:13.5px; color:var(--ink-soft); margin-top:1px; }
+      .cv-flag { background:none; border:none; color:var(--danger); width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .cv-strip { background:#E3EFE9; color:var(--primary); padding:11px 16px; font-size:13.5px; font-weight:700; display:flex; flex-direction:column; gap:2px; }
+      .cv-strip small { font-size:12.5px; font-weight:500; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .cv-msgs { flex:1; min-height:240px; overflow-y:auto; background:#EFE9DA; padding:16px 14px; display:flex; flex-direction:column; gap:6px; }
+      .cv-day { align-self:center; margin:6px 0; }
+      .cv-day span { background:#E1D9C5; color:var(--ink-soft); font-size:12.5px; font-weight:600; padding:4px 12px; border-radius:999px; }
+      .cv-sys { align-self:center; text-align:center; font-size:12.5px; color:var(--ink-soft); max-width:300px; line-height:1.4; margin:4px 0 8px; }
+      .cv-row { display:flex; flex-direction:column; max-width:80%; margin-bottom:6px; }
+      .cv-row--me { align-self:flex-end; align-items:flex-end; }
+      .cv-row--them { align-self:flex-start; align-items:flex-start; }
+      .cv-bubble { padding:12px 15px; border-radius:18px; font-size:16px; line-height:1.4; word-break:break-word; }
+      .cv-bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:6px; }
+      .cv-bubble--them { background:var(--surface); color:var(--ink); border-bottom-left-radius:6px; }
+      .cv-time { display:flex; align-items:center; font-size:12px; color:var(--ink-soft); margin:4px 4px 0; }
+      .cv-quick { display:flex; gap:8px; overflow-x:auto; padding:10px 14px 4px; background:var(--bg); }
+      .cv-quick button { flex-shrink:0; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:10px 16px; font-family:inherit; font-size:14.5px; font-weight:600; color:var(--ink); cursor:pointer; }
+      .cv-input { display:flex; gap:10px; padding:10px 14px 4px; background:var(--bg); }
+      .cv-input input { flex:1; min-width:0; border:none; outline:none; background:#EDE5D1; border-radius:999px; padding:14px 18px; font-family:inherit; font-size:16px; color:var(--ink); }
+      .cv-send { width:48px; height:48px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+      .cv-send:disabled { opacity:.4; cursor:default; }
+      .cv-safe { text-align:center; font-size:12px; color:var(--ink-soft); padding:6px 16px 12px; background:var(--bg); }
+      @media (min-width:760px) { .cv-msgs { max-height:calc(100vh - 360px); } }
 
       /* Login / loading screens: dark branded background */
       .phone > .screen--center { background:linear-gradient(160deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; }
