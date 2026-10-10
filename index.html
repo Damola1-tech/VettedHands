@@ -432,7 +432,7 @@ function MainApp({ auth, intent }) {
   // Background refresh of requests every 8s so the nav badge count and requests/messages
   // lists stay roughly current even when the user isn't actively viewing a conversation.
   useEffect(() => {
-    const id = setInterval(() => { loadRequests(); }, 8000);
+    const id = setInterval(() => { if (!document.hidden) loadRequests(); }, 15000);
     return () => clearInterval(id);
   }, []);
 
@@ -539,19 +539,14 @@ function MainApp({ auth, intent }) {
   }
   // Silent background refresh — no toast/flash on failure, since this fires every
   // few seconds and a transient network blip shouldn't spam the user.
-  async function pollConversation(requestId) {
+    async function pollConversation(requestId) {
+    if (document.hidden) return;
     try {
       const msgRes = await api(`/api/requests/${requestId}/messages`, { token });
       setMessages(msgRes.messages);
       setOtherReadAt(msgRes.otherReadAt || null);
-      const reqRes = await api("/api/requests/mine", { token });
-      let list = reqRes.requests;
-      if (isArtisan) {
-        const incomingRes = await api("/api/requests/incoming", { token });
-        list = [...incomingRes.requests, ...reqRes.requests].filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i);
-      }
-      setRequests(list.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
-    } catch (e) { /* silent — next poll will retry */ }
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
+    } catch (e) { /* silent */ }
   }
   async function sendMessage(requestId, text) {
     try {
