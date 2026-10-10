@@ -767,7 +767,7 @@ function MainApp({ auth, intent }) {
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
-        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} />
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report"].includes(view)} />
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -2567,7 +2567,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
 }
 
 /* ---------------- Bottom nav ---------------- */
-function BottomNav({ active, onChange, isArtisan, requestCount, messageCount }) {
+function BottomNav({ active, onChange, isArtisan, requestCount, messageCount, hide }) {
   const items = [
     { id: "home", label: "Home", icon: Home },
     { id: "requests", label: "Requests", icon: ClipboardList, badge: requestCount },
@@ -2575,7 +2575,7 @@ function BottomNav({ active, onChange, isArtisan, requestCount, messageCount }) 
     { id: "profile", label: "Profile", icon: UserIcon },
   ];
   return (
-    <div className="bottomnav">
+    <div className={"bottomnav" + (hide ? " bottomnav--hide" : "")}>
       {items.map((it) => { const I = it.icon; const isActive = active === it.id; return (
         <button key={it.id} className={"nav-item" + (isActive ? " nav-item--active" : "")} onClick={() => onChange(it.id)}>
           <span className="nav-icon-wrap"><I size={19} strokeWidth={isActive ? 2.4 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
@@ -3392,6 +3392,25 @@ function Style() {
       .hp-more .w { background:#fff; color:var(--primary); border:none; }
       .hp-more .o { background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,.5); }
       .hp-emg { display:flex; gap:12px; background:#F8E3DD; color:var(--danger); border-radius:14px; padding:14px; margin-top:16px; font-size:14.5px; line-height:1.45; }
+
+      /* ===== App-style nav, fit-to-screen, form fixes ===== */
+      html, body { height:100%; overscroll-behavior-y:none; -webkit-text-size-adjust:100%; }
+      button, a, label { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+      input, textarea, select { font-size:16px !important; }
+      .rf > * { flex-shrink:0; }
+      .rf-text { min-height:112px; }
+      @media (max-width: 759px) {
+        .phone { position:relative; }
+        .content { padding-bottom:calc(92px + env(safe-area-inset-bottom)); }
+        .content:has(+ .bottomnav--hide) { padding-bottom:0; }
+        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:rgba(255,255,255,.97); border:1px solid var(--line); border-radius:999px; box-shadow:0 14px 30px -12px rgba(20,32,27,.4); }
+        .phone .bottomnav--hide { display:none; }
+        .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:11px; font-weight:600; color:var(--ink-soft); }
+        .phone .nav-item--active { background:var(--primary); color:#fff; }
+        .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
+        .phone .nav-badge { top:-6px; right:-10px; }
+        .toast { bottom:calc(100px + env(safe-area-inset-bottom)); }
+      }
 
       @media (max-width: 480px) {
         .app { padding: 0; }
