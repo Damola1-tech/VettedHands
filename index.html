@@ -767,7 +767,7 @@ function MainApp({ auth, intent }) {
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
-        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report"].includes(view)} />
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report"].includes(view) || (view === "userProfile" && applyOpen)} />
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -851,7 +851,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
         ); })}
       </div>
 
-      <div className="hm-sec-head"><h3 className="hm-h">Available near you</h3><span>Ready today</span></div>
+      <div className="hm-sec-head"><h3 className="hm-h">Available near you</h3><button className="hm-see" onClick={onSeeAll}>See all <ChevronRight size={14} /></button></div>
       <div className="hm-list">
         {onlineNow.slice(0, 3).map((a) => { const [bg, fg] = tintFor(a.id); return (
           <button key={a.id} className="hm-ac" onClick={() => onOpenProfile(a)}>
@@ -2839,7 +2839,7 @@ function Style() {
       .hm-tile--soon { opacity:.6; }
       .hm-sec-head { display:flex; align-items:baseline; justify-content:space-between; margin:28px 0 14px; }
       .hm-sec-head .hm-h { margin:0; }
-      .hm-sec-head span { color:var(--ink-soft); font-size:12.5px; }
+      .hm-see { background:none; border:none; color:var(--primary); font-family:inherit; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:2px; cursor:pointer; padding:6px 0 6px 10px; }
       .hm-list { display:flex; flex-direction:column; gap:12px; }
       .hm-ac { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; text-align:left; font-family:inherit; cursor:pointer; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
       .hm-ac-top { display:flex; align-items:center; gap:14px; }
@@ -3402,8 +3402,8 @@ function Style() {
       .rf-text { min-height:112px; }
       @media (max-width: 759px) {
         .phone { position:relative; }
-        .content { padding-bottom:calc(92px + env(safe-area-inset-bottom)); }
-        .content:has(+ .bottomnav--hide) { padding-bottom:0; }
+        .content::after { content:""; display:block; flex:0 0 calc(96px + env(safe-area-inset-bottom)); }
+        .content:has(+ .bottomnav--hide)::after { display:none; }
         .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:rgba(255,255,255,.97); border:1px solid var(--line); border-radius:999px; box-shadow:0 14px 30px -12px rgba(20,32,27,.4); }
         .phone .bottomnav--hide { display:none; }
         .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:11px; font-weight:600; color:var(--ink-soft); }
