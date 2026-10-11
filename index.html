@@ -182,7 +182,7 @@ function useAuth() {
   useEffect(() => {
     if (!token) { setLoading(false); return; }
     api("/api/auth/me", { token })
-      .then((d) => setUser(d.user))
+      .then((d) => { if (d.token && tokenRole(token) !== d.user.role) { localStorage.setItem("vh_token", d.token); setToken(d.token); } setUser(d.user); })
       .catch(() => { localStorage.removeItem("vh_token"); setToken(null); })
       .finally(() => setLoading(false));
   }, [token]);
@@ -206,7 +206,7 @@ function useAuth() {
     setToken(null);
     setUser(null);
   }
-  return { token, user, setUser, loading, error, login, register, logout };
+  return { token, setToken, user, setUser, loading, error, login, register, logout };
 }
 
 function Landing({ onSignIn, onStart }) {
@@ -347,7 +347,7 @@ function App() {
 }
 
 function MainApp({ auth, intent }) {
-  const { user, token, logout, setUser } = auth;
+  const { user, token, logout, setUser, setToken } = auth;
   const isArtisan = user.role === "ARTISAN";
   const isAdmin = user.role === "ADMIN";
 
@@ -445,7 +445,7 @@ function MainApp({ auth, intent }) {
         setApplication(d.application);
         if (d.application && d.application.status === "APPROVED") {
           const me = await api("/api/auth/me", { token });
-          if (me.user.role === "ARTISAN") setUser(me.user);
+          if (me.user.role === "ARTISAN") { if (me.token) { localStorage.setItem("vh_token", me.token); setToken(me.token); } setUser(me.user); }
         }
       } catch (e) { /* silent */ }
     }, 20000);
@@ -652,7 +652,8 @@ function MainApp({ auth, intent }) {
           <ArtisanHome user={user} requests={requests} myReviews={myReviews}
             onToggleOnline={toggleOnline} onOpenNotifs={() => setView("notifications")} hasAlerts={unreadNotifs > 0}
             onOpenMe={() => goNav("profile")} onRespond={respondToRequest}
-            onOpenTrack={(id) => openTrack(id)} onOpenRequests={() => goNav("requests")} />
+            onOpenTrack={(id) => openTrack(id)} onOpenRequests={() => goNav("requests")}
+            onRequestArtisan={() => { setWiz({ ...blankWiz }); setView("wizard"); }} />
         )}
         {view === "home" && !(isArtisan && user.artisanProfile) && (
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
@@ -763,7 +764,7 @@ function MainApp({ auth, intent }) {
             incomingCount={requests.filter((r) => r.status === "PENDING").length} myReviews={myReviews}
             onApply={applyAsArtisan} onToggleOnline={toggleOnline} onSetBadge={setBadge}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
-            onLogout={logout} onBrowse={() => goNav("browse")} onViewRequests={() => goNav("requests")} />
+            onLogout={logout} onBrowse={() => goNav("browse")} onRequestArtisan={() => { setWiz({ ...blankWiz }); setView("wizard"); }} onViewRequests={() => goNav("requests")} />
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
@@ -872,7 +873,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
         ); })}
         {onlineNow.length === 0 && <div className="hm-empty">No one is available right now. <button onClick={onSeeAll}>Browse all artisans</button></div>}
       </div>
-      {onlineNow.length > 0 && <button className="hm-all" onClick={onSeeAll}>See all artisans <ChevronRight size={15} /></button>}
+      <button className="hm-all" onClick={onOpenWizard}>Request an artisan <ChevronRight size={15} /></button>
     </div>
   );
 }
@@ -1303,8 +1304,8 @@ function statusMeta(status) {
 function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
-  if (s === "ACCEPTED") return ["Accepted", "blue"];
-  if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : ["In progress", "green"];
+  if (s === "ACCEPTED") return artisanSide ? ["Accepted", "blue"] : ["Confirm booking", "amber"];
+  if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : r.startedAt ? ["In progress", "green"] : ["Booked", "green"];
   if (s === "COMPLETED") return ["Completed", "dark"];
   if (s === "DECLINED") return ["Declined", "red"];
   return ["Closed", "grey"];
@@ -1357,8 +1358,9 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
                   <button className="a" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
                 </div>
               )}
-              {artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "start")}>Start job</button></div>}
-              {artisanSide && r.status === "CONFIRMED" && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "done")}>Mark completed</button></div>}
+              {!artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onOpen(r.id)}>Review and confirm booking</button></div>}
+              {artisanSide && r.status === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "start")}>Start job</button></div>}
+              {artisanSide && r.status === "CONFIRMED" && r.startedAt && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "done")}>Mark completed</button></div>}
               <div className="rq-foot">
                 <button className="rq-link" onClick={() => onOpen(r.id)}>{r.status === "CONFIRMED" ? "Track job" : "View status"}<ChevronRight size={18} /></button>
               </div>
@@ -1390,18 +1392,20 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
 }
 
 /* ---------------- Request tracking ---------------- */
-function TrackView({ request: r, user, onBack, onMessage, onRespond, onStart, onDone, onReview, onReport }) {
+function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport }) {
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const ap = r.artisanProfile;
   const artisanSide = ap.user.id === user.id;
   const other = artisanSide ? r.student : ap.user;
   const first = other.name.split(" ")[0];
   const s = r.status;
   const ended = s === "DECLINED" || s === "CLOSED";
-  const working = s === "CONFIRMED" && !r.artisanDoneAt;
+  const booked = s === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt;
+  const working = s === "CONFIRMED" && !!r.startedAt && !r.artisanDoneAt;
   const waitingConfirm = s === "CONFIRMED" && !!r.artisanDoneAt;
-  const done = ended || s === "PENDING" ? 1 : s === "ACCEPTED" || working ? 2 : waitingConfirm ? 3 : 5;
-  const current = ended ? -1 : s === "PENDING" ? 1 : s === "ACCEPTED" || working ? 2 : waitingConfirm ? 3 : -1;
+  const done = ended || s === "PENDING" ? 1 : s === "ACCEPTED" ? 2 : booked || working ? 3 : waitingConfirm ? 4 : 6;
+  const current = ended ? -1 : s === "PENDING" ? 1 : s === "ACCEPTED" ? 2 : booked || working ? 3 : waitingConfirm ? 4 : -1;
   const [label, cls] = pillFor(r, artisanSide);
   const [bg, fg] = tintFor(other.id || r.id);
   async function run(fn) { if (busy) return; setBusy(true); try { await fn(); } finally { setBusy(false); } }
@@ -1409,7 +1413,8 @@ function TrackView({ request: r, user, onBack, onMessage, onRespond, onStart, on
   if (s === "DECLINED") head = artisanSide ? "You declined this request" : `${first} declined this request`;
   else if (s === "CLOSED") head = "This request was closed";
   else if (s === "PENDING") head = artisanSide ? `${first} is waiting for your reply` : `Waiting for ${first} to reply`;
-  else if (s === "ACCEPTED") head = artisanSide ? `Start ${first}'s job when you're ready` : `${first} accepted your request`;
+  else if (s === "ACCEPTED") head = artisanSide ? `Waiting for ${first} to confirm the booking` : `${first} accepted. Confirm to book them`;
+  else if (booked) head = artisanSide ? `${first} booked you. Start when you're ready` : `${first} is booked for your job`;
   else if (working) head = artisanSide ? `You're working on ${first}'s job` : `${first} is working on your job`;
   else if (waitingConfirm) head = artisanSide ? `Waiting for ${first} to confirm` : `${first} marked the job done`;
   else head = r.rating ? "Job completed and reviewed" : "Job completed";
@@ -1418,8 +1423,8 @@ function TrackView({ request: r, user, onBack, onMessage, onRespond, onStart, on
   const steps = [
     ["Request sent", `${dayLabel(r.createdAt)}, ${clockTime(r.createdAt)} · ${artisanSide ? "From " + r.student.name : "Sent to " + ap.user.name}`],
     ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "The request was closed" : "Request accepted"],
-    ["Job in progress", s === "ACCEPTED" ? (artisanSide ? "Tap Start job when you begin" : `Starts when ${first} begins the job`) : working || waitingConfirm || s === "COMPLETED" ? startedTxt : "Starts once the artisan begins"],
-    ["Job completed", s === "COMPLETED" ? "Marked done and confirmed" : waitingConfirm ? (artisanSide ? "Waiting for the customer to confirm" : `${first} marked it done. Confirm it to review`) : artisanSide ? "You mark it done, the customer confirms" : `${first} marks it done, you confirm`],
+    ["Booking confirmed", s === "PENDING" ? "After the artisan accepts" : ended ? "Not reached" : s === "ACCEPTED" ? (artisanSide ? "Waiting for the customer to confirm" : `Confirm to book ${first}. Your other requests for this job close`) : "The customer confirmed the booking"],
+    ["Job in progress", s === "ACCEPTED" || booked ? (artisanSide ? (booked ? "Tap Start job when you begin" : "After the customer confirms") : `Starts when ${first} begins the job`) : working || waitingConfirm || s === "COMPLETED" ? startedTxt : "Starts once the artisan begins"],    ["Job completed", s === "COMPLETED" ? "Marked done and confirmed" : waitingConfirm ? (artisanSide ? "Waiting for the customer to confirm" : `${first} marked it done. Confirm it to review`) : artisanSide ? "You mark it done, the customer confirms" : `${first} marks it done, you confirm`],
     [artisanSide ? "Customer review" : "Review artisan", r.rating ? `Rated ${r.rating} out of 5` : "Rate the work and help others hire with confidence"],
   ];
   return (
@@ -1445,7 +1450,18 @@ function TrackView({ request: r, user, onBack, onMessage, onRespond, onStart, on
             <button className="a" onClick={() => onRespond("ACCEPTED")}>Accept</button>
           </div>
         )}
-        {artisanSide && s === "ACCEPTED" && <button className="tk-btn" disabled={busy} onClick={() => run(onStart)}>{busy ? "Starting…" : "Start job"}</button>}
+        {artisanSide && s === "ACCEPTED" && <div className="tk-note">Waiting for {first} to confirm the booking. You can message each other once you have both agreed.</div>}
+        {!artisanSide && s === "ACCEPTED" && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Confirm booking with {first}</button>}
+        {!artisanSide && s === "ACCEPTED" && confirming && (
+          <div className="inline-confirm">
+            <div className="inline-confirm-text">This books {first} for the job and closes your other requests for it. Confirm?</div>
+            <div className="settle-actions">
+              <button className="ghost-btn" onClick={() => setConfirming(false)}>Cancel</button>
+              <button className="settle-btn" disabled={busy} onClick={() => run(async () => { await onConfirm(); setConfirming(false); })}>{busy ? "Confirming…" : "Yes, confirm"}</button>
+            </div>
+          </div>
+        )}
+        {artisanSide && booked && <button className="tk-btn" disabled={busy} onClick={() => run(onStart)}>{busy ? "Starting…" : "Start job"}</button>}
         {artisanSide && working && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
         {!artisanSide && waitingConfirm && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
       </div>
@@ -1657,7 +1673,7 @@ function repeatStats(requests, meId) {
   return { total: ids.length, repeat: rep.length, repeatIds: new Set(rep) };
 }
 
-function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests }) {
+function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests, onRequestArtisan }) {
   const ap = user.artisanProfile;
   const first = user.name.split(" ")[0];
   const [busy, setBusy] = useState(false);
@@ -1705,6 +1721,11 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
         <div><b>{fmtStars(ap.rating)}</b><span>Rating</span></div>
         <div><b>{rs.repeat}</b><span>Repeat customers</span></div>
       </div>
+
+      <button className="ah-ask" onClick={onRequestArtisan}>
+        <span><b>Need another artisan?</b><small>Request help from other vetted artisans.</small></span>
+        <ArrowRight size={18} />
+      </button>
 
       <div className="ah-head"><h2>New requests</h2>{fresh.length > 0 && <span className="ah-new">{fresh.length} new</span>}</div>
       {fresh.length === 0 && (
@@ -2045,8 +2066,8 @@ function buildNotifications(requests, me) {
     const base = { requestId: r.id, time: r.updatedAt || r.createdAt };
     const add = (status, extra) => out.push({ ...base, id: r.id + ":" + status, ...extra });
     if (!artisanSide) {
-      if (r.status === "ACCEPTED") add("ACCEPTED", { kind: "ok", title: `${first} accepted your request`, text: "They'll start the job soon. You can message them while you wait." });
-      if (r.status === "CONFIRMED" && !r.artisanDoneAt) add("STARTED", { kind: "job", title: `${first} started your job`, text: `${reqCode(r.id)} is in progress.` });
+      if (r.status === "ACCEPTED") add("ACCEPTED", { kind: "ok", title: `${first} accepted your request`, text: "Confirm the booking to go ahead. You can message them while you decide." });
+      if (r.status === "CONFIRMED" && r.startedAt && !r.artisanDoneAt) add("STARTED", { kind: "job", title: `${first} started your job`, text: `${reqCode(r.id)} is in progress.` });
       if (r.status === "CONFIRMED" && r.artisanDoneAt) add("DONE", { kind: "review", title: `${first} marked the job done`, text: "Confirm it and leave a review." });
       if (r.status === "COMPLETED") add("COMPLETED", r.rating
         ? { kind: "ok", title: "Job completed", text: `Thanks for reviewing ${first}.` }
@@ -2055,6 +2076,8 @@ function buildNotifications(requests, me) {
       if (r.status === "CLOSED") add("CLOSED", { kind: "flag", title: "Request closed", text: "You booked another artisan for this job." });
     } else {
       if (r.status === "PENDING") add("PENDING", { kind: "job", title: `New request from ${first}`, text: r.job });
+      if (r.status === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt) add("BOOKED", { kind: "ok", title: `${first} booked you`, text: "Start the job when you're ready." });
+      if (r.status === "CLOSED") add("CLOSED", { kind: "flag", title: `${first} chose another artisan`, text: r.job });
       if (r.status === "CONFIRMED" && r.artisanDoneAt) add("DONE", { kind: "ok", title: `Waiting for ${first} to confirm`, text: r.job });
       if (r.status === "COMPLETED") add("COMPLETED", { kind: "review", title: `Job completed for ${first}`, text: r.rating ? `They rated you ${r.rating} out of 5.` : "Waiting for their review." });
     }
@@ -2232,6 +2255,8 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const iAmArtisanSide = request.artisanProfile.user.id === user.id;
   const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
   const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
+  const locked = iAmArtisanSide && request.status === "PENDING"; // artisans can only chat after accepting
+  
   const readUpTo = otherReadAt ? new Date(otherReadAt).getTime() : 0;
   const [bg, fg] = tintFor(other.id || request.id);
   const online = request.artisanProfile.online;
@@ -2280,7 +2305,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         <div ref={bottomRef} />
       </div>
 
-      {canAct && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
+      {canAct && !locked && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
       {vr.recording && (
         <div className="cv-rec">
           <button type="button" className="cv-rec-x" onClick={() => vr.stop(false)} aria-label="Cancel"><Trash size={18} /></button>
@@ -2289,7 +2314,8 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         </div>
       )}
       {vErr && <div className="cv-verr">{vErr}</div>}
-      <form className="cv-input" style={vr.recording ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
+      {locked && <div className="cv-lock">Accept this request to start chatting with {other.name.split(" ")[0]}.</div>}
+      <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
@@ -2369,7 +2395,7 @@ function fileToDataUrl(file, maxDim = 1000, quality = 0.7) {
   });
 }
 
-function UserProfileView({ startWithForm, user, isArtisan, application, incomingCount, myReviews = [], onApply,onToggleOnline, onSetBadge, onAddPhoto, onRemovePhoto, onLogout, onBrowse, onViewRequests }) {
+function UserProfileView({ startWithForm, user, isArtisan, application, incomingCount, myReviews = [], onApply,onToggleOnline, onSetBadge, onAddPhoto, onRemovePhoto, onLogout, onBrowse, onRequestArtisan, onViewRequests }) {
   const [showForm, setShowForm] = useState(!!startWithForm);
   const [trade, setTrade] = useState(trades[0].id);
   const [bio, setBio] = useState("");
@@ -2494,7 +2520,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
               )}
             </div>
           )}
-          <button className="browse-link" onClick={onBrowse}>Need a service yourself? Browse artisans <ChevronRight size={14} /></button>
+          <button className="browse-link" onClick={onRequestArtisan}>Need a service yourself? Request an artisan <ChevronRight size={14} /></button>
         </div>
       )}
 
@@ -2561,7 +2587,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
           <div className="settings-row settings-row--danger" onClick={onLogout} style={{ cursor: "pointer" }}><LogOut size={17} /> Log out</div>
         </div>
       </div>
-      {!isArtisan && <button className="browse-link" onClick={onBrowse}>Browse artisans <ChevronRight size={14} /></button>}
+      {!isArtisan && <button className="browse-link" onClick={onRequestArtisan}>Request an artisan <ChevronRight size={14} /></button>}
     </div>
   );
 }
@@ -2974,6 +3000,8 @@ function Style() {
       .cv-safe { text-align:center; font-size:11px; color:var(--ink-soft); padding:6px 16px 12px; background:var(--bg); }
       @media (min-width:760px) { .cv-msgs { max-height:calc(100vh - 360px); } }
 
+            .tk-note { background:#E3EFE9; color:var(--primary); border-radius:14px; padding:14px; font-size:13px; line-height:1.45; }
+      .cv-lock { margin:10px 14px 4px; background:#F3EEDD; border:1px solid var(--line); color:var(--ink-soft); border-radius:14px; padding:14px; font-size:13px; text-align:center; line-height:1.45; }
       /* Login / loading screens: dark branded background */
       .phone > .screen--center { background:linear-gradient(160deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; }
       .phone > .screen--center .sent-title { color:#F4EFE0; }
@@ -3301,6 +3329,9 @@ function Style() {
       .ah-stats div { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px 6px; text-align:center; display:flex; flex-direction:column; gap:4px; }
       .ah-stats b { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:23px; color:var(--primary); }
       .ah-stats span { font-size:11.5px; color:var(--ink-soft); }
+      .ah-ask { width:100%; margin:16px 0 0; display:flex; align-items:center; justify-content:space-between; gap:12px; text-align:left; background:var(--primary); color:#fff; border:none; border-radius:16px; padding:14px 16px; font-family:inherit; cursor:pointer; }
+      .ah-ask b { display:block; font-size:14.5px; }
+      .ah-ask small { display:block; font-size:12px; opacity:.85; margin-top:2px; }
       .ah-head { display:flex; align-items:center; justify-content:space-between; margin:26px 0 14px; }
       .ah-head h2 { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:19.5px; margin:0; }
       .ah-new { background:var(--primary); color:#fff; border-radius:999px; padding:6px 14px; font-size:12px; font-weight:700; }
