@@ -185,6 +185,9 @@ function tradeLabel(t) { const found = trades.find((x) => x.id === t); return fo
 function fmtStars(n) { return Number(n || 0).toFixed(1); }
 
 /* ============ AUTH ============ */
+function tokenRole(t) {
+  try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role; } catch (e) { return null; }
+}
 function useAuth() {
   const [token, setToken] = useState(() => localStorage.getItem("vh_token") || null);
   const [user, setUser] = useState(null);
