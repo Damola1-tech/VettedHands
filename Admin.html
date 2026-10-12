@@ -201,7 +201,7 @@ async function api(path, { method = "GET", body, token } = {}) {
 /* ============ helpers ============ */
 const TRADES = { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair", LAPTOP_REPAIR: "Laptop Repair", PAINTER: "Painter", CARPENTER: "Carpenter", CLEANER: "Cleaner" };
 const tradeLabel = (t) => TRADES[t] || t;
-const NAV = [["dashboard", "Dashboard"], ["applications", "Artisan Applications"], ["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
+const NAV = [["dashboard", "Dashboard"], ["applications", "Artisan Applications"], ["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
 const PAGES = NAV.map((n) => n[0]);
 const initials = (n = "") => n.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -343,7 +343,7 @@ function Shell({ token, user, onLogout }) {
   const [img, setImg] = useState(null);
   const stats = useFetch(token, "/api/admin/stats");
   const s = stats.data ? stats.data.stats : null;
-  const badge = { applications: s ? s.pendingApplications : 0, reports: s ? s.openReports : 0 };
+  const badge = { applications: s ? s.pendingApplications : 0, reports: s ? s.openReports : 0, blog: s ? (s.pendingPosts || 0) : 0 };
 
   function go(p, id = null) { setPage(p); setParam(id); setMenu(false); window.location.hash = "/" + p; window.scrollTo(0, 0); }
   function flash(m) { setToast(m); clearTimeout(window.__vhT); window.__vhT = setTimeout(() => setToast(null), 2800); }
@@ -358,6 +358,7 @@ function Shell({ token, user, onLogout }) {
   else if (page === "active") body = <ActiveJobs {...c} />;
   else if (page === "completed") body = <Completed {...c} />;
   else if (page === "reviews") body = <Reviews {...c} />;
+  else if (page === "blog") body = <BlogMod {...c} />;
   else if (page === "reports") body = <Reports {...c} />;
   else if (page === "verification") body = <Verification {...c} />;
   else body = <Settings {...c} user={user} />;
@@ -778,6 +779,67 @@ function Reviews({ token, flash, refreshStats }) {
             {r.reviewStatus === "PUBLISHED" && <><button className="btn btn-sm" onClick={() => set(r, "FLAGGED")}>Flag</button><button className="btn btn-sm btn-danger" onClick={() => set(r, "REMOVED")}>Remove review</button></>}
             {r.reviewStatus === "FLAGGED" && <><button className="btn btn-sm" onClick={() => set(r, "PUBLISHED")}>Keep published</button><button className="btn btn-sm btn-danger" onClick={() => set(r, "REMOVED")}>Remove review</button></>}
             {r.reviewStatus === "REMOVED" && <button className="btn btn-sm" onClick={() => set(r, "PUBLISHED")}>Restore</button>}
+          </div>
+        </div>); })}
+      {!rows.length && <div className="empty">Nothing here.</div>}
+    </>
+  );
+}
+
+/* ============ blog ============ */
+const POST_TONE = { PENDING: ["Waiting", "p-amber"], PUBLISHED: ["Live", "p-green"], HIDDEN: ["Hidden", "p-red"], REJECTED: ["Rejected", "p-grey"] };
+const KIND_WORD = { STORY: "Story", UPDATE: "Artisan update", GUIDE: "Guide" };
+
+function BlogMod({ token, flash, refreshStats }) {
+  const res = useFetch(token, "/api/admin/blog");
+  const [chip, setChip] = useState("PENDING");
+  const [writing, setWriting] = useState(false);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const w = wait(res); if (w) return w;
+  const all = res.data.posts;
+  const n = (st) => all.filter((p) => p.status === st).length;
+  const reported = all.filter((p) => p.reports.length > 0 && p.status !== "REJECTED").length;
+  const rows = all.filter((p) => chip === "REPORTED" ? p.reports.length > 0 && p.status !== "REJECTED" : p.status === chip);
+  async function set(p, status) {
+    let reason;
+    if (status === "REJECTED" || status === "HIDDEN") { reason = window.prompt(status === "REJECTED" ? "Why is this not approved? The author will see this." : "Why are you hiding this post? The author will see this."); if (reason === null) return; if (!reason.trim()) { flash("A reason is required"); return; } }
+    try { await api(`/api/admin/blog/${p.id}`, { method: "PATCH", token, body: { status, reason } }); flash("Post updated"); res.reload(); refreshStats(); } catch (e) { flash(e.message); }
+  }
+  async function del(p) {
+    if (!window.confirm("Delete this post for good?")) return;
+    try { await api(`/api/admin/blog/${p.id}`, { method: "DELETE", token }); flash("Post deleted"); res.reload(); refreshStats(); } catch (e) { flash(e.message); }
+  }
+  async function publish() {
+    try { await api("/api/admin/blog", { method: "POST", token, body: { title, body } }); flash("Guide published"); setTitle(""); setBody(""); setWriting(false); setChip("PUBLISHED"); res.reload(); } catch (e) { flash(e.message); }
+  }
+  return (
+    <>
+      <Head title="Blog" sub="Posts from customers and artisans go live only after you approve them. You decide, you never edit what they wrote." right={<button className="btn btn-primary" onClick={() => setWriting(!writing)}>{writing ? "Close" : "Write a guide"}</button>} />
+      {writing && (
+        <div className="revcard">
+          <input style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 12, padding: 12, marginBottom: 10 }} placeholder="Guide title" maxLength={90} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <textarea className="note" placeholder="Write the guide. Start a line in CAPITALS to make a heading." value={body} onChange={(e) => setBody(e.target.value)} />
+          <div className="revact" style={{ marginTop: 10 }}><button className="btn btn-primary" disabled={title.trim().length < 3 || body.trim().length < 20} onClick={publish}>Publish guide</button></div>
+        </div>
+      )}
+      <Chips value={chip} onChange={setChip} items={[["PENDING", "Waiting", n("PENDING")], ["REPORTED", "Reported", reported], ["PUBLISHED", "Live", n("PUBLISHED")], ["HIDDEN", "Hidden", n("HIDDEN")], ["REJECTED", "Rejected", n("REJECTED")]]} />
+      {rows.map((p) => { const [t, c] = POST_TONE[p.status]; return (
+        <div className="revcard" key={p.id}>
+          <div className="revhead">
+            <div className="who"><Avatar name={p.author.name} /><div><b>{p.title}</b><small className="soft">{KIND_WORD[p.kind]} · {firstLast(p.author.name)}{p.artisanProfile ? ` about ${p.artisanProfile.user.name} (${tradeLabel(p.artisanProfile.trade)})` : ""} · {fmtDate(p.createdAt)}</small></div></div>
+            <span className={"pill " + c}>{t}</span>
+          </div>
+          <div className="revtext" style={{ whiteSpace: "pre-wrap" }}>{p.body}</div>
+          {p.replyText && <div className="stmt"><b>Artisan reply:</b> "{p.replyText}"</div>}
+          {p.reports.length > 0 && <div className="stmt"><b>{plural(p.reports.length, "report")}:</b> {p.reports.map((r) => `${r.reason} (${firstLast(r.reporter.name)})`).join(", ")}</div>}
+          {p.rejectionReason && p.status !== "PUBLISHED" && <div className="soft" style={{ margin: "6px 0" }}>Reason given: {p.rejectionReason}</div>}
+          <div className="revact">
+            {p.status === "PENDING" && <><button className="btn btn-sm btn-primary" onClick={() => set(p, "PUBLISHED")}>Approve</button><button className="btn btn-sm btn-danger" onClick={() => set(p, "REJECTED")}>Reject</button></>}
+            {p.status === "PUBLISHED" && <button className="btn btn-sm btn-danger" onClick={() => set(p, "HIDDEN")}>Hide</button>}
+            {p.status === "HIDDEN" && <button className="btn btn-sm" onClick={() => set(p, "PUBLISHED")}>Restore</button>}
+            {p.status === "REJECTED" && <button className="btn btn-sm" onClick={() => set(p, "PUBLISHED")}>Approve anyway</button>}
+            <button className="btn btn-sm btn-danger" onClick={() => del(p)}>Delete</button>
           </div>
         </div>); })}
       {!rows.length && <div className="empty">Nothing here.</div>}

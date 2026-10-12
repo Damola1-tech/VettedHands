@@ -119,6 +119,12 @@ const PaintRoller = (p) => <Icon name="paintRoller" {...p} />;
 const Sparkle = (p) => <Icon name="sparkle" {...p} />;
 const ChevronDown = (p) => <Icon name="chevronDown" {...p} />;
 const ArrowRight = (p) => <Icon name="arrowRight" {...p} />;
+Object.assign(ICON_PATHS, {
+  bookOpen: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
+  pen: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+});
+const BookOpen = (p) => <Icon name="bookOpen" {...p} />;
+const Pen = (p) => <Icon name="pen" {...p} />;
 Object.assign(ICON_PATHS, { check: <polyline points="20 6 9 17 4 12" /> });
 const Check = (p) => <Icon name="check" {...p} />;
 Object.assign(ICON_PATHS, {
@@ -174,7 +180,7 @@ const trades = [
   { id: "CARPENTER", label: "Carpenter", icon: Hammer },
   { id: "CLEANER", label: "Cleaner", icon: Sparkle },
 ];
-const areas = ["All areas", "Main Gate", "Uba Gate", "Phase 2", "Fajuyi", "Iworoko", "Odo-Ado", "Ureje"];
+const areas = ["All areas", "Main Gate", "Uba Gate", "Phase 2", "Fajuyi", "Iworoko", "Adebayo", "Satellite", "Osekita", "Aare Road"];
 const SUPPORT_EMAIL = "vettedhands@gmail.com"; // TODO: replace with your real support email
 const reportReasonsCustomer = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
 const reportReasonsArtisan = ["Customer unavailable", "Wrong job description", "Customer issue", "Other"];
@@ -679,7 +685,8 @@ function MainApp({ auth, intent }) {
             onToggleOnline={toggleOnline} onOpenNotifs={() => setView("notifications")} hasAlerts={unreadNotifs > 0}
             onOpenMe={() => goNav("profile")} onRespond={respondToRequest}
             onOpenTrack={(id) => openTrack(id)} onOpenRequests={() => goNav("requests")}
-            onRequestArtisan={() => { setWiz({ ...blankWiz }); setView("wizard"); }} />
+            onRequestArtisan={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
+            onOpenBlog={() => setView("blog")} />
         )}
         {view === "home" && !(isArtisan && user.artisanProfile) && (
           <HomeView user={user} isArtisan={isArtisan} area={area} setArea={setArea} query={query} setQuery={setQuery}
@@ -688,11 +695,16 @@ function MainApp({ auth, intent }) {
             onPickTrade={(id) => { setWiz({ ...blankWiz, trade: id }); setView("wizard"); }}
             onSeeAll={() => { setTradeFilter(null); setView("browse"); setNavTab("home"); }}
             onOpenWizard={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
+            onOpenBlog={() => setView("blog")}
             onOpenRequests={() => setView("notifications")}
             onOpenMe={() => goNav("profile")}
             hasAlerts={unreadNotifs > 0}
             flash={flash}
             onLogout={logout} />
+        )}
+        {view === "blog" && (
+          <BlogSection token={token} user={user} isArtisan={isArtisan} flash={flash} fail={fail}
+            onBack={() => { setView("home"); setNavTab("home"); }} />
         )}
         {view === "wizard" && (
           <RequestFlow wiz={wiz} setWiz={setWiz} meId={user.id}
@@ -812,7 +824,7 @@ const HOME_TINTS = [["#E3EFE9", "#0F4D3A"], ["#FBEBC8", "#8A5A12"], ["#DDE9F4", 
 function tintFor(id = "") { let h = 0; for (const c of id) h += c.charCodeAt(0); return HOME_TINTS[h % HOME_TINTS.length]; }
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
-function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineNow, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onOpenRequests, onOpenMe, hasAlerts, flash }) {
+function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineNow, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onOpenBlog, onOpenRequests, onOpenMe, hasAlerts, flash }) {
   const first = user.name.split(" ")[0];
   const live = trades.map((t) => t.id);
   const here = area === "All areas" ? "Ado-Ekiti" : `${area}, Ado-Ekiti`;
@@ -900,6 +912,11 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
         {onlineNow.length === 0 && <div className="hm-empty">No one is available right now. <button onClick={onSeeAll}>Browse all artisans</button></div>}
       </div>
       <button className="hm-all" onClick={onOpenWizard}>Request an artisan <ChevronRight size={15} /></button>
+      <button className="hm-blog" onClick={onOpenBlog}>
+        <span className="bl-ic"><BookOpen size={20} /></span>
+        <span><b>VettedHands Blog</b><small>Stories, updates and how-to guides</small></span>
+        <ChevronRight size={16} />
+      </button>
     </div>
   );
 }
@@ -953,6 +970,236 @@ function ArtisanCard({ artisan: a, onOpen }) {
         <span><MapPin size={13} /> {a.area}</span>
       </div>
     </button>
+  );
+}
+
+/* ---------------- Blog ---------------- */
+const KIND_LABEL = { STORY: "Story", UPDATE: "Update", GUIDE: "Guide" };
+const POST_STATE = {
+  PENDING: ["Waiting for approval", "amber"],
+  PUBLISHED: ["Live", "green"],
+  REJECTED: ["Not approved", "red"],
+  HIDDEN: ["Hidden", "grey"],
+};
+const REPORT_REASONS = ["Not true", "Rude or abusive", "Spam or advert", "Contains personal details", "Other"];
+// Written by us, always shown. Admin-written guides appear after it.
+const BUILT_IN_GUIDE = {
+  id: "builtin-guide", kind: "GUIDE", author: "VettedHands", builtin: true,
+  title: "How VettedHands works",
+  body: [
+    "FOR CUSTOMERS",
+    "1. Tap Request a service, describe the job and pick your area. You can send it to more than one artisan.",
+    "2. Artisans who accept can then chat with you. Compare, ask questions, agree a time.",
+    "3. Confirm the one you want. Your other requests for that job close automatically.",
+    "4. The artisan starts the job and marks it done. You confirm and leave a review.",
+    "",
+    "FOR ARTISANS",
+    "1. Turn on Available so customers can see you.",
+    "2. Accept a request to open the chat. You can't message before accepting.",
+    "3. Wait for the customer to confirm the booking, then tap Start job and Mark done.",
+    "4. Good reviews build your rating and earn the Top Rated badge.",
+    "",
+    "STAY SAFE",
+    "Keep chats inside VettedHands so reports can be checked. Never share your PIN or send money outside the app. If something goes wrong, use Report on the job.",
+  ].join("\n"),
+};
+
+function postDate(d) { return timeAgo(d); }
+
+function BlogSection({ token, user, isArtisan, flash, fail, onBack }) {
+  const [screen, setScreen] = useState({ name: "list" }); // list | post | write | mine
+  const [tab, setTab] = useState("ALL");
+  const [posts, setPosts] = useState(null);
+  const [mine, setMine] = useState([]);
+
+  async function load() {
+    try {
+      const [a, b] = await Promise.all([api("/api/blog", { token }), api("/api/blog/mine", { token })]);
+      setPosts(a.posts); setMine(b.posts);
+    } catch (e) { setPosts((p) => p || []); fail(e); }
+  }
+  useEffect(() => { load(); }, []);
+
+  if (screen.name === "post") {
+    return <BlogPostView token={token} id={screen.id} seed={screen.seed} isArtisan={isArtisan} flash={flash} fail={fail}
+      onBack={() => { setScreen({ name: screen.from || "list" }); load(); }} />;
+  }
+  if (screen.name === "write") {
+    return <BlogWrite token={token} isArtisan={isArtisan} flash={flash} fail={fail}
+      onBack={() => setScreen({ name: "list" })} onDone={() => { load(); setScreen({ name: "mine" }); }} />;
+  }
+
+  const open = (p, from) => setScreen({ name: "post", id: p.id, seed: p, from });
+
+  if (screen.name === "mine") {
+    return (
+      <div className="screen bl">
+        <div className="bl-head"><button className="iconbtn" onClick={() => setScreen({ name: "list" })} aria-label="Back"><ArrowLeft size={18} /></button><h1>Your posts</h1></div>
+        {mine.length === 0 && <div className="bl-empty"><b>Nothing yet.</b>Posts you write will show up here with their status.</div>}
+        <div className="bl-list">
+          {mine.map((p) => { const [l, c] = POST_STATE[p.status]; return (
+            <button key={p.id} className="bl-card" onClick={() => open(p, "mine")}>
+              <span className="bl-top"><span className={"bl-pill bl-pill--" + c}>{l}</span><span className="bl-kind">{KIND_LABEL[p.kind]}</span></span>
+              <b>{p.title}</b>
+              {(p.status === "REJECTED" || p.status === "HIDDEN") && p.rejectionReason && <p className="bl-why">{p.rejectionReason}</p>}
+              <small>{postDate(p.createdAt)}</small>
+            </button>
+          ); })}
+        </div>
+      </div>
+    );
+  }
+
+  const live = (posts || []).filter((p) => tab === "ALL" || p.kind === tab);
+  const showBuiltIn = tab === "ALL" || tab === "GUIDE";
+  const waiting = mine.filter((p) => p.status === "PENDING").length;
+  return (
+    <div className="screen bl">
+      <div className="bl-head">
+        <button className="iconbtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
+        <h1>Blog</h1>
+        <button className="bl-write" onClick={() => setScreen({ name: "write" })}><Pen size={15} /> Write</button>
+      </div>
+      <div className="chip-row bl-tabs">
+        {[["ALL", "All"], ["STORY", "Stories"], ["UPDATE", "Updates"], ["GUIDE", "Guides"]].map(([k, l]) =>
+          <button key={k} className={"chip" + (tab === k ? " chip--active" : "")} onClick={() => setTab(k)}>{l}</button>)}
+      </div>
+      {mine.length > 0 && (
+        <button className="bl-mine" onClick={() => setScreen({ name: "mine" })}>
+          <span>Your posts{waiting ? ` · ${waiting} waiting for approval` : ""}</span><ChevronRight size={16} />
+        </button>
+      )}
+      <div className="bl-list">
+        {showBuiltIn && (
+          <button className="bl-card bl-card--guide" onClick={() => open(BUILT_IN_GUIDE, "list")}>
+            <span className="bl-top"><span className="bl-pill bl-pill--green">Start here</span><span className="bl-kind">Guide</span></span>
+            <b>{BUILT_IN_GUIDE.title}</b>
+            <p>A two minute walk through requests, booking and reviews.</p>
+          </button>
+        )}
+        {posts === null && <div className="bl-empty">Loading…</div>}
+        {live.map((p) => (
+          <button key={p.id} className="bl-card" onClick={() => open(p, "list")}>
+            <span className="bl-top"><span className={"bl-kindpill bl-kindpill--" + p.kind}>{KIND_LABEL[p.kind]}</span><small>{postDate(p.createdAt)}</small></span>
+            <b>{p.title}</b>
+            <p>{p.body.length > 150 ? p.body.slice(0, 150).trim() + "…" : p.body}</p>
+            <span className="bl-by">
+              {p.kind === "STORY" && p.artisan ? <>{p.author} on <i>{p.artisan.name}</i> · {tradeLabel(p.artisan.trade)}</> : p.kind === "UPDATE" && p.artisan ? <>{p.author}</> : <>{p.author}</>}
+              {p.reply && <span className="bl-replied"> · Artisan replied</span>}
+            </span>
+          </button>
+        ))}
+        {posts !== null && live.length === 0 && !showBuiltIn && <div className="bl-empty"><b>Nothing here yet.</b>Be the first to write one.</div>}
+      </div>
+      <p className="bl-foot">Posts are checked by VettedHands before they appear. Keep it honest and respectful.</p>
+    </div>
+  );
+}
+
+function BlogPostView({ token, id, seed, isArtisan, flash, fail, onBack }) {
+  const [p, setP] = useState(seed || null);
+  const [reporting, setReporting] = useState(false);
+  const [reason, setReason] = useState(REPORT_REASONS[0]);
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (seed && seed.builtin) return;
+    api(`/api/blog/${id}`, { token }).then((d) => setP(d.post)).catch((e) => { if (!seed) fail(e); });
+  }, [id]);
+  if (!p) return <div className="screen bl"><div className="bl-head"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button></div><div className="bl-empty">Loading…</div></div>;
+
+  async function act(fn) { if (busy) return; setBusy(true); try { await fn(); } catch (e) { fail(e); } finally { setBusy(false); } }
+  const sendReport = () => act(async () => { await api(`/api/blog/${p.id}/report`, { method: "POST", token, body: { reason } }); setReporting(false); flash("Thanks. We'll look at this post."); });
+  const sendReply = () => act(async () => { const d = await api(`/api/blog/${p.id}/reply`, { method: "POST", token, body: { text: reply } }); setP(d.post); setReply(""); flash("Reply posted"); });
+  const del = () => act(async () => { if (!window.confirm("Delete this post?")) return; await api(`/api/blog/${p.id}`, { method: "DELETE", token }); flash("Post deleted"); onBack(); });
+  const [stateLabel, stateCls] = POST_STATE[p.status] || [];
+  const canReply = p.kind === "STORY" && p.status === "PUBLISHED" && p.artisan && p.artisan.mine && !p.reply;
+
+  return (
+    <div className="screen bl">
+      <div className="bl-head"><button className="iconbtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button><h1>{KIND_LABEL[p.kind]}</h1></div>
+      <article className="bl-post">
+        {p.mine && p.status !== "PUBLISHED" && <div className={"bl-state bl-state--" + stateCls}><b>{stateLabel}</b>{p.rejectionReason && <span>{p.rejectionReason}</span>}{p.status === "PENDING" && <span>An admin will review it soon.</span>}</div>}
+        <h2>{p.title}</h2>
+        <div className="bl-meta">
+          <span className="bl-av">{initials(p.author)}</span>
+          <span><b>{p.author}</b>{!p.builtin && <small> · {postDate(p.createdAt)}</small>}</span>
+        </div>
+        {p.kind === "STORY" && p.artisan && <div className="bl-about"><ShieldCheck size={16} /> About <b>{p.artisan.name}</b> · {tradeLabel(p.artisan.trade)} · {p.artisan.area}</div>}
+        <div className="bl-body">{p.body.split("\n").map((line, i) => line === "" ? <div key={i} className="bl-gap" /> : /^[A-Z ]{4,}$/.test(line) ? <h3 key={i}>{line}</h3> : <p key={i}>{line}</p>)}</div>
+        {p.reply && <div className="bl-reply"><small>Reply from {p.artisan ? p.artisan.name.split(" ")[0] : "the artisan"}</small><p>{p.reply.text}</p></div>}
+      </article>
+      {canReply && (
+        <div className="bl-replybox">
+          <b>Reply to this story</b>
+          <textarea value={reply} onChange={(e) => setReply(e.target.value.slice(0, 500))} placeholder="Say thanks or give your side. You can reply once." />
+          <button className="primary-btn" disabled={busy || reply.trim().length < 2} onClick={sendReply}>Post reply</button>
+        </div>
+      )}
+      {!p.builtin && (
+        <div className="bl-actions">
+          {p.mine ? <button className="bl-link bl-link--danger" onClick={del}><Trash size={15} /> Delete post</button>
+            : p.status === "PUBLISHED" && !reporting && <button className="bl-link" onClick={() => setReporting(true)}><Flag size={15} /> Report this post</button>}
+        </div>
+      )}
+      {reporting && (
+        <div className="bl-replybox">
+          <b>What's wrong with it?</b>
+          <select value={reason} onChange={(e) => setReason(e.target.value)}>{REPORT_REASONS.map((r) => <option key={r}>{r}</option>)}</select>
+          <button className="primary-btn" disabled={busy} onClick={sendReport}>Send report</button>
+          <button className="ghost-btn" onClick={() => setReporting(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlogWrite({ token, isArtisan, flash, fail, onBack, onDone }) {
+  const [jobs, setJobs] = useState(null);
+  const [kind, setKind] = useState(isArtisan ? "UPDATE" : "STORY");
+  const [requestId, setRequestId] = useState("");
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api("/api/blog/eligible", { token }).then((d) => { setJobs(d.jobs); if (d.jobs[0]) setRequestId(d.jobs[0].requestId); }).catch((e) => { setJobs([]); fail(e); });
+  }, []);
+  const story = kind === "STORY";
+  const noJobs = story && jobs && jobs.length === 0;
+  const ok = !busy && title.trim().length >= 3 && body.trim().length >= 20 && (!story || requestId);
+  async function submit() {
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api("/api/blog", { method: "POST", token, body: { kind, title: title.trim(), body: body.trim(), requestId: story ? requestId : undefined } });
+      flash("Sent for approval");
+      onDone();
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  }
+  return (
+    <div className="screen bl">
+      <div className="bl-head"><button className="iconbtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button><h1>Write a post</h1></div>
+      {isArtisan && (
+        <div className="ms-seg bl-seg">
+          <button className={kind === "UPDATE" ? "on" : ""} onClick={() => setKind("UPDATE")}>My update</button>
+          <button className={kind === "STORY" ? "on" : ""} onClick={() => setKind("STORY")}>Story about a job</button>
+        </div>
+      )}
+      <div className="bl-form">
+        {story && (
+          <label>Which job is this about?
+            {jobs === null ? <span className="bl-hint">Loading…</span> : noJobs ? <span className="bl-hint">You can write a story after a job is completed. None are ready yet.</span> :
+              <select value={requestId} onChange={(e) => setRequestId(e.target.value)}>{jobs.map((j) => <option key={j.requestId} value={j.requestId}>{j.artisanName} · {tradeLabel(j.trade)} · {j.job.slice(0, 32)}</option>)}</select>}
+          </label>
+        )}
+        {!noJobs && <>
+          <label>Title<input value={title} maxLength={90} onChange={(e) => setTitle(e.target.value)} placeholder={story ? "e.g. Fixed my socket in one visit" : "e.g. Now taking weekend jobs"} /></label>
+          <label>Your post<textarea value={body} maxLength={2000} onChange={(e) => setBody(e.target.value)} placeholder={story ? "What was the job, how did it go, would you hire them again?" : "Share news, recent work or availability."} /><span className="bl-count">{body.length}/2000</span></label>
+          <p className="bl-hint">An admin reads every post before it goes live. No phone numbers or payment details.</p>
+          <button className="primary-btn" disabled={!ok} onClick={submit}>{busy ? "Sending…" : "Send for approval"}</button>
+        </>}
+      </div>
+    </div>
   );
 }
 
@@ -1719,7 +1966,7 @@ function repeatStats(requests, meId) {
   return { total: ids.length, repeat: rep.length, repeatIds: new Set(rep) };
 }
 
-function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests, onRequestArtisan }) {
+function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests, onRequestArtisan, onOpenBlog }) {
   const ap = user.artisanProfile;
   const first = user.name.split(" ")[0];
   const [busy, setBusy] = useState(false);
@@ -1771,6 +2018,11 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
       <button className="ah-ask" onClick={onRequestArtisan}>
         <span><b>Need another artisan?</b><small>Request help from other vetted artisans.</small></span>
         <ArrowRight size={18} />
+      </button>
+      <button className="ah-blog" onClick={onOpenBlog}>
+        <span className="bl-ic"><BookOpen size={20} /></span>
+        <span><b>VettedHands Blog</b><small>Share an update or read what customers say</small></span>
+        <ChevronRight size={16} />
       </button>
 
       <div className="ah-head"><h2>New requests</h2>{fresh.length > 0 && <span className="ah-new">{fresh.length} new</span>}</div>
@@ -3393,6 +3645,73 @@ function Style() {
       .bw-on--yes i { background:#7ee0a8; }
       .bw-off { font-size:11px; font-weight:600; color:var(--ink-soft); background:var(--bg); border-radius:10px; padding:4px 8px; white-space:nowrap; }
       .bw-list { margin-top:14px; padding:0 16px 8px; }
+      /* Blog */
+      .bl { padding-bottom:8px; }
+      .bl-head { display:flex; align-items:center; gap:12px; padding:calc(14px + env(safe-area-inset-top)) 16px 6px; }
+      .bl-head h1 { font-family:'Bricolage Grotesque',sans-serif; font-size:21px; font-weight:700; margin:0; flex:1; }
+      .bl-write { display:inline-flex; align-items:center; gap:6px; background:var(--primary); color:#fff; border:none; border-radius:18px; padding:9px 14px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+      .bl-tabs { margin-top:8px; }
+      .bl-mine { margin:12px 16px 0; width:calc(100% - 32px); display:flex; align-items:center; justify-content:space-between; background:var(--accent-bg); color:var(--ink); border:none; border-radius:12px; padding:11px 14px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; text-align:left; }
+      .bl-list { display:flex; flex-direction:column; gap:12px; padding:14px 16px 0; }
+      .bl-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:15px; text-align:left; font-family:inherit; cursor:pointer; display:flex; flex-direction:column; gap:6px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
+      .bl-card--guide { background:linear-gradient(160deg,#0F4D3A,#0A3A2B); color:#F4EFE0; border:none; }
+      .bl-card--guide p { color:rgba(244,239,224,.8); }
+      .bl-card b { font-size:15.5px; line-height:1.3; }
+      .bl-card p { margin:0; font-size:13px; line-height:1.45; color:var(--ink-soft); }
+      .bl-card small { color:var(--ink-soft); font-size:11.5px; }
+      .bl-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .bl-kind { font-size:11.5px; font-weight:600; opacity:.7; }
+      .bl-pill { font-size:11px; font-weight:700; padding:3px 9px; border-radius:10px; }
+      .bl-pill--green { background:#DDEEE3; color:#1E6B45; }
+      .bl-pill--amber { background:var(--warn-bg); color:var(--warn); }
+      .bl-pill--red { background:#F4DAD4; color:var(--danger); }
+      .bl-pill--grey { background:#ECE6D8; color:var(--ink-soft); }
+      .bl-kindpill { font-size:11px; font-weight:700; padding:3px 9px; border-radius:10px; background:#ECE6D8; color:var(--ink-soft); }
+      .bl-kindpill--STORY { background:var(--accent-bg); color:var(--accent); }
+      .bl-kindpill--UPDATE { background:#DDEEE3; color:#1E6B45; }
+      .bl-kindpill--GUIDE { background:#DCE6F2; color:#2D5B91; }
+      .bl-by { font-size:12px; color:var(--ink-soft); }
+      .bl-by i { font-style:normal; font-weight:700; color:var(--ink); }
+      .bl-replied { color:var(--primary); font-weight:700; }
+      .bl-why { color:var(--danger) !important; font-size:12.5px !important; }
+      .bl-empty { text-align:center; color:var(--ink-soft); font-size:13px; padding:34px 20px; }
+      .bl-empty b { display:block; color:var(--ink); font-size:15px; margin-bottom:4px; }
+      .bl-foot { margin:16px 20px 0; text-align:center; font-size:11.5px; color:var(--ink-soft); }
+      .bl-post { margin:8px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px; }
+      .bl-post h2 { font-family:'Bricolage Grotesque',sans-serif; font-size:22px; line-height:1.2; margin:0 0 12px; }
+      .bl-meta { display:flex; align-items:center; gap:10px; font-size:13px; }
+      .bl-meta small { color:var(--ink-soft); font-size:12px; }
+      .bl-av { width:32px; height:32px; border-radius:50%; background:var(--accent-bg); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; }
+      .bl-about { display:flex; align-items:center; gap:7px; margin-top:12px; background:var(--bg); border-radius:10px; padding:9px 11px; font-size:12.5px; color:var(--primary); }
+      .bl-body { margin-top:14px; font-size:14.5px; line-height:1.6; }
+      .bl-body p { margin:0 0 8px; }
+      .bl-body h3 { margin:14px 0 6px; font-size:12px; letter-spacing:.08em; color:var(--primary); }
+      .bl-gap { height:6px; }
+      .bl-state { display:flex; flex-direction:column; gap:3px; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:12.5px; }
+      .bl-state--amber { background:var(--warn-bg); color:var(--warn); }
+      .bl-state--red { background:#F4DAD4; color:var(--danger); }
+      .bl-state--grey { background:#ECE6D8; color:var(--ink-soft); }
+      .bl-state--green { background:#DDEEE3; color:#1E6B45; }
+      .bl-reply { margin-top:16px; border-left:3px solid var(--primary); background:var(--bg); border-radius:0 12px 12px 0; padding:10px 12px; }
+      .bl-reply small { font-weight:700; color:var(--primary); }
+      .bl-reply p { margin:4px 0 0; font-size:13.5px; line-height:1.5; }
+      .bl-replybox { margin:12px 16px 0; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+      .bl-replybox textarea, .bl-form textarea { border:1px solid var(--line); border-radius:12px; padding:11px 12px; font-family:inherit; font-size:16px; min-height:110px; resize:vertical; background:var(--surface); color:var(--ink); }
+      .bl-replybox select, .bl-form select, .bl-form input { border:1px solid var(--line); border-radius:12px; padding:11px 12px; font-family:inherit; font-size:16px; background:var(--surface); color:var(--ink); width:100%; box-sizing:border-box; }
+      .bl-actions { display:flex; justify-content:center; margin-top:14px; }
+      .bl-link { background:none; border:none; display:inline-flex; align-items:center; gap:6px; color:var(--ink-soft); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; padding:8px; }
+      .bl-link--danger { color:var(--danger); }
+      .bl-seg { margin:10px 16px 0; }
+      .bl-form { display:flex; flex-direction:column; gap:14px; padding:14px 16px 0; }
+      .bl-form label { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:700; position:relative; }
+      .bl-count { position:absolute; right:10px; bottom:8px; font-size:11px; font-weight:600; color:var(--ink-soft); }
+      .bl-hint { font-size:12.5px; font-weight:500; color:var(--ink-soft); margin:0; }
+      .hm-blog, .ah-blog { width:100%; margin:16px 0 0; display:flex; align-items:center; gap:12px; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:13px 14px; font-family:inherit; cursor:pointer; color:var(--ink); }
+      .hm-blog > span:nth-child(2), .ah-blog > span:nth-child(2) { flex:1; }
+      .hm-blog b, .ah-blog b { display:block; font-size:14.5px; }
+      .hm-blog small, .ah-blog small { display:block; font-size:12px; color:var(--ink-soft); margin-top:2px; }
+      .bl-ic { width:38px; height:38px; border-radius:11px; background:var(--accent-bg); color:var(--accent); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .bl-form .primary-btn, .bl-replybox .primary-btn, .bl-replybox .ghost-btn { margin:0; }
       .ah-ask { width:100%; margin:16px 0 0; display:flex; align-items:center; justify-content:space-between; gap:12px; text-align:left; background:var(--primary); color:#fff; border:none; border-radius:16px; padding:14px 16px; font-family:inherit; cursor:pointer; }
       .ah-ask b { display:block; font-size:14.5px; }
       .ah-ask small { display:block; font-size:12px; opacity:.85; margin-top:2px; }
