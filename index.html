@@ -61,7 +61,9 @@ async function api(path, { method = "GET", body, token } = {}) {
   if (!res.ok) {
     const raw = (data && data.error) || "";
     if (/prisma|database server|invocation/i.test(raw)) throw new Error("Waking up the server. Please try again in a few seconds.");
-    throw new Error(raw || `Request failed (${res.status})`);
+    const apiErr = new Error(raw || `Request failed (${res.status})`);
+    apiErr.data = data;
+    throw apiErr;
   }
   return data;
 }
@@ -208,13 +210,21 @@ function useAuth() {
       .finally(() => setLoading(false));
   }, [token]);
 
+    function startSession(d) { localStorage.setItem("vh_token", d.token); setToken(d.token); setUser(d.user); }
   async function login(email, password) {
     setError(null);
-    const d = await api("/api/auth/login", { method: "POST", body: { email, password } });
-    localStorage.setItem("vh_token", d.token);
-    setToken(d.token);
-    setUser(d.user);
+    startSession(await api("/api/auth/login", { method: "POST", body: { email, password } }));
   }
+  async function register(name, email, password, area) {
+    setError(null);
+    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area } });
+    if (d.needsVerification) return d;
+    startSession(d);
+  }
+  async function verifyEmail(email, code) { startSession(await api("/api/auth/verify-email", { method: "POST", body: { email, code } })); }
+  async function resendCode(email) { await api("/api/auth/resend-code", { method: "POST", body: { email } }); }
+  async function forgotPassword(email) { await api("/api/auth/forgot-password", { method: "POST", body: { email } }); }
+  async function resetPassword(email, code, password) { startSession(await api("/api/auth/reset-password", { method: "POST", body: { email, code, password } })); }
   async function register(name, email, password, area) {
     setError(null);
     const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area } });
@@ -227,7 +237,7 @@ function useAuth() {
     setToken(null);
     setUser(null);
   }
-  return { token, setToken, user, setUser, loading, error, login, register, logout };
+    return { token, setToken, user, setUser, loading, error, login, register, logout, verifyEmail, resendCode, forgotPassword, resetPassword };
 }
 
 function Landing({ onSignIn, onStart }) {
@@ -238,9 +248,11 @@ function Landing({ onSignIn, onStart }) {
     ["Available near you", "Artisans switch their own availability on and off."],
   ];
   const steps = [
-    ["Tell us the job", "Describe it, add a photo and where you are."],
+    ["Request a service", "Describe the job, add a photo and your area. Send it to more than one artisan."],
     ["We find vetted artisans", "Matched by trade, availability, distance and rating."],
-    ["Pick one and track the job", "They accept, you follow progress, then review the work."],
+    ["Compare and chat", "Artisans who accept can message you. Ask questions and agree a time."],
+    ["Confirm one and track the job", "Your other requests close. Follow the job until it's done."],
+    ["Confirm and review", "Confirm the work is done and rate the artisan."],
   ];
   return (
     <div className="landing">
@@ -290,64 +302,293 @@ function Splash() {
   );
 }
 
-function AuthScreen({ initialMode, onBack, onLogin, onRegister }) {
-  const [mode, setMode] = useState(initialMode || "login");
+/* ============ AUTH SCREEN (replaces the old AuthScreen function) ============ */
+function CodeBoxes({ value, onChange }) {
+  const refs = useRef([]);
+  useEffect(() => { if (refs.current[0]) refs.current[0].focus(); }, []);
+  function onBox(i, v) {
+    const d = v.replace(/\D/g, "");
+    if (!d) { onChange(value.slice(0, i) + value.slice(i + 1)); return; }
+    const pos = Math.min(i, value.length);
+    onChange((value.slice(0, pos) + d.slice(-1) + value.slice(pos + 1)).slice(0, 6));
+    if (pos < 5 && refs.current[pos + 1]) refs.current[pos + 1].focus();
+  }
+  function onKey(i, e) {
+    if (e.key === "Backspace" && !value[i] && i > 0) {
+      e.preventDefault();
+      onChange(value.slice(0, i - 1));
+      refs.current[i - 1].focus();
+    }
+  }
+  function onPaste(e) {
+    const t = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!t) return;
+    e.preventDefault();
+    onChange(t);
+    refs.current[Math.min(t.length, 5)].focus();
+  }
+  return (
+    <div className="code-row" onPaste={onPaste}>
+      {Array.from({ length: 6 }, (_, i) => (
+        <input key={i} ref={(el) => (refs.current[i] = el)} className="code-box" inputMode="numeric" pattern="[0-9]*"
+          autoComplete={i === 0 ? "one-time-code" : "off"} aria-label={`Digit ${i + 1}`}
+          value={value[i] || ""} onChange={(e) => onBox(i, e.target.value)} onKeyDown={(e) => onKey(i, e)} />
+      ))}
+    </div>
+  );
+}
+
+function AuthScreen({ initialMode, onBack, auth }) {
+  const [mode, setMode] = useState(initialMode || "login"); // register | login | forgot | code
+  const [after, setAfter] = useState("verify"); // what the code screen finishes: verify | reset
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [area, setArea] = useState(areas[1]);
   const [agree, setAgree] = useState(true);
+  const [code, setCode] = useState("");
+  const [wait, setWait] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [info, setInfo] = useState(null);
+  const addr = email.trim().toLowerCase();
 
-  async function submit(e) {
-    e.preventDefault();
-    setErr(null); setBusy(true);
-    try {
-      if (mode === "login") await onLogin(email.trim(), password);
-      else await onRegister(name.trim(), email.trim(), password, area);
-    } catch (ex) {
-      setErr(ex.message);
-    } finally { setBusy(false); }
+  useEffect(() => {
+    if (wait <= 0) return;
+    const id = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(id);
+  }, [wait]);
+
+  async function run(fn) {
+    setErr(null); setInfo(null); setBusy(true);
+    try { await fn(); } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   }
+  function toCode(kind) {
+    setAfter(kind); setCode(""); setWait(60); setMode("code");
+    if (kind === "reset") setPassword("");
+  }
+  function submitMain(e) {
+    e.preventDefault();
+    run(async () => {
+      if (mode === "login") {
+        try { await auth.login(addr, password); }
+        catch (ex) { if (ex.data && ex.data.needsVerification) { toCode("verify"); return; } throw ex; }
+      } else if (mode === "register") {
+        const d = await auth.register(name.trim(), addr, password, area);
+        if (d && d.needsVerification) toCode("verify");
+      } else if (mode === "forgot") {
+        await auth.forgotPassword(addr);
+        toCode("reset");
+      }
+    });
+  }
+  function submitCode(e) {
+    e.preventDefault();
+    run(async () => {
+      if (after === "verify") await auth.verifyEmail(addr, code);
+      else await auth.resetPassword(addr, code, password);
+    });
+  }
+  function resend() {
+    if (wait > 0 || busy) return;
+    run(async () => {
+      if (after === "verify") await auth.resendCode(addr); else await auth.forgotPassword(addr);
+      setWait(60);
+      setInfo("A new code is on its way. Check your inbox and spam folder.");
+    });
+  }
+  function goBack() {
+    setErr(null); setInfo(null);
+    if (mode === "code") setMode(after === "reset" ? "forgot" : initialMode === "login" ? "login" : "register");
+    else if (mode === "forgot") setMode("login");
+    else onBack();
+  }
+  const clock = "0:" + String(wait).padStart(2, "0");
 
   return (
     <div className="auth">
       <div className="auth-inner">
         <div className="auth-top">
-          <button className="auth-back" onClick={onBack} aria-label="Back"><ArrowLeft size={20} /></button>
+          <button className="auth-back" onClick={goBack} aria-label="Back"><ArrowLeft size={20} /></button>
           <span className="landing-mark landing-mark--sm"><ShieldCheck size={16} /></span>
           <span className="auth-brand">VettedHands</span>
         </div>
-        <h1 className="auth-h1">{mode === "register" ? <>Find skilled people.<br />Hire with confidence.</> : "Welcome back."}</h1>
-        <p className="auth-sub">{mode === "register" ? "Create your account in under a minute. No payment needed." : "Sign in to track your requests and jobs."}</p>
-        <div className="seg">
-          <button type="button" className={"seg-btn" + (mode === "register" ? " seg-btn--on" : "")} onClick={() => setMode("register")}>Create account</button>
-          <button type="button" className={"seg-btn" + (mode === "login" ? " seg-btn--on" : "")} onClick={() => setMode("login")}>Sign in</button>
-        </div>
-        <form className="auth-form" onSubmit={submit}>
-          {mode === "register" && (
-            <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" /></label>
-          )}
-          <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label>
-          <label>Password<input required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" /></label>
-          {mode === "register" && (
-            <label>Where are you? <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
-          )}
-          {mode === "register" && (
-            <label className="auth-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><span>I agree to the Terms of Use and Privacy Policy.</span></label>
-          )}
-          {err && <div className="auth-err">{err}</div>}
-          <button className="auth-submit" disabled={busy || (mode === "register" && !agree)}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
-        </form>
-        {mode === "register" && (
-          <div className="auth-note"><UserIcon size={20} /><span>Everyone starts as a customer. Have a trade? You can apply to become a vetted artisan from your profile.</span></div>
+
+        {mode === "code" ? (
+          <>
+            <div className="auth-ic"><Send size={26} /></div>
+            <h1 className="auth-h1">{after === "reset" ? "Check your email." : "Enter the 6-digit code"}</h1>
+            <p className="auth-sub">We sent a code to <b style={{ color: "var(--ink)" }}>{addr}</b>. <button type="button" className="auth-link" onClick={goBack}>Change</button></p>
+            <form className="auth-form" onSubmit={submitCode}>
+              <CodeBoxes value={code} onChange={setCode} />
+              {after === "reset" && (
+                <label>New password<input required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" /></label>
+              )}
+              {info && <div className="auth-info">{info}</div>}
+              {err && <div className="auth-err">{err}</div>}
+              <button className="auth-submit" disabled={busy || code.length < 6 || (after === "reset" && password.length < 6)}>
+                {busy ? "Please wait…" : after === "reset" ? "Reset password" : "Verify and continue"}
+              </button>
+            </form>
+            <div className="auth-resend">
+              Didn't get it? {wait > 0 ? <b style={{ color: "var(--ink)" }}>Resend in {clock}</b> : <button type="button" className="auth-link" onClick={resend}>Resend code</button>}
+              <div style={{ marginTop: 6 }}>Check your spam folder too.</div>
+            </div>
+            <div className="auth-warn"><span>VettedHands will never ask you to share this code. Anyone who does is trying to take over your account.</span></div>
+          </>
+        ) : mode === "forgot" ? (
+          <>
+            <h1 className="auth-h1">Reset your password.</h1>
+            <p className="auth-sub">Enter your email and we'll send you a 6-digit code.</p>
+            <form className="auth-form" onSubmit={submitMain}>
+              <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label>
+              {err && <div className="auth-err">{err}</div>}
+              <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : "Send code"}</button>
+            </form>
+            <div className="auth-resend"><button type="button" className="auth-link" onClick={() => setMode("login")}>Back to sign in</button></div>
+          </>
+        ) : (
+          <>
+            <h1 className="auth-h1">{mode === "register" ? <>Find skilled people.<br />Hire with confidence.</> : "Welcome back."}</h1>
+            <p className="auth-sub">{mode === "register" ? "Create your account in under a minute. No payment needed." : "Sign in to track your requests and jobs."}</p>
+            <div className="seg">
+              <button type="button" className={"seg-btn" + (mode === "register" ? " seg-btn--on" : "")} onClick={() => { setErr(null); setMode("register"); }}>Create account</button>
+              <button type="button" className={"seg-btn" + (mode === "login" ? " seg-btn--on" : "")} onClick={() => { setErr(null); setMode("login"); }}>Sign in</button>
+            </div>
+            <form className="auth-form" onSubmit={submitMain}>
+              {mode === "register" && (
+                <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" /></label>
+              )}
+              <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label>
+              <label>Password<input required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" /></label>
+              {mode === "login" && (
+                <button type="button" className="auth-link auth-forgot" onClick={() => { setErr(null); setMode("forgot"); }}>Forgot password?</button>
+              )}
+              {mode === "register" && (
+                <label>Where are you? <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
+              )}
+              {mode === "register" && (
+                <label className="auth-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><span>I agree to the Terms of Use and Privacy Policy.</span></label>
+              )}
+              {err && <div className="auth-err">{err}</div>}
+              <button className="auth-submit" disabled={busy || (mode === "register" && !agree)}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
+            </form>
+            {mode === "register" && (
+              <div className="auth-note"><UserIcon size={20} /><span>Everyone starts as a customer. Have a trade? You can apply to become a vetted artisan from your profile. We'll email you a 6-digit code to confirm your address.</span></div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
+/* ============ EDIT ARTISAN PROFILE (new, paste above function TrackRecordView) ============ */
+const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
+const TRAVEL_OPTIONS = [2, 5, 8, 10, 15, 20];
+function EditArtisanProfile({ user, onBack, onSave, onAvatar, onAddPhoto, onRemovePhoto }) {
+  const ap = user.artisanProfile;
+  const [area, setArea] = useState(ap.area || areas[1]);
+  const [years, setYears] = useState(ap.yearsExperience == null ? "" : String(ap.yearsExperience));
+  const [travel, setTravel] = useState(ap.travelKm == null ? "" : String(ap.travelKm));
+  const [bio, setBio] = useState(ap.bio || "");
+  const [phone, setPhone] = useState(ap.phone || "");
+  const [handle, setHandle] = useState(ap.socialHandle || "");
+  const [days, setDays] = useState(ap.workDays || "1111110");
+  const [busy, setBusy] = useState(false);
+  const photos = ap.photos || [];
+  const areaList = areas.filter((a) => a !== "All areas");
+  if (ap.area && !areaList.includes(ap.area)) areaList.unshift(ap.area);
+
+  function toggleDay(i) { setDays((d) => d.slice(0, i) + (d[i] === "1" ? "0" : "1") + d.slice(i + 1)); }
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await onSave({
+        bio: bio.trim(), phone: phone.trim(), socialHandle: handle.trim(), area,
+        yearsExperience: years === "" ? null : Number(years),
+        travelKm: travel === "" ? null : Number(travel),
+        workDays: days,
+      });
+      if (ok) onBack();
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="screen ep">
+      <div className="ep-top">
+        <button onClick={onBack} aria-label="Close"><X size={24} /></button>
+        <b>Edit profile</b>
+        <button className="ep-save" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
+
+      <div className="ep-ph">
+        <div className="ep-av">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user.name)}</div>
+        <label className="auth-link" style={{ cursor: "pointer" }}>
+          Change photo
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) onAvatar(await fileToDataUrl(f, 600, 0.8)); }} />
+        </label>
+      </div>
+
+      <label className="ep-lab">Full name</label>
+      <input className="ep-in ep-lock" value={user.name} readOnly />
+      <div className="ep-hint">Locked: changing it needs a new review.</div>
+
+      <label className="ep-lab">Trade</label>
+      <input className="ep-in ep-lock" value={tradeLabel(ap.trade)} readOnly />
+      <div className="ep-hint">Locked: changing it needs a new review.</div>
+
+      <label className="ep-lab">Years of experience</label>
+      <input className="ep-in" type="number" inputMode="numeric" min="0" max="60" value={years} onChange={(e) => setYears(e.target.value)} placeholder="e.g. 5" />
+
+      <label className="ep-lab">Base location</label>
+      <select className="ep-in" value={area} onChange={(e) => setArea(e.target.value)}>{areaList.map((a) => <option key={a}>{a}</option>)}</select>
+
+      <label className="ep-lab">How far will you travel?</label>
+      <select className="ep-in" value={travel} onChange={(e) => setTravel(e.target.value)}>
+        <option value="">No limit</option>
+        {TRAVEL_OPTIONS.map((k) => <option key={k} value={k}>Up to {k} km</option>)}
+      </select>
+
+      <label className="ep-lab">About your service</label>
+      <textarea className="ep-in" rows={5} maxLength={600} value={bio} onChange={(e) => setBio(e.target.value)} style={{ resize: "none", lineHeight: 1.45 }} />
+      <div className="ep-hint">{bio.length} / 600. Don't put phone numbers here.</div>
+
+      <label className="ep-lab">Phone number</label>
+      <input className="ep-in" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <div className="ep-hint">Only the VettedHands team sees this.</div>
+
+      <label className="ep-lab">Social handle (optional)</label>
+      <input className="ep-in" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@yourhandle" />
+
+      <label className="ep-lab">Days you usually work</label>
+      <div className="ep-days">
+        {WEEK.map((d, i) => <button type="button" key={i} className={"ep-day" + (days[i] === "1" ? " ep-day--on" : "")} onClick={() => toggleDay(i)}>{d}</button>)}
+      </div>
+      <div className="ep-hint">This is a guide for customers. Your live availability is still controlled by you on the home screen.</div>
+
+      <label className="ep-lab">Portfolio</label>
+      <div className="photo-picker">
+        {photos.map((p) => (
+          <div key={p.id} style={{ position: "relative" }}>
+            <img src={p.url} className="photo-thumb" alt="" style={{ objectFit: "cover", width: 84, height: 84 }} />
+            <button type="button" onClick={() => onRemovePhoto(p.id)} aria-label="Remove photo" style={{ position: "absolute", top: -6, right: -6, width: 24, height: 24, borderRadius: "50%", background: "var(--danger)", color: "#fff", border: "2px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><X size={13} /></button>
+          </div>
+        ))}
+        {photos.length < 6 && (
+          <label className="photo-add" style={{ cursor: "pointer", width: 84, height: 84 }}>
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) onAddPhoto(await fileToDataUrl(f)); }} />
+            <Camera size={18} /> Add
+          </label>
+        )}
+      </div>
+      <div className="ep-hint">Customers see these as Recent work. Up to 6 photos.</div>
+
+      <button className="auth-submit" style={{ width: "100%", marginTop: 26 }} onClick={save} disabled={busy}>{busy ? "Saving…" : "Save changes"}</button>
+    </div>
+  );
+}
 /* ============ APP ============ */
 function App() {
   const auth = useAuth();
@@ -362,7 +603,7 @@ function App() {
     body = <Splash />;
   } else if (!auth.token || !auth.user) {
     body = screen === "auth"
-      ? <AuthScreen initialMode={authMode} onBack={() => setScreen("landing")} onLogin={auth.login} onRegister={auth.register} />
+      ? <AuthScreen initialMode={authMode} onBack={() => setScreen("landing")} auth={auth} />
       : <Landing
           onSignIn={() => { setIntent(null); setAuthMode("login"); setScreen("auth"); }}
           onStart={(i) => { setIntent(i); setAuthMode("register"); setScreen("auth"); }} />;
@@ -667,6 +908,21 @@ function MainApp({ auth, intent }) {
       setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, photos: [...(u.artisanProfile.photos || []), d.photo] } }));
     } catch (e) { fail(e); }
   }
+    async function saveArtisanProfile(fields) {
+    try {
+      const d = await api("/api/profile/artisan", { method: "PATCH", token, body: fields });
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, ...d.artisan } }));
+      flash("Profile saved");
+      return true;
+    } catch (e) { fail(e); return false; }
+  }
+  async function saveAvatar(image) {
+    try {
+      const d = await api("/api/profile/avatar", { method: "POST", token, body: { image } });
+      setUser((u) => ({ ...u, avatarUrl: d.avatarUrl }));
+      flash("Photo updated");
+    } catch (e) { fail(e); }
+  }
   async function removeArtisanPhoto(photoId) {
     try {
       await api(`/api/artisans/me/photos/${photoId}`, { method: "DELETE", token });
@@ -795,8 +1051,13 @@ function MainApp({ auth, intent }) {
             onHelp={() => setView("help")}
             onLogout={logout} />
         )}
+                {view === "editProfile" && isArtisan && user.artisanProfile && (
+          <EditArtisanProfile user={user} onBack={() => setView("userProfile")} onSave={saveArtisanProfile} onAvatar={saveAvatar}
+            onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto} />
+        )}
         {view === "userProfile" && isArtisan && user.artisanProfile && (
           <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut}
+            onEditProfile={() => setView("editProfile")}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onLogout={logout} />
         )}
@@ -812,7 +1073,7 @@ function MainApp({ auth, intent }) {
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
-        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report"].includes(view) || (view === "userProfile" && applyOpen)} />
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report", "editProfile" ].includes(view) || (view === "userProfile" && applyOpen)} />
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1006,7 +1267,7 @@ const BUILT_IN_GUIDE = {
     "4. Good reviews build your rating and earn the Top Rated badge.",
     "",
     "STAY SAFE",
-    "Keep chats inside VettedHands so reports can be checked. Never share your PIN or send money outside the app. If something goes wrong, use Report on the job.",
+    "Keep chats inside VettedHands so reports can be checked. Never share your PIN. Don't send money in advance or outside the app. If something goes wrong, use Report on the job.",
   ].join("\n"),
 };
 
@@ -1244,10 +1505,10 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
       <div className="ap-hero">
         {onBack ? <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button> : <div style={{ height: 12 }} />}
         <div className="ap-id">
-          <span className="ap-av">{initials(a.user.name)}</span>
+          <span className="ap-av">{a.user.avatarUrl ? <img src={a.user.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials(a.user.name)}</span>
           <div>
             <div className="ap-name">{a.user.name}</div>
-            <div className="ap-trade">{tradeLabel(a.trade)} · {a.area}, Ado-Ekiti</div>
+            <div className="ap-trade">{tradeLabel(a.trade)}{a.yearsExperience ? ` · ${a.yearsExperience} years` : ""} · {a.area}, Ado-Ekiti</div>
           </div>
         </div>
         <div className="ap-pills">
@@ -2069,11 +2330,11 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout, onEmailPref }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout, onEmailPref, onEditProfile }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
-  const me = { ...ap, user: { id: user.id, name: user.name }, reviews: myReviews, stats: { repeatCustomers: rs.repeat, totalCustomers: rs.total, reviewCount: myReviews.length, minJobs: TOP_RULES.minJobs, minRating: TOP_RULES.minRating } };
+  const me = { ...ap, user: { id: user.id, name: user.name, avatarUrl: user.avatarUrl }, reviews: myReviews, stats: { repeatCustomers: rs.repeat, totalCustomers: rs.total, reviewCount: myReviews.length, minJobs: TOP_RULES.minJobs, minRating: TOP_RULES.minRating } };
   const footer = (
     <div className="ao">
       <div className="ao-card">
@@ -2095,6 +2356,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
         <p>Customers see these as Recent work. Up to 6 photos.</p>
       </div>
       <div className="ao-menu">
+        <button className="ao-row" onClick={onEditProfile}><Pen size={22} /><span>Edit profile</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
@@ -3366,6 +3628,30 @@ function Style() {
       .auth-err { background:#F8E3DD; color:var(--danger); border-radius:10px; padding:11px 13px; font-size:12px; }
       .auth-submit { background:var(--primary); color:#fff; border:none; border-radius:14px; padding:16px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:4px; }
       .auth-submit:disabled { opacity:.5; cursor:not-allowed; }
+            .auth-ic { width:58px; height:58px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; margin:6px 0 18px; }
+      .code-row { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:6px 0 4px; }
+      .auth-form .code-box { width:100%; height:58px; padding:0; text-align:center; font-size:24px; font-weight:800; font-family:'Bricolage Grotesque',sans-serif; }
+      .auth-link { background:none; border:none; padding:0; color:var(--primary); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+      .auth-forgot { align-self:flex-end; margin-top:-6px; }
+      .auth-resend { text-align:center; font-size:13px; color:var(--ink-soft); margin-top:16px; }
+      .auth-warn { display:flex; gap:12px; margin-top:22px; background:#FBEBC8; color:#8A5A12; border-radius:14px; padding:16px; font-size:12.5px; line-height:1.5; }
+      .auth-info { background:#E3EFE9; color:var(--primary); border-radius:10px; padding:11px 13px; font-size:12px; }
+      .ap-av { overflow:hidden; }
+      .ep { padding:0 18px 40px; }
+      .ep-top { display:flex; align-items:center; justify-content:space-between; padding:14px 0; }
+      .ep-top button { background:none; border:none; font-family:inherit; cursor:pointer; color:var(--ink); }
+      .ep-save { color:var(--primary) !important; font-weight:800; font-size:15px; }
+      .ep-ph { display:flex; flex-direction:column; align-items:center; gap:10px; margin:6px 0 10px; }
+      .ep-av { width:92px; height:92px; border-radius:50%; background:#E3EFE9; color:var(--primary); font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:28px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+      .ep-av img { width:100%; height:100%; object-fit:cover; }
+      .ep-lab { display:block; font-weight:700; font-size:13.5px; margin:18px 0 8px; }
+      .ep-in { width:100%; border:1.5px solid var(--line); border-radius:12px; padding:14px; font-family:inherit; font-size:16px; background:var(--surface); color:var(--ink); }
+      .ep-in:focus { outline:none; border-color:var(--primary); }
+      .ep-lock { background:#ECE7D8; color:var(--ink-soft); }
+      .ep-hint { font-size:12px; color:var(--ink-soft); margin-top:6px; }
+      .ep-days { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+      .ep-day { height:44px; border-radius:10px; border:1.5px solid var(--line); background:var(--surface); font-family:inherit; font-weight:700; color:var(--ink); cursor:pointer; }
+      .ep-day--on { background:var(--primary); border-color:var(--primary); color:#fff; }
       .auth-note { display:flex; gap:12px; align-items:flex-start; margin-top:22px; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:16px; font-size:12.5px; line-height:1.5; }
 
       .auth-form label.auth-agree { flex-direction:row; align-items:center; gap:12px; font-weight:500; color:var(--ink-soft); font-size:13.5px; }
