@@ -201,7 +201,7 @@ async function api(path, { method = "GET", body, token } = {}) {
 /* ============ helpers ============ */
 const TRADES = { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair", LAPTOP_REPAIR: "Laptop Repair", PAINTER: "Painter", CARPENTER: "Carpenter", CLEANER: "Cleaner" };
 const tradeLabel = (t) => TRADES[t] || t;
-const NAV = [["dashboard", "Dashboard"], ["applications", "Artisan Applications"], ["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
+const NAV = [["dashboard", "Dashboard"], ["notifications", "Notifications"], ["applications", "Artisan Applications"],["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
 const PAGES = NAV.map((n) => n[0]);
 const initials = (n = "") => n.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -342,15 +342,18 @@ function Shell({ token, user, onLogout }) {
   const [toast, setToast] = useState(null);
   const [img, setImg] = useState(null);
   const stats = useFetch(token, "/api/admin/stats");
+  const nf = useFetch(token, "/api/notifications");
+  useEffect(() => { const id = setInterval(() => { if (!document.hidden) { nf.reload(); stats.reload(); } }, 30000); return () => clearInterval(id); }, []);
   const s = stats.data ? stats.data.stats : null;
-  const badge = { applications: s ? s.pendingApplications : 0, reports: s ? s.openReports : 0, blog: s ? (s.pendingPosts || 0) : 0 };
+  const badge = { notifications: nf.data ? nf.data.unread : 0, applications: s ? s.pendingApplications : 0, reports: s ? s.openReports : 0, blog: s ? (s.pendingPosts || 0) : 0 };
 
   function go(p, id = null) { setPage(p); setParam(id); setMenu(false); window.location.hash = "/" + p; window.scrollTo(0, 0); }
   function flash(m) { setToast(m); clearTimeout(window.__vhT); window.__vhT = setTimeout(() => setToast(null), 2800); }
-  const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats };
+  const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats, nfRes: nf };
 
   let body;
   if (page === "dashboard") body = <Dashboard {...c} />;
+  else if (page === "notifications") body = <AdminNotifications {...c} />;
   else if (page === "applications") body = param ? <ApplicationDetail key={param} id={param} {...c} /> : <Applications {...c} />;
   else if (page === "artisans") body = <Artisans key={param || "x"} {...c} />;
   else if (page === "customers") body = <Customers {...c} />;
@@ -410,6 +413,29 @@ function Dashboard({ statsRes, go }) {
         <div className="card"><div className="card-h"><h3>Completed jobs</h3><span className="soft">Per week · {last(series.completed)} this week</span></div><BarChart data={series.completed} color="#0F4D3A" /></div>
         <div className="card"><div className="card-h"><h3>New artisans</h3><span className="soft">Approved per week · {last(series.artisans)} this week</span></div><BarChart data={series.artisans} color="#1B6650" /></div>
         <div className="card"><div className="card-h"><h3>Popular services</h3><span className="soft">Requests, all time</span></div><HBars data={popular} /></div>
+      </div>
+    </>
+  );
+}
+
+/* ============ notifications ============ */
+const ADMIN_GO = { ADMIN_NEW_APP: "applications", ADMIN_NEW_REPORT: "reports", ADMIN_NEW_POST: "blog", ADMIN_POST_REPORTED: "blog" };
+function AdminNotifications({ token, nfRes, go }) {
+  const w = wait(nfRes); if (w) return w;
+  const items = nfRes.data.notifications;
+  async function read(ids) { try { await api("/api/notifications/read", { method: "POST", token, body: { ids } }); nfRes.reload(); } catch (e) {} }
+  return (
+    <>
+      <Head title="Notifications" sub={`${nfRes.data.unread} unread`} right={nfRes.data.unread > 0 ? <button className="btn" onClick={() => read([])}>Mark all as read</button> : null} />
+      <div className="stack">
+        {items.map((n) => (
+          <button key={n.id} className="rep-item" style={{ width: "100%", background: n.readAt ? "#fff" : "#EEF6F1" }}
+            onClick={() => { if (!n.readAt) read([n.id]); if (ADMIN_GO[n.type]) go(ADMIN_GO[n.type]); }}>
+            <div className="rep-top"><b>{n.title}</b><span className="soft">{ago(n.createdAt)}</span></div>
+            <div className="rep-t soft" style={{ fontWeight: 400 }}>{n.text}</div>
+          </button>
+        ))}
+        {!items.length && <div className="empty">You're all caught up.</div>}
       </div>
     </>
   );

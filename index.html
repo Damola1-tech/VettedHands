@@ -396,7 +396,8 @@ function MainApp({ auth, intent }) {
   const [trackFrom, setTrackFrom] = useState(null);
   const [applyOpen, setApplyOpen] = useState(intent === "artisan");
   const [otherReadAt, setOtherReadAt] = useState(null);
-  const [readIds, setReadIds] = useState(() => { try { return JSON.parse(localStorage.getItem("vh_notif_read_" + user.id) || "[]"); } catch (e) { return []; } });
+  const [notifs, setNotifs] = useState([]);
+  async function loadNotifs() { try { const d = await api("/api/notifications", { token }); setNotifs(d.notifications); } catch (e) { /* silent */ } }
 
   const [artisans, setArtisans] = useState([]);
   const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
@@ -456,7 +457,7 @@ function MainApp({ auth, intent }) {
   }
 
   useEffect(() => { loadArtisans(); }, [tradeFilter, area, query]);
-  useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); }, []);
+  useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); loadNotifs(); }, []);
   useEffect(() => {
     if (!isArtisan) return;
     api("/api/artisans/me/reviews", { token }).then((d) => setMyReviews(d.reviews)).catch(() => {});
@@ -464,7 +465,7 @@ function MainApp({ auth, intent }) {
   // Background refresh of requests every 8s so the nav badge count and requests/messages
   // lists stay roughly current even when the user isn't actively viewing a conversation.
   useEffect(() => {
-    const id = setInterval(() => { if (!document.hidden) loadRequests(); }, 15000);
+    const id = setInterval(() => { if (!document.hidden) { loadRequests(); loadNotifs(); } }, 15000);
     return () => clearInterval(id);
   }, []);
 
@@ -497,15 +498,20 @@ function MainApp({ auth, intent }) {
 
   const onlineNow = artisans.filter((a) => a.online);
   const activeRequest = requests.find((r) => r.id === activeRequestId);
-  const notifications = useMemo(() => buildNotifications(requests, user), [requests, user.id]);
-  const unreadNotifs = notifications.filter((n) => notifUnread(n, readIds)).length;
+  const notifications = notifs.map((n) => ({ ...n, time: n.createdAt, kind: NOTIF_KIND[n.type] || "job" }));
+  const unreadNotifs = notifs.filter((n) => !n.readAt).length;
   const unreadMessages = requests.reduce((n, r) => n + (r.unreadCount || 0), 0);
-  function markRead(ids) {
-    setReadIds((prev) => {
-      const next = [...new Set([...prev, ...ids])].slice(-300);
-      try { localStorage.setItem("vh_notif_read_" + user.id, JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  async function markRead(ids) {
+    const all = !ids || !ids.length;
+    setNotifs((p) => p.map((n) => (all || ids.includes(n.id) ? { ...n, readAt: n.readAt || new Date().toISOString() } : n)));
+    try { await api("/api/notifications/read", { method: "POST", token, body: { ids } }); } catch (e) { /* silent */ }
+  }
+  async function setEmailOptOut(v) {
+    try {
+      await api("/api/notifications/prefs", { method: "PATCH", token, body: { emailOptOut: v } });
+      setUser((u) => ({ ...u, emailOptOut: v }));
+      flash(v ? "Email alerts off" : "Email alerts on");
+    } catch (e) { fail(e); }
   }
 
   async function openArtisanProfile(a, origin = "home") {
@@ -764,10 +770,10 @@ function MainApp({ auth, intent }) {
         )}
         {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={(id) => openConversation(id)} />}
         {view === "notifications" && (
-          <NotificationsView items={notifications} readIds={readIds}
+          <NotificationsView items={notifications} readIds={[]}
             onBack={() => setView("home")}
             onMarkAll={() => markRead(notifications.map((n) => n.id))}
-            onOpen={(n) => { markRead([n.id]); openConversation(n.requestId, "notifications"); }} />
+            onOpen={(n) => { markRead([n.id]); if (n.requestId) openTrack(n.requestId, "notifications"); else if (n.postId) setView("blog"); else setView("home"); }} />
         )}
         {view === "conversation" && activeRequest && (
           <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user} otherReadAt={otherReadAt}
@@ -783,14 +789,14 @@ function MainApp({ auth, intent }) {
             onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
-          <CustomerProfileView user={user} requests={requests} application={application}
+          <CustomerProfileView user={user} requests={requests} application={application} onEmailPref={setEmailOptOut}
             onGoRequests={() => goNav("requests")}
             onBecomeArtisan={() => setApplyOpen(true)}
             onHelp={() => setView("help")}
             onLogout={logout} />
         )}
         {view === "userProfile" && isArtisan && user.artisanProfile && (
-          <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews}
+          <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onLogout={logout} />
         )}
@@ -1866,7 +1872,7 @@ function ReportView({ request: r, user, onClose, onSubmit }) {
 }
 
 /* ---------------- Customer profile ---------------- */
-function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onHelp, onLogout }) {
+function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onHelp, onLogout, onEmailPref }) {
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
@@ -1875,6 +1881,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onBeco
     [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
     [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
     [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoRequests],
+    [Bell, "Email alerts", user.emailOptOut ? "Off. Tap to turn on" : "On. Tap to turn off", () => onEmailPref(!user.emailOptOut)],
     [HelpCircle, "Help and support", "Answers, badges and how to reach us", onHelp],
   ];
   return (
@@ -2062,7 +2069,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout, onEmailPref }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
@@ -2089,6 +2096,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
       </div>
       <div className="ao-menu">
         <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
       </div>
       <button className="ao-out" onClick={onLogout}>Sign out</button>
@@ -2386,7 +2394,8 @@ function buildNotifications(requests, me) {
   }
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
-const notifUnread = (n, readIds) => !n.autoRead && !readIds.includes(n.id);
+const notifUnread = (n) => !n.readAt;
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
