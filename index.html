@@ -862,10 +862,28 @@ function MainApp({ auth, intent }) {
     else setView("userProfile");
   }
 
-  async function sendRequest(artisanProfileId, job, when, jobGroupId, image, reqArea) {
+  const [askGroup, setAskGroup] = useState(null); // { args, groups } while we ask "same job?"
+  // Open jobs (still waiting or accepted) that this artisan is not already part of
+  function openJobsFor(artisanProfileId) {
+    const m = new Map();
+    for (const r of requests) {
+      if (r.studentId !== user.id || !["PENDING", "ACCEPTED"].includes(r.status)) continue;
+      const g = m.get(r.jobGroupId) || { jobGroupId: r.jobGroupId, job: r.job, when: r.when, ids: [], names: [] };
+      g.ids.push(r.artisanProfileId);
+      g.names.push(((r.artisanProfile && r.artisanProfile.user && r.artisanProfile.user.name) || "an artisan"));
+      m.set(r.jobGroupId, g);
+    }
+    return [...m.values()].filter((g) => !g.ids.includes(artisanProfileId));
+  }
+  async function sendRequest(artisanProfileId, job, when, jobGroupId, image, reqArea, decided) {
+    if (!jobGroupId && !decided) {
+      const groups = openJobsFor(artisanProfileId);
+      if (groups.length) { setAskGroup({ args: [artisanProfileId, job, when, image, reqArea], groups }); return; }
+    }
     try {
       const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined, image: image || undefined, area: reqArea || undefined } });
       setRequests((prev) => [d.request, ...prev]);
+      loadOpenGroups();
       setActiveRequestId(d.request.id);
       setWiz({ ...blankWiz });
       setTrackFrom("home");
@@ -955,6 +973,16 @@ function MainApp({ auth, intent }) {
       flash(action === "start" ? "Job started" : "Marked done. Waiting for the customer to confirm");
       return true;
     } catch (e) { fail(e); }
+  }
+  async function cancelAction(requestId, path, method, body, okMsg) {
+    try {
+      const d = await api(`/api/requests/${requestId}/${path}`, { method, token, body });
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, ...d.request } : r)));
+      try { const m = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(m.messages); } catch (e) { /* ignore */ }
+      loadOpenGroups();
+      if (okMsg) flash(okMsg);
+      return true;
+    } catch (e) { fail(e); return false; }
   }
   async function reportRequest(requestId, reason, note) {
     try {
@@ -1075,7 +1103,7 @@ function MainApp({ auth, intent }) {
         )}
         {view === "request" && selectedArtisan && (
           <RequestView artisan={selectedArtisan} openJobGroups={openGroups} initialJob={prefillJob} onBack={() => setView("artisanProfile")}
-            onSend={(job, when, gId, image) => { sendRequest(selectedArtisan.id, job, when, gId, image); setPrefillJob(""); }} />
+            onSend={(job, when, gId, image) => { sendRequest(selectedArtisan.id, job, when, gId, image, undefined, true); setPrefillJob(""); }} />
         )}
         {view === "requestSent" && activeRequest && (
           <RequestSentView artisan={activeRequest.artisanProfile} onDone={() => { setView("home"); setNavTab("home"); }} onMessage={() => openConversation(activeRequest.id)} />
@@ -1096,7 +1124,8 @@ function MainApp({ auth, intent }) {
             onReview={() => setView("review")}
             onStart={() => jobAction(activeRequest.id, "start")}
             onDone={() => jobAction(activeRequest.id, "done")}
-            onReport={() => setView("report")} />
+            onReport={() => setView("report")}
+            onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)} />
         )}
         {view === "review" && activeRequest && (
           <ReviewView request={activeRequest}
@@ -1129,6 +1158,7 @@ function MainApp({ auth, intent }) {
             onPoll={pollConversation}
             onViewJob={() => openTrack(activeRequest.id)}
             onOpenReport={() => setView("report")}
+            onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)}
             onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
@@ -1161,6 +1191,24 @@ function MainApp({ auth, intent }) {
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
         requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report", "editProfile", "reportReply" ].includes(view) || (view === "userProfile" && applyOpen)} />
+      {askGroup && (
+        <div className="sg-back" onClick={() => setAskGroup(null)}>
+          <div className="sg-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Is this the same job?</h3>
+            <p>You already have an open request. If it's the same job, we group them. When one artisan is confirmed, the others close on their own.</p>
+            {askGroup.groups.map((g) => (
+              <button key={g.jobGroupId} className="sg-opt" onClick={() => { const [a, j, w, im, ar] = askGroup.args; setAskGroup(null); sendRequest(a, j, w, g.jobGroupId, im, ar, true); }}>
+                <b>Yes, same as: "{g.job.length > 40 ? g.job.slice(0, 40) + "…" : g.job}"</b>
+                <small>Already sent to {g.names.join(", ")}</small>
+              </button>
+            ))}
+            <button className="sg-opt sg-new" onClick={() => { const [a, j, w, im, ar] = askGroup.args; setAskGroup(null); sendRequest(a, j, w, null, im, ar, true); }}>
+              <b>No, this is a different job</b>
+            </button>
+            <button className="sg-x" onClick={() => setAskGroup(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1954,6 +2002,7 @@ function statusMeta(status) {
     COMPLETED: { label: "Completed", cls: "badge--completed" },
     CLOSED: { label: "Closed", cls: "badge--closed" },
     DECLINED: { label: "Declined", cls: "badge--declined" },
+    CANCELLED: { label: "Cancelled", cls: "badge--declined" },
   };
   return map[status] || { label: status, cls: "" };
 }
@@ -1963,14 +2012,16 @@ function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
   if (s === "ACCEPTED") return artisanSide ? ["Accepted", "blue"] : ["Confirm booking", "amber"];
+  if (s === "CONFIRMED" && r.cancelRequestedAt) return ["Cancel requested", "amber"];
   if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : r.startedAt ? ["In progress", "green"] : ["Booked", "green"];
   if (s === "COMPLETED") return ["Completed", "dark"];
   if (s === "DECLINED") return ["Declined", "red"];
+  if (s === "CANCELLED") return ["Cancelled", "red"];
   return ["Closed", "grey"];
 }
 function reqBucket(r, meId) {
   if (r.status === "COMPLETED") return "completed";
-  if (r.status === "DECLINED" || r.status === "CLOSED") return "cancelled";
+  if (r.status === "DECLINED" || r.status === "CLOSED" || r.status === "CANCELLED") return "cancelled";
   if (r.status === "PENDING" && r.artisanProfile.user.id === meId) return "new";
   return "active";
 }
@@ -2060,7 +2111,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
 }
 
 /* ---------------- Request tracking ---------------- */
-function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport }) {
+function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport, onCancelAction }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const ap = r.artisanProfile;
@@ -2068,7 +2119,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   const other = artisanSide ? r.student : ap.user;
   const first = other.name.split(" ")[0];
   const s = r.status;
-  const ended = s === "DECLINED" || s === "CLOSED";
+  const ended = s === "DECLINED" || s === "CLOSED" || s === "CANCELLED";
   const booked = s === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt;
   const working = s === "CONFIRMED" && !!r.startedAt && !r.artisanDoneAt;
   const waitingConfirm = s === "CONFIRMED" && !!r.artisanDoneAt;
@@ -2080,6 +2131,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   let head;
   if (s === "DECLINED") head = artisanSide ? "You declined this request" : `${first} declined this request`;
   else if (s === "CLOSED") head = "This request was closed";
+  else if (s === "CANCELLED") head = "This request was cancelled";
   else if (s === "PENDING") head = artisanSide ? `${first} is waiting for your reply` : `Waiting for ${first} to reply`;
   else if (s === "ACCEPTED") head = artisanSide ? `Waiting for ${first} to confirm the booking` : `${first} accepted. Confirm to book them`;
   else if (booked) head = artisanSide ? `${first} booked you. Start when you're ready` : `${first} is booked for your job`;
@@ -2090,7 +2142,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   const startedTxt = r.startedAt ? `Started ${dayLabel(r.startedAt)}, ${clockTime(r.startedAt)}` : s === "COMPLETED" ? "Work finished" : "Work under way";
   const steps = [
     ["Request sent", `${dayLabel(r.createdAt)}, ${clockTime(r.createdAt)} · ${artisanSide ? "From " + r.student.name : "Sent to " + ap.user.name}`],
-    ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "The request was closed" : "Request accepted"],
+    ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "The request was closed" : s === "CANCELLED" ? "The request was cancelled" : "Request accepted"],
     ["Booking confirmed", s === "PENDING" ? "After the artisan accepts" : ended ? "Not reached" : s === "ACCEPTED" ? (artisanSide ? "Waiting for the customer to confirm" : `Confirm to book ${first}. Your other requests for this job close`) : "The customer confirmed the booking"],
     ["Job in progress", s === "ACCEPTED" || booked ? (artisanSide ? (booked ? "Tap Start job when you begin" : "After the customer confirms") : `Starts when ${first} begins the job`) : working || waitingConfirm || s === "COMPLETED" ? startedTxt : "Starts once the artisan begins"],    ["Job completed", s === "COMPLETED" ? "Marked done and confirmed" : waitingConfirm ? (artisanSide ? "Waiting for the customer to confirm" : `${first} marked it done. Confirm it to review`) : artisanSide ? "You mark it done, the customer confirms" : `${first} marks it done, you confirm`],
     [artisanSide ? "Customer review" : "Review artisan", r.rating ? `Rated ${r.rating} out of 5` : "Rate the work and help others hire with confidence"],
@@ -2147,8 +2199,95 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
           </div>
         )}
       </div>
+      {!ended && s !== "COMPLETED" && <CancelBar request={r} user={user} onAction={onCancelAction} />}
       {!ended && <button className="tk-report" onClick={onReport}>Report a problem with this job</button>}
     </div>
+  );
+}
+
+/* ---------------- Cancelling ---------------- */
+const CANCEL_REASONS = {
+  customer: ["Found another artisan", "Artisan is not responding", "I no longer need this done", "Price or terms didn't work", "The time doesn't work for me", "Other"],
+  artisan: ["I can't make the time", "This job is outside my skill", "Customer is not responding", "Price or terms didn't work", "The location is too far", "Other"],
+};
+function CancelBar({ request: r, user, onAction, compact }) {
+  const artisanSide = r.artisanProfile.user.id === user.id;
+  const other = artisanSide ? r.student : r.artisanProfile.user;
+  const first = other.name.split(" ")[0];
+  const [sheet, setSheet] = useState(null); // "ask" | "reply"
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [noFunds, setNoFunds] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const s = r.status;
+  const booked = s === "CONFIRMED";
+  const iAsked = booked && r.cancelRequestedById === user.id;
+  const theyAsked = booked && !!r.cancelRequestedAt && r.cancelRequestedById !== user.id;
+  if (booked && r.artisanDoneAt) return null;
+  if (s === "PENDING" && artisanSide) return null; // artisans decline pending requests instead
+  if (!["PENDING", "ACCEPTED", "CONFIRMED"].includes(s)) return null;
+  const list = CANCEL_REASONS[artisanSide ? "artisan" : "customer"];
+  const reasonOk = reason && (reason !== "Other" || note.trim().length >= 3);
+  async function go(path, method, body, msg) {
+    if (busy) return;
+    setBusy(true);
+    try { const ok = await onAction(path, method, body, msg); if (ok) { setSheet(null); setReason(""); setNote(""); setNoFunds(false); } } finally { setBusy(false); }
+  }
+  const label = booked ? "Cancel booking" : artisanSide ? "Withdraw from this job" : `Cancel request to ${first}`;
+  return (
+    <>
+      {theyAsked ? (
+        <div className="cx-card">
+          <b>{first} asked to cancel this booking</b>
+          <span>Reason: {r.cancelReason}{r.cancelNote ? ` (${r.cancelNote})` : ""}</span>
+          <div className="cx-row"><button className="ghost-btn" disabled={busy} onClick={() => go("cancel-respond", "POST", { agree: false }, "Booking kept")}>Keep booking</button><button className="settle-btn" onClick={() => { setNoFunds(false); setSheet("reply"); }}>Agree to cancel</button></div>
+        </div>
+      ) : iAsked ? (
+        <div className="cx-card cx-wait">
+          <b>Waiting for {first} to agree to cancel</b>
+          <button className="cx-link" disabled={busy} onClick={() => go("cancel-retract", "POST", {}, "Request withdrawn")}>Take it back</button>
+        </div>
+      ) : (
+        <button className={"cx-btn" + (compact ? " cx-btn--compact" : "")} onClick={() => setSheet("ask")}>{label}</button>
+      )}
+      {sheet === "ask" && (
+        <div className="sg-back" onClick={() => setSheet(null)}>
+          <div className="sg-card" onClick={(e) => e.stopPropagation()}>
+            <h3>{label}</h3>
+            <p>{booked ? `${first} has to agree before this booking is cancelled.` : `${first} will be told. This can't be undone.`} Why are you cancelling?</p>
+            <div className="cx-reasons">
+              {list.map((x) => (
+                <label key={x} className={"cx-reason" + (reason === x ? " on" : "")}><input type="radio" name="cxr" checked={reason === x} onChange={() => setReason(x)} />{x}</label>
+              ))}
+            </div>
+            {reason === "Other" && <textarea className="cx-note" rows={2} maxLength={300} placeholder="Tell us in a few words" value={note} onChange={(e) => setNote(e.target.value)} />}
+            {booked && (
+              <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>No money has been exchanged for this job.</span></label>
+            )}
+            {booked && <small className="cx-hint">If money has already changed hands, don't cancel here. Use "Report a problem" instead.</small>}
+            <button className="primary-btn" style={{ margin: "10px 0 0" }} disabled={busy || !reasonOk || (booked && !noFunds)}
+              onClick={() => go(booked ? "cancel" : "withdraw", booked ? "POST" : "PATCH", { reason, note: note.trim() || undefined, noFunds: booked ? true : undefined }, booked ? "Cancellation sent" : "Request cancelled")}>
+              {busy ? "Sending…" : booked ? "Send cancellation request" : "Cancel request"}
+            </button>
+            <button className="sg-x" onClick={() => setSheet(null)}>Back</button>
+          </div>
+        </div>
+      )}
+      {sheet === "reply" && (
+        <div className="sg-back" onClick={() => setSheet(null)}>
+          <div className="sg-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Agree to cancel?</h3>
+            <p>Both of you have to confirm that no money has been exchanged.</p>
+            <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>No money has been exchanged for this job.</span></label>
+            <small className="cx-hint">If money has changed hands, leave this unticked. The booking stays and you can use "Report a problem".</small>
+            <button className="primary-btn" style={{ margin: "10px 0 0" }} disabled={busy} onClick={() => go("cancel-respond", "POST", { agree: true, noFunds }, noFunds ? "Booking cancelled" : "Booking kept")}>
+              {busy ? "Sending…" : noFunds ? "Cancel the booking" : "Money was exchanged, keep booking"}
+            </button>
+            <button className="sg-x" onClick={() => setSheet(null)}>Back</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2797,10 +2936,12 @@ function buildNotifications(requests, me) {
         : { kind: "review", title: `Time to review ${first}`, text: `Your ${r.job.slice(0, 40)} job is complete. Share how it went.` });
       if (r.status === "DECLINED") add("DECLINED", { kind: "flag", title: `${first} declined your request`, text: "Try another artisan near you." });
       if (r.status === "CLOSED") add("CLOSED", { kind: "flag", title: "Request closed", text: "You booked another artisan for this job." });
+      if (r.status === "CANCELLED") add("CANCELLED", { kind: "flag", title: "Request cancelled", text: r.job });
     } else {
       if (r.status === "PENDING") add("PENDING", { kind: "job", title: `New request from ${first}`, text: r.job });
       if (r.status === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt) add("BOOKED", { kind: "ok", title: `${first} booked you`, text: "Start the job when you're ready." });
       if (r.status === "CLOSED") add("CLOSED", { kind: "flag", title: `${first} chose another artisan`, text: r.job });
+      if (r.status === "CANCELLED") add("CANCELLED", { kind: "flag", title: "Request cancelled", text: r.job });
       if (r.status === "CONFIRMED" && r.artisanDoneAt) add("DONE", { kind: "ok", title: `Waiting for ${first} to confirm`, text: r.job });
       if (r.status === "COMPLETED") add("COMPLETED", { kind: "review", title: `Job completed for ${first}`, text: r.rating ? `They rated you ${r.rating} out of 5.` : "Waiting for their review." });
     }
@@ -2812,7 +2953,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -2860,7 +3001,7 @@ function NotificationsView({ items, readIds, onBack, onMarkAll, onOpen }) {
 function MessagesListView({ requests, user, onOpen }) {
   const [tab, setTab] = useState("active");
   const [q, setQ] = useState("");
-  const done = (r) => ["COMPLETED", "DECLINED", "CLOSED"].includes(r.status);
+  const done = (r) => ["COMPLETED", "DECLINED", "CLOSED", "CANCELLED"].includes(r.status);
   const rows = requests
     .map((r) => {
       const artisanSide = r.artisanProfile.user.id === user.id;
@@ -2960,7 +3101,7 @@ function VoiceBubble({ src, secs, mine }) {
     </div>
   );
 }
-function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onViewJob, onOpenReport, onSendVoice }) {
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onViewJob, onOpenReport, onSendVoice, onCancelAction }) {
   const [text, setText] = useState("");
   const vr = useRecorder(60);
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -2978,7 +3119,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   }, [request.id]);
   const iAmArtisanSide = request.artisanProfile.user.id === user.id;
   const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
-  const canAct = !["COMPLETED", "DECLINED", "CLOSED"].includes(request.status);
+  const canAct = !["COMPLETED", "DECLINED", "CLOSED", "CANCELLED"].includes(request.status);
   const locked = iAmArtisanSide && request.status === "PENDING"; // artisans can only chat after accepting
   
   const readUpTo = otherReadAt ? new Date(otherReadAt).getTime() : 0;
@@ -3002,6 +3143,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         {canAct && <button className="cv-flag" onClick={onOpenReport} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
       <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {label}</span><b>View job <ChevronRight size={15} /></b></button>
+      {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
       {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" />}
 
@@ -3523,6 +3665,29 @@ function Style() {
       .settings-row { display:flex; align-items:center; gap:10px; padding:14px 16px; font-size:13.5px; font-weight:500; border-bottom:1px solid var(--line); color:var(--ink); }
       .settings-row:last-child { border-bottom:none; }
       .settings-row--danger { color:var(--danger); }
+      .sg-back { position:fixed; inset:0; background:rgba(30,27,22,0.5); z-index:40; display:flex; align-items:flex-end; justify-content:center; }
+      .sg-card { width:100%; max-width:420px; background:var(--surface); border-radius:18px 18px 0 0; padding:18px 16px calc(16px + env(safe-area-inset-bottom)); }
+      .sg-card h3 { margin:0 0 6px; font-family:'Bricolage Grotesque',sans-serif; font-size:17px; }
+      .sg-card p { margin:0 0 12px; font-size:12.5px; color:var(--ink-soft); line-height:1.45; }
+      .sg-opt { display:block; width:100%; text-align:left; background:var(--bg); border:1.5px solid var(--line); border-radius:12px; padding:11px 12px; margin-bottom:8px; cursor:pointer; font-family:inherit; color:var(--ink); }
+      .sg-opt b { display:block; font-size:13px; } .sg-opt small { color:var(--ink-soft); font-size:11.5px; }
+      .sg-opt:first-of-type { border-color:var(--primary); }
+      .sg-new { border-style:dashed; }
+      .sg-x { display:block; margin:4px auto 0; background:none; border:none; color:var(--ink-soft); font-size:12.5px; cursor:pointer; font-family:inherit; }
+      .cx-btn { display:block; margin:14px auto 0; background:none; border:none; color:var(--ink-soft); font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; text-decoration:underline; }
+      .cx-btn--compact { margin:0; padding:7px 14px; background:#F3EEDD; border-bottom:1px solid var(--line); width:100%; text-decoration:none; font-size:12.5px; color:var(--danger); }
+      .cx-card { margin:12px 16px 0; background:var(--accent-bg); border:1px solid #E5CFAE; border-radius:14px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
+      .cx-card b { font-size:13.5px; } .cx-card span { color:var(--ink-soft); }
+      .cx-wait { flex-direction:row; align-items:center; justify-content:space-between; }
+      .cx-row { display:flex; gap:8px; margin-top:6px; } .cx-row button { flex:1; }
+      .cx-link { background:none; border:none; color:var(--primary); font-weight:700; font-family:inherit; font-size:12.5px; cursor:pointer; }
+      .cx-reasons { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+      .cx-reason { display:flex; align-items:center; gap:9px; border:1.5px solid var(--line); border-radius:11px; padding:10px 12px; font-size:13px; cursor:pointer; background:var(--bg); }
+      .cx-reason.on { border-color:var(--primary); background:#E3EFE9; font-weight:600; }
+      .cx-note { width:100%; border:1.5px solid var(--line); border-radius:11px; padding:10px 12px; font-family:inherit; font-size:13px; margin-bottom:8px; resize:none; background:var(--bg); }
+      .cx-check { display:flex; align-items:flex-start; gap:10px; background:var(--bg); border:1.5px solid var(--line); border-radius:11px; padding:11px 12px; font-size:13px; font-weight:600; margin-top:4px; }
+      .cx-check input { margin-top:2px; width:18px; height:18px; accent-color:var(--primary); }
+      .cx-hint { display:block; color:var(--ink-soft); font-size:11.5px; margin-top:6px; line-height:1.4; }
       .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
 
       .hero { background:linear-gradient(135deg,#0F4D3A 0%,#0A3A2B 100%); border-radius:0 0 28px 28px; padding:calc(20px + env(safe-area-inset-top)) 18px 22px; }
@@ -4301,15 +4466,36 @@ function Style() {
         .topbar { padding-top: calc(16px + env(safe-area-inset-top)); }
       }
 
+      /* ===== Desktop and tablet: sidebar + wide content, like the admin ===== */
       @media (min-width: 760px) {
-        .app { padding: 40px 24px; align-items: flex-start; }
-        .phone { max-width: 880px; min-height: 680px; border-radius: 20px; flex-direction: row; }
-        .content { order: 1; min-width: 0; }
-        .bottomnav { order: 2; flex-direction: column; width: 220px; flex-shrink: 0; border-top: none; border-left: 1px solid var(--line); padding: 22px 12px; gap: 4px; justify-content: flex-start; }
-        .nav-item { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 11px 12px; border-radius: 10px; font-size: 13px; }
-        .nav-item--active { background: var(--accent-bg); }
-        .feed--scroll { display: block; column-count: 2; column-gap: 14px; padding-bottom: 24px; }
-        .feed--scroll > * { break-inside: avoid; margin-bottom: 10px; }
+        .app { padding:0; align-items:stretch; background:var(--bg); }
+        .phone { max-width:none; width:100%; min-height:100vh; height:100vh; border-radius:0; border:none; box-shadow:none; flex-direction:row; position:relative; }
+        .phone > .screen--center { flex:1; }
+        .content { order:1; flex:1; min-width:0; background:var(--bg); }
+        .content::after { display:none !important; }
+        .content > .screen { width:100%; max-width:1040px; margin:0 auto; padding-left:12px; padding-right:12px; }
+        .bottomnav, .phone .bottomnav { order:0; position:static; display:flex; flex-direction:column; justify-content:flex-start; width:236px; flex-shrink:0; background:var(--primary); border:none; border-radius:0; box-shadow:none; padding:24px 12px; gap:4px; left:auto; right:auto; bottom:auto; }
+        .bottomnav--hide, .phone .bottomnav--hide { display:flex; }
+        .bottomnav::before { content:"VettedHands"; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:21px; color:#fff; padding:2px 12px 24px; letter-spacing:-0.01em; }
+        .nav-item, .phone .nav-item { flex:none; flex-direction:row; justify-content:flex-start; align-items:center; gap:12px; padding:12px 14px; border-radius:11px; font-size:14.5px; font-weight:600; color:rgba(255,255,255,.82); }
+        .nav-item:hover { background:rgba(255,255,255,.08); }
+        .nav-item--active, .phone .nav-item--active { background:rgba(255,255,255,.16); color:#fff; }
+        .nav-icon-wrap, .nav-item--active .nav-icon-wrap, .phone .nav-icon-wrap { padding:0; background:none; border-radius:0; }
+        .nav-item { position:relative; }
+        .nav-badge, .phone .nav-badge { position:absolute; top:50%; right:12px; transform:translateY(-50%); background:#D69A1F; font-size:11px; padding:2px 7px; }
+        .nav-icon-wrap { position:static; }
+        .nav-item > span:last-child { flex:1; text-align:left; }
+        .rq-list, .hm-list { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; align-items:start; }
+        .rq-list > *, .hm-list > * { margin:0; }
+        .content > .screen.tk, .content > .screen.rv, .content > .screen.rf, .content > .screen.cv, .content > .screen.ep, .content > .screen.hp, .content > .screen.nf { max-width:720px; }
+        .feed--scroll { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; padding:12px 16px 32px; align-content:start; }
+        .feed--scroll > * { margin:0; }
+        .toast { bottom:26px; }
+        .cv-msgs { max-height:none; }
+      }
+      @media (min-width: 1180px) {
+        .content > .screen { max-width:1120px; padding-left:24px; padding-right:24px; }
+        .feed--scroll { grid-template-columns:repeat(3, minmax(0,1fr)); }
       }
     `}</style>
   );

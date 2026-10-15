@@ -229,7 +229,7 @@ function Avatar({ name, size = 38 }) {
 }
 const Shield = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" /></svg>;
 
-const REQ_STATUS = { PENDING: ["Pending", "p-amber"], ACCEPTED: ["Accepted", "p-blue"], CONFIRMED: ["In Progress", "p-green"], COMPLETED: ["Completed", "p-dark"], DECLINED: ["Cancelled", "p-red"], CLOSED: ["Cancelled", "p-red"] };
+const REQ_STATUS = { PENDING: ["Pending", "p-amber"], ACCEPTED: ["Accepted", "p-blue"], CONFIRMED: ["In Progress", "p-green"], COMPLETED: ["Completed", "p-dark"], DECLINED: ["Cancelled", "p-red"], CLOSED: ["Cancelled", "p-red"], CANCELLED: ["Cancelled", "p-red"] };
 const ReqPill = ({ status }) => { const [t, c] = REQ_STATUS[status] || [status, "p-grey"]; return <span className={"pill " + c}>{t}</span>; };
 const Badges = ({ a }) => <span className="badges"><span className="pill p-green">Vetted</span>{a.skillVerified && <span className="pill p-blue">Skill</span>}{a.badge === "TOP_RATED" && <span className="pill p-amber">Top</span>}</span>;
 const Head = ({ title, sub, right }) => <div className="head"><div><h1>{title}</h1>{sub && <p className="head-sub">{sub}</p>}</div>{right}</div>;
@@ -996,20 +996,82 @@ function Verification({ token, flash, go, refreshStats }) {
   );
 }
 
-/* ============ settings (read only) ============ */
-function Settings({ statsRes, user }) {
-  const rules = statsRes.data ? statsRes.data.rules : null;
+/* ============ settings ============ */
+function Settings({ token, flash, statsRes, reload: _r }) {
+  const res = useFetch(token, "/api/admin/settings");
+  const d = res.data;
+  const [support, setSupport] = useState(null);
+  const [acct, setAcct] = useState({ email: "", cur: "", next: "" });
+  const [clear, setClear] = useState({ open: false, text: "" });
+  const [busy, setBusy] = useState("");
+  useEffect(() => { if (d) { setSupport(d.settings.supportEmail); setAcct((a) => ({ ...a, email: d.me.email })); } }, [d && d.me.email, d && d.settings.supportEmail]);
+  if (res.loading && !d) return <><Head title="Settings" sub="Loading…" /></>;
+  if (!d) return <><Head title="Settings" sub="Could not load settings." /></>;
   const order = ["Trade match", "Availability", "Distance", "Verification", "Rating", "Jobs completed"];
+  const st = d.status;
+  const dot = (ok) => <span className={"pill " + (ok ? "p-green" : "p-red")}>{ok ? "Working" : "Not set up"}</span>;
+  async function run(key, fn, okMsg) {
+    if (busy) return; setBusy(key);
+    try { await fn(); if (okMsg) flash(okMsg); } catch (e) { flash(e.message || "Something went wrong"); } finally { setBusy(""); }
+  }
+  const saveSupport = () => run("support", async () => { await api("/api/admin/settings", { method: "PATCH", token, body: { supportEmail: support } }); res.reload(); }, "Support email saved");
+  const saveAcct = () => run("acct", async () => {
+    const body = { currentPassword: acct.cur };
+    if (acct.email.trim().toLowerCase() !== d.me.email) body.email = acct.email;
+    if (acct.next) body.newPassword = acct.next;
+    await api("/api/admin/account", { method: "PATCH", token, body });
+    setAcct((a) => ({ ...a, cur: "", next: "" })); res.reload();
+  }, "Account updated. Use the new details next time you sign in.");
+  const doClear = () => run("clear", async () => {
+    const r = await api("/api/admin/clear-data", { method: "POST", token, body: { confirm: "CLEAR" } });
+    setClear({ open: false, text: "" }); res.reload(); if (statsRes && statsRes.reload) statsRes.reload();
+    flash(`Cleared ${r.removedUsers} accounts and everything that belonged to them`);
+  });
   return (
     <>
-      <Head title="Settings" sub="Rules that shape matching and trust. Read-only for now." />
+      <Head title="Settings" sub="Account, support, system checks and test-data tools." />
       <div className="grid2">
-        <div className="card"><h3>Matching priority</h3><p className="soft">Order is fixed. Applied when the new request flow ships.</p>{order.map((o, i) => <div className="vrow" key={o}><span>{i + 1}. {o}</span></div>)}<p className="soft" style={{ marginTop: 12 }}>Unavailable and suspended artisans are never matched.</p></div>
+        <div className="card"><h3>Support email</h3><p className="soft">Where customers and artisans can reach VettedHands.</p>
+          <input className="search" style={{ width: "100%", marginTop: 10 }} value={support || ""} onChange={(e) => setSupport(e.target.value)} placeholder="vettedhands@gmail.com" />
+          <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={busy === "support" || !support || support === d.settings.supportEmail} onClick={saveSupport}>{busy === "support" ? "Saving…" : "Save"}</button></div>
+
+        <div className="card"><h3>Admin sign-in</h3><p className="soft">Change the email or password you use here. Enter your current password to confirm.</p>
+          <input className="search" style={{ width: "100%", marginTop: 10 }} type="email" value={acct.email} onChange={(e) => setAcct({ ...acct, email: e.target.value })} placeholder="Admin email" />
+          <input className="search" style={{ width: "100%", marginTop: 8 }} type="password" value={acct.next} onChange={(e) => setAcct({ ...acct, next: e.target.value })} placeholder="New password (optional, 8+ characters)" />
+          <input className="search" style={{ width: "100%", marginTop: 8 }} type="password" value={acct.cur} onChange={(e) => setAcct({ ...acct, cur: e.target.value })} placeholder="Current password" />
+          <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={busy === "acct" || !acct.cur || (acct.email.trim().toLowerCase() === d.me.email && !acct.next)} onClick={saveAcct}>{busy === "acct" ? "Saving…" : "Update account"}</button></div>
+
+        <div className="card"><h3>System checks</h3><p className="soft">What the server can currently do.</p>
+          <div className="vrow"><span>Email (Brevo)</span>{dot(st.email)}</div>
+          <div className="vrow"><span>Push alerts</span>{dot(st.push)}</div>
+          <div className="vrow"><span>Photos and voice notes</span>{dot(st.photos)}</div>
+          <div className="vrow"><span>App link used in emails</span><b className="soft">{st.appUrl || "Not set"}</b></div>
+          <div className="vrow"><span>Signed in as</span><b className="soft">{d.me.email}</b></div></div>
+
         <div className="card"><h3>Top Rated thresholds</h3><p className="soft">An artisan must meet every line. One strong job is never enough.</p>
-          <div className="vrow"><span>Completed jobs</span><b>{rules ? rules.minJobs : "—"}</b></div><div className="vrow"><span>Average rating</span><b>{rules ? rules.minRating : "—"}</b></div>
+          <div className="vrow"><span>Completed jobs</span><b>{d.rules.minJobs}</b></div><div className="vrow"><span>Average rating</span><b>{d.rules.minRating}</b></div>
           <p className="soft" style={{ marginTop: 12 }}>Edit these in <code>config/badgeRules.js</code> on the backend.</p></div>
-        <div className="card"><h3>Service categories</h3><div className="badges" style={{ marginTop: 10 }}>{["ELECTRICIAN", "PLUMBER", "TAILOR", "PHONE_REPAIR"].map((t) => <span key={t} className="pill p-grey">{tradeLabel(t)}</span>)}</div><p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p></div>
-        <div className="card"><h3>Product scope</h3><div className="vrow"><span>Payments</span><b className="soft">Out of scope for the MVP</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Not yet</b></div><div className="vrow"><span>Signed in as</span><b>{user.email}</b></div></div>
+
+        <div className="card"><h3>Matching priority</h3><p className="soft">Order is fixed.</p>{order.map((o, i) => <div className="vrow" key={o}><span>{i + 1}. {o}</span></div>)}</div>
+
+        <div className="card"><h3>Service categories</h3><div className="badges" style={{ marginTop: 10 }}>{["ELECTRICIAN", "PLUMBER", "TAILOR", "PHONE_REPAIR"].map((t) => <span key={t} className="pill p-grey">{tradeLabel(t)}</span>)}</div><p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p>
+          <div className="vrow" style={{ marginTop: 8 }}><span>Payments</span><b className="soft">Out of scope for the MVP</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Live</b></div></div>
+
+        <div className="card" style={{ borderColor: "#E9C7BD" }}><h3 style={{ color: "var(--red)" }}>Clear test data</h3>
+          <p className="soft">Deletes every customer and artisan account, with their requests, messages, reports, reviews, posts and notifications. Admin accounts stay. Uploaded photos stay on Cloudinary. This cannot be undone.</p>
+          <div className="vrow"><span>Accounts to delete</span><b>{d.counts.users}</b></div>
+          <div className="vrow"><span>Requests</span><b>{d.counts.requests}</b></div>
+          <div className="vrow"><span>Blog posts</span><b>{d.counts.posts}</b></div>
+          {!clear.open ? <button className="btn btn-danger" style={{ marginTop: 12 }} onClick={() => setClear({ open: true, text: "" })}>Clear test data…</button> : (
+            <div style={{ marginTop: 12 }}>
+              <p className="soft" style={{ margin: "0 0 8px" }}>Type <b>CLEAR</b> to confirm.</p>
+              <input className="search" style={{ width: "100%" }} value={clear.text} onChange={(e) => setClear({ ...clear, text: e.target.value })} placeholder="CLEAR" />
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn" onClick={() => setClear({ open: false, text: "" })}>Cancel</button>
+                <button className="btn btn-danger" disabled={clear.text !== "CLEAR" || busy === "clear"} onClick={doClear}>{busy === "clear" ? "Deleting…" : "Delete everything"}</button>
+              </div>
+            </div>
+          )}</div>
       </div>
     </>
   );
