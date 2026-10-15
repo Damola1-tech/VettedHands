@@ -219,7 +219,19 @@ const playPing = (() => {
 })();
 function initials(name = "") { return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(); }
 function colorFor(id = "") { const palette = ["#0F4D3A", "#B5651D", "#1B6650"]; let h = 0; for (const c of id) h += c.charCodeAt(0); return palette[h % palette.length]; }
-function tradeLabel(t) { const found = trades.find((x) => x.id === t); return found ? found.label : t; }
+const EXTRA_LABELS = {}; // names of services an admin has hidden (still shown on existing artisans)
+function applyServices(list) {
+  (list || []).forEach((s) => {
+    EXTRA_LABELS[s.key] = s.label;
+    const i = trades.findIndex((t) => t.id === s.key);
+    if (s.active && i < 0) trades.push({ id: s.key, label: s.label, icon: Sparkle });
+    if (s.active && i >= 0) trades[i].label = s.label;
+    if (!s.active && i >= 0 && !CORE_TRADE_IDS.includes(s.key)) trades.splice(i, 1);
+  });
+}
+const CORE_TRADE_IDS = trades.map((t) => t.id);
+function prettyKey(k) { return String(k || "").toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
+function tradeLabel(t) { const found = trades.find((x) => x.id === t); return found ? found.label : EXTRA_LABELS[t] || prettyKey(t); }
 function fmtStars(n) { return Number(n || 0).toFixed(1); }
 
 /* ============ AUTH ============ */
@@ -640,6 +652,10 @@ function EditArtisanProfile({ user, token, flash, fail, onBack, onSave, onAvatar
 /* ============ APP ============ */
 function App() {
   const auth = useAuth();
+  const [, bumpServices] = useState(0);
+  useEffect(() => {
+    api("/api/artisans/services").then((d) => { applyServices(d.services); bumpServices((n) => n + 1); }).catch(() => {});
+  }, []);
   const [screen, setScreen] = useState("landing"); // landing | auth
   const [authMode, setAuthMode] = useState("register");
   const [intent, setIntent] = useState(null); // "request" | "artisan" | null
@@ -875,11 +891,14 @@ function MainApp({ auth, intent }) {
     }
     return [...m.values()].filter((g) => !g.ids.includes(artisanProfileId));
   }
+  const sendingRef = useRef(false);
   async function sendRequest(artisanProfileId, job, when, jobGroupId, image, reqArea, decided) {
+    if (sendingRef.current) return; // ignore double taps
     if (!jobGroupId && !decided) {
       const groups = openJobsFor(artisanProfileId);
       if (groups.length) { setAskGroup({ args: [artisanProfileId, job, when, image, reqArea], groups }); return; }
     }
+    sendingRef.current = true;
     try {
       const d = await api("/api/requests", { method: "POST", token, body: { artisanProfileId, job, when, jobGroupId: jobGroupId || undefined, image: image || undefined, area: reqArea || undefined } });
       setRequests((prev) => [d.request, ...prev]);
@@ -888,7 +907,7 @@ function MainApp({ auth, intent }) {
       setWiz({ ...blankWiz });
       setTrackFrom("home");
       setView("track");
-    } catch (e) { fail(e); }
+    } catch (e) { fail(e); } finally { sendingRef.current = false; }
   }
   async function requestFromProfile() {
     if (profileOrigin === "wizard" && wiz.problem.trim().length >= 10) {
@@ -1221,7 +1240,7 @@ const homeExtraTrades = [
   { id: "CARPENTER", label: "Carpenter", icon: Hammer },
   { id: "CLEANER", label: "Cleaner", icon: Sparkle },
 ];
-const homeTrades = [...trades, ...homeExtraTrades.filter((e) => !trades.some((t) => t.id === e.id))];
+const getHomeTrades = () => [...trades, ...homeExtraTrades.filter((e) => !trades.some((t) => t.id === e.id))];
 const HOME_TINTS = [["#E3EFE9", "#0F4D3A"], ["#FBEBC8", "#8A5A12"], ["#DDE9F4", "#1F5A8A"], ["#F6E1DA", "#9A3B26"], ["#ECE7D8", "#4A4636"]];
 function tintFor(id = "") { let h = 0; for (const c of id) h += c.charCodeAt(0); return HOME_TINTS[h % HOME_TINTS.length]; }
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
@@ -1229,6 +1248,7 @@ function greeting() { const h = new Date().getHours(); return h < 12 ? "Good mor
 function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineNow, onOpenProfile, onPickTrade, onSeeAll, onOpenWizard, onOpenBlog, onOpenRequests, onOpenMe, hasAlerts, flash }) {
   const first = user.name.split(" ")[0];
   const live = trades.map((t) => t.id);
+  const homeTrades = getHomeTrades();
   const here = area === "All areas" ? "Ado-Ekiti" : `${area}, Ado-Ekiti`;
   return (
     <div className="screen hm">
@@ -2953,7 +2973,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },

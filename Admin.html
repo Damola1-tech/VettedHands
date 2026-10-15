@@ -200,7 +200,7 @@ async function api(path, { method = "GET", body, token } = {}) {
 
 /* ============ helpers ============ */
 const TRADES = { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair", LAPTOP_REPAIR: "Laptop Repair", PAINTER: "Painter", CARPENTER: "Carpenter", CLEANER: "Cleaner" };
-const tradeLabel = (t) => TRADES[t] || t;
+const tradeLabel = (t) => TRADES[t] || String(t || "").toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const NAV = [["dashboard", "Dashboard"], ["notifications", "Notifications"], ["applications", "Artisan Applications"],["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
 const PAGES = NAV.map((n) => n[0]);
 const initials = (n = "") => n.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -342,6 +342,8 @@ function Shell({ token, user, onLogout }) {
   const [toast, setToast] = useState(null);
   const [img, setImg] = useState(null);
   const stats = useFetch(token, "/api/admin/stats");
+  const svc = useFetch(token, "/api/artisans/services");
+  if (svc.data) svc.data.services.forEach((s) => { TRADES[s.key] = s.label; });
   const nf = useFetch(token, "/api/notifications");
   useEffect(() => { const id = setInterval(() => { if (!document.hidden) { nf.reload(); stats.reload(); } }, 30000); return () => clearInterval(id); }, []);
   const s = stats.data ? stats.data.stats : null;
@@ -349,7 +351,7 @@ function Shell({ token, user, onLogout }) {
 
   function go(p, id = null) { setPage(p); setParam(id); setMenu(false); window.location.hash = "/" + p; window.scrollTo(0, 0); }
   function flash(m) { setToast(m); clearTimeout(window.__vhT); window.__vhT = setTimeout(() => setToast(null), 2800); }
-  const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats, nfRes: nf };
+  const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats, nfRes: nf, reloadServices: svc.reload };
 
   let body;
   if (page === "dashboard") body = <Dashboard {...c} />;
@@ -997,13 +999,15 @@ function Verification({ token, flash, go, refreshStats }) {
 }
 
 /* ============ settings ============ */
-function Settings({ token, flash, statsRes, reload: _r }) {
+function Settings({ token, flash, statsRes, reloadServices }) {
   const res = useFetch(token, "/api/admin/settings");
   const d = res.data;
   const [support, setSupport] = useState(null);
   const [acct, setAcct] = useState({ email: "", cur: "", next: "" });
   const [clear, setClear] = useState({ open: false, text: "" });
   const [busy, setBusy] = useState("");
+  const sv = useFetch(token, "/api/admin/services");
+  const [newSvc, setNewSvc] = useState("");
   useEffect(() => { if (d) { setSupport(d.settings.supportEmail); setAcct((a) => ({ ...a, email: d.me.email })); } }, [d && d.me.email, d && d.settings.supportEmail]);
   if (res.loading && !d) return <><Head title="Settings" sub="Loading…" /></>;
   if (!d) return <><Head title="Settings" sub="Could not load settings." /></>;
@@ -1022,6 +1026,9 @@ function Settings({ token, flash, statsRes, reload: _r }) {
     await api("/api/admin/account", { method: "PATCH", token, body });
     setAcct((a) => ({ ...a, cur: "", next: "" })); res.reload();
   }, "Account updated. Use the new details next time you sign in.");
+  const addSvc = () => run("svc", async () => { await api("/api/admin/services", { method: "POST", token, body: { label: newSvc } }); setNewSvc(""); sv.reload(); if (reloadServices) reloadServices(); }, "Service added. It now shows in the app.");
+  const toggleSvc = (s) => run("svc" + s.key, async () => { await api(`/api/admin/services/${s.key}`, { method: "PATCH", token, body: { active: !s.active } }); sv.reload(); if (reloadServices) reloadServices(); }, s.active ? "Hidden from the app" : "Visible in the app");
+  const delSvc = (s) => { if (!window.confirm(`Delete "${s.label}"?`)) return; run("svc" + s.key, async () => { await api(`/api/admin/services/${s.key}`, { method: "DELETE", token }); sv.reload(); if (reloadServices) reloadServices(); }, "Service deleted"); };
   const doClear = () => run("clear", async () => {
     const r = await api("/api/admin/clear-data", { method: "POST", token, body: { confirm: "CLEAR" } });
     setClear({ open: false, text: "" }); res.reload(); if (statsRes && statsRes.reload) statsRes.reload();
@@ -1054,7 +1061,24 @@ function Settings({ token, flash, statsRes, reload: _r }) {
 
         <div className="card"><h3>Matching priority</h3><p className="soft">Order is fixed.</p>{order.map((o, i) => <div className="vrow" key={o}><span>{i + 1}. {o}</span></div>)}</div>
 
-        <div className="card"><h3>Service categories</h3><div className="badges" style={{ marginTop: 10 }}>{["ELECTRICIAN", "PLUMBER", "TAILOR", "PHONE_REPAIR"].map((t) => <span key={t} className="pill p-grey">{tradeLabel(t)}</span>)}</div><p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p>
+        <div className="card"><h3>Service categories</h3>
+          <p className="soft">Built in</p>
+          <div className="badges" style={{ marginTop: 6 }}>{["ELECTRICIAN", "PLUMBER", "TAILOR", "PHONE_REPAIR", "LAPTOP_REPAIR", "PAINTER", "CARPENTER", "CLEANER"].map((t) => <span key={t} className="pill p-grey">{tradeLabel(t)}</span>)}</div>
+          <p className="soft" style={{ marginTop: 14 }}>Added by you. When someone offers a service that isn't listed, add it here and it appears in the app for applying, browsing and requests.</p>
+          {(sv.data ? sv.data.services : []).map((s) => (
+            <div className="vrow" key={s.key}>
+              <span>{s.label}{!s.active && <span className="pill p-grey" style={{ marginLeft: 8 }}>Hidden</span>}<br /><small className="soft">{s.artisans} artisan{s.artisans === 1 ? "" : "s"}{s.applications ? ` · ${s.applications} application${s.applications === 1 ? "" : "s"} waiting` : ""}</small></span>
+              <span style={{ display: "flex", gap: 6 }}>
+                <button className="btn btn-sm" disabled={!!busy} onClick={() => toggleSvc(s)}>{s.active ? "Hide" : "Show"}</button>
+                {s.artisans + s.applications === 0 && <button className="btn btn-danger btn-sm" disabled={!!busy} onClick={() => delSvc(s)}>Delete</button>}
+              </span>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <input className="search" style={{ flex: 1, minWidth: 0 }} value={newSvc} onChange={(e) => setNewSvc(e.target.value)} placeholder="e.g. Printing and Branding" maxLength={40} />
+            <button className="btn btn-primary" disabled={!!busy || newSvc.trim().length < 3} onClick={addSvc}>{busy === "svc" ? "Adding…" : "Add"}</button>
+          </div>
+          <p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p>
           <div className="vrow" style={{ marginTop: 8 }}><span>Payments</span><b className="soft">Out of scope for the MVP</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Live</b></div></div>
 
         <div className="card" style={{ borderColor: "#E9C7BD" }}><h3 style={{ color: "var(--red)" }}>Clear test data</h3>
