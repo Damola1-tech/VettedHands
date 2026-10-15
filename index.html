@@ -38,6 +38,14 @@ const { useState, useMemo, useRef, useEffect } = React;
 /* ============ CONFIG ============ */
 const API_BASE = "https://vettedhands-backend.onrender.com";
 
+/* ============ PUSH HELPERS ============ */
+function urlB64ToUint8(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+
 /* ============ API HELPER ============ */
 // Talks to the real backend. Throws an Error with a readable message on failure.
 async function api(path, { method = "GET", body, token } = {}) {
@@ -187,6 +195,28 @@ const SUPPORT_EMAIL = "vettedhands@gmail.com"; // TODO: replace with your real s
 const reportReasonsCustomer = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
 const reportReasonsArtisan = ["Customer unavailable", "Wrong job description", "Customer issue", "Other"];
 
+function Face({ u }) { return u && u.avatarUrl ? <img className="face" src={u.avatarUrl} alt="" /> : initials((u && u.name) || ""); }
+const playPing = (() => {
+  let ctx = null;
+  const unlock = () => { try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch (e) {} };
+  ["pointerdown", "touchstart", "keydown"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true }));
+  return function () {
+    try {
+      if (localStorage.getItem("vh_sound") === "off") return;
+      if (!ctx || ctx.state !== "running") return;
+      const t = ctx.currentTime;
+      [[880, 0], [1318, 0.15]].forEach(([f, d]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t + d);
+        g.gain.exponentialRampToValueAtTime(0.28, t + d + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.4);
+        o.connect(g); g.connect(ctx.destination); o.start(t + d); o.stop(t + d + 0.45);
+      });
+      if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+    } catch (e) {}
+  };
+})();
 function initials(name = "") { return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(); }
 function colorFor(id = "") { const palette = ["#0F4D3A", "#B5651D", "#1B6650"]; let h = 0; for (const c of id) h += c.charCodeAt(0); return palette[h % palette.length]; }
 function tradeLabel(t) { const found = trades.find((x) => x.id === t); return found ? found.label : t; }
@@ -225,13 +255,6 @@ function useAuth() {
   async function resendCode(email) { await api("/api/auth/resend-code", { method: "POST", body: { email } }); }
   async function forgotPassword(email) { await api("/api/auth/forgot-password", { method: "POST", body: { email } }); }
   async function resetPassword(email, code, password) { startSession(await api("/api/auth/reset-password", { method: "POST", body: { email, code, password } })); }
-  async function register(name, email, password, area) {
-    setError(null);
-    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area } });
-    localStorage.setItem("vh_token", d.token);
-    setToken(d.token);
-    setUser(d.user);
-  }
   function logout() {
     localStorage.removeItem("vh_token");
     setToken(null);
@@ -486,7 +509,7 @@ function AuthScreen({ initialMode, onBack, auth }) {
 /* ============ EDIT ARTISAN PROFILE (new, paste above function TrackRecordView) ============ */
 const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
 const TRAVEL_OPTIONS = [2, 5, 8, 10, 15, 20];
-function EditArtisanProfile({ user, onBack, onSave, onAvatar, onAddPhoto, onRemovePhoto }) {
+function EditArtisanProfile({ user, token, flash, fail, onBack, onSave, onAvatar, onAddPhoto, onRemovePhoto }) {
   const ap = user.artisanProfile;
   const [area, setArea] = useState(ap.area || areas[1]);
   const [years, setYears] = useState(ap.yearsExperience == null ? "" : String(ap.yearsExperience));
@@ -497,6 +520,23 @@ function EditArtisanProfile({ user, onBack, onSave, onAvatar, onAddPhoto, onRemo
   const [days, setDays] = useState(ap.workDays || "1111110");
   const [busy, setBusy] = useState(false);
   const photos = ap.photos || [];
+  const [certs, setCerts] = useState([]);
+  const [certTitle, setCertTitle] = useState("");
+  const [certBusy, setCertBusy] = useState(false);
+  useEffect(() => { api("/api/profile/certificates", { token }).then((d) => setCerts(d.certificates)).catch(() => {}); }, []);
+  async function addCert(e) {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    if (certTitle.trim().length < 2) { flash("Name the certificate first."); return; }
+    setCertBusy(true);
+    try {
+      const d = await api("/api/profile/certificates", { method: "POST", token, body: { title: certTitle.trim(), image: await fileToDataUrl(f, 1400, 0.8) } });
+      setCerts((c) => [d.certificate, ...c]); setCertTitle(""); flash("Certificate added");
+    } catch (ex) { fail(ex); } finally { setCertBusy(false); }
+  }
+  async function removeCert(id) {
+    try { await api(`/api/profile/certificates/${id}`, { method: "DELETE", token }); setCerts((c) => c.filter((x) => x.id !== id)); } catch (ex) { fail(ex); }
+  }
   const areaList = areas.filter((a) => a !== "All areas");
   if (ap.area && !areaList.includes(ap.area)) areaList.unshift(ap.area);
 
@@ -584,6 +624,14 @@ function EditArtisanProfile({ user, onBack, onSave, onAvatar, onAddPhoto, onRemo
         )}
       </div>
       <div className="ep-hint">Customers see these as Recent work. Up to 6 photos.</div>
+
+      <label className="ep-lab">Certificates</label>
+      {certs.map((c) => <div className="ep-cert" key={c.id}><a href={c.url} target="_blank" rel="noreferrer">{c.title}</a><button type="button" onClick={() => removeCert(c.id)} aria-label="Remove certificate"><X size={16} /></button></div>)}
+      <input className="ep-in" value={certTitle} onChange={(e) => setCertTitle(e.target.value)} placeholder="e.g. NABTEB Electrical Installation" />
+      <label className="rf-ghost" style={{ display: "block", textAlign: "center", marginTop: 10, cursor: "pointer" }}>
+        <input type="file" accept="image/*" style={{ display: "none" }} onChange={addCert} />{certBusy ? "Uploading…" : "Add certificate photo"}
+      </label>
+      <div className="ep-hint">Only you and the VettedHands team can see these. They help us verify your skill.</div>
 
       <button className="auth-submit" style={{ width: "100%", marginTop: 26 }} onClick={save} disabled={busy}>{busy ? "Saving…" : "Save changes"}</button>
     </div>
@@ -742,10 +790,46 @@ function MainApp({ auth, intent }) {
   const notifications = notifs.map((n) => ({ ...n, time: n.createdAt, kind: NOTIF_KIND[n.type] || "job" }));
   const unreadNotifs = notifs.filter((n) => !n.readAt).length;
   const unreadMessages = requests.reduce((n, r) => n + (r.unreadCount || 0), 0);
+  const lastTotal = useRef(null);
+  useEffect(() => {
+    const total = unreadNotifs + unreadMessages;
+    if (lastTotal.current !== null && total > lastTotal.current) playPing();
+    lastTotal.current = total;
+    try { if (navigator.setAppBadge) { if (total) navigator.setAppBadge(total); else navigator.clearAppBadge(); } } catch (e) {}
+  }, [unreadNotifs, unreadMessages]);
+  useEffect(() => {
+    const onVis = () => { if (!document.hidden) { loadRequests(); loadNotifs(); } };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   async function markRead(ids) {
     const all = !ids || !ids.length;
     setNotifs((p) => p.map((n) => (all || ids.includes(n.id) ? { ...n, readAt: n.readAt || new Date().toISOString() } : n)));
     try { await api("/api/notifications/read", { method: "POST", token, body: { ids } }); } catch (e) { /* silent */ }
+  }
+  const [pushOn, setPushOn] = useState(false);
+  useEffect(() => {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription()).then((s) => setPushOn(!!s)).catch(() => {});
+    }
+  }, []);
+  async function togglePush() {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) { flash("Push isn't supported here. On iPhone, add VettedHands to your Home Screen first."); return; }
+      const reg = await navigator.serviceWorker.ready;
+      if (pushOn) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) { await api("/api/notifications/push-unsubscribe", { method: "POST", token, body: { endpoint: sub.endpoint } }); await sub.unsubscribe(); }
+        setPushOn(false); flash("Push alerts off"); return;
+      }
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { flash("Notifications are blocked. Allow them in your browser settings."); return; }
+      const { key } = await api("/api/notifications/push-key", { token });
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
+      await api("/api/notifications/push-subscribe", { method: "POST", token, body: { subscription: sub.toJSON() } });
+      setPushOn(true); flash("Push alerts on");
+    } catch (e) { fail(e); }
   }
   async function setEmailOptOut(v) {
     try {
@@ -1025,11 +1109,14 @@ function MainApp({ auth, intent }) {
             onSubmit={async (reason, note) => { const ok = await reportRequest(activeRequest.id, reason, note); if (ok) setView("track"); }} />
         )}
         {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={(id) => openConversation(id)} />}
+        {view === "reportReply" && activeRequest && (
+          <ReportReplyView request={activeRequest} token={token} flash={flash} fail={fail} onBack={() => setView("notifications")} />
+        )}
         {view === "notifications" && (
           <NotificationsView items={notifications} readIds={[]}
             onBack={() => setView("home")}
             onMarkAll={() => markRead(notifications.map((n) => n.id))}
-            onOpen={(n) => { markRead([n.id]); if (n.requestId) openTrack(n.requestId, "notifications"); else if (n.postId) setView("blog"); else setView("home"); }} />
+            onOpen={(n) => { markRead([n.id]); if (n.type === "REPORT_ABOUT_YOU" && n.requestId) { setActiveRequestId(n.requestId); setView("reportReply"); } else if (n.requestId) openTrack(n.requestId, "notifications"); else if (n.postId) setView("blog"); else setView("home"); }} />
         )}
         {view === "conversation" && activeRequest && (
           <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user} otherReadAt={otherReadAt}
@@ -1045,18 +1132,18 @@ function MainApp({ auth, intent }) {
             onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
-          <CustomerProfileView user={user} requests={requests} application={application} onEmailPref={setEmailOptOut}
+          <CustomerProfileView user={user} requests={requests} application={application} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
             onGoRequests={() => goNav("requests")}
             onBecomeArtisan={() => setApplyOpen(true)}
             onHelp={() => setView("help")}
             onLogout={logout} />
         )}
                 {view === "editProfile" && isArtisan && user.artisanProfile && (
-          <EditArtisanProfile user={user} onBack={() => setView("userProfile")} onSave={saveArtisanProfile} onAvatar={saveAvatar}
+          <EditArtisanProfile user={user} token={token} flash={flash} fail={fail} onBack={() => setView("userProfile")} onSave={saveArtisanProfile} onAvatar={saveAvatar}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto} />
         )}
         {view === "userProfile" && isArtisan && user.artisanProfile && (
-          <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut}
+          <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
             onEditProfile={() => setView("editProfile")}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onLogout={logout} />
@@ -1073,7 +1160,7 @@ function MainApp({ auth, intent }) {
         )}
       </div>
       <BottomNav active={navTab} onChange={goNav} isArtisan={isArtisan}
-        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report", "editProfile" ].includes(view) || (view === "userProfile" && applyOpen)} />
+        requestCount={requests.filter((r) => r.status === "PENDING" || r.status === "ACCEPTED").length} messageCount={unreadMessages} hide={["wizard", "conversation", "artisanProfile", "request", "review", "report", "editProfile", "reportReply" ].includes(view) || (view === "userProfile" && applyOpen)} />
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1101,7 +1188,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
         <h1 className="hm-greet">{greeting()},<br />{first}</h1>
         <div className="hm-top-r">
           <button className="hm-bell" onClick={onOpenRequests} aria-label="Notifications"><Bell size={22} />{hasAlerts && <span className="hm-bell-dot" />}</button>
-          <button className="hm-me" onClick={onOpenMe} aria-label="Profile">{initials(user.name)}</button>
+          <button className="hm-me" onClick={onOpenMe} aria-label="Profile"><Face u={user} /></button>
         </div>
       </div>
       <label className="hm-loc">
@@ -1162,7 +1249,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
         {onlineNow.slice(0, 3).map((a) => { const [bg, fg] = tintFor(a.id); return (
           <button key={a.id} className="hm-ac" onClick={() => onOpenProfile(a)}>
             <div className="hm-ac-top">
-              <span className="hm-ac-av" style={{ background: bg, color: fg }}>{initials(a.user.name)}</span>
+              <span className="hm-ac-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
               <div className="hm-ac-id">
                 <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" /></div>
                 <div className="hm-ac-trade">{tradeLabel(a.trade)}</div>
@@ -1224,7 +1311,7 @@ function ArtisanCard({ artisan: a, onOpen }) {
   return (
     <button className="hm-ac" onClick={onOpen}>
       <div className="hm-ac-top">
-        <span className="hm-ac-av" style={{ background: bg, color: fg }}>{initials(a.user.name)}</span>
+        <span className="hm-ac-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
         <div className="hm-ac-id">
           <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />{a.isPro && <span className="badge badge--pro">Pro</span>}</div>
           <div className="hm-ac-trade">{tradeLabel(a.trade)}{top ? " · Top Rated" : ""}</div>
@@ -1525,6 +1612,17 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
       </div>
       <div className={"ap-avail" + (a.online ? "" : " ap-avail--off")}><i />{a.online ? `Available now · ${a.area}` : `Currently unavailable · ${a.area}`}</div>
 
+      {(a.travelKm || (a.workDays && /^[01]{7}$/.test(a.workDays))) && (
+        <div className="ap-sec">
+          <h2 className="ap-h">Availability</h2>
+          <div className="ap-card" style={{ padding: 16 }}>
+            {a.workDays && /^[01]{7}$/.test(a.workDays) && (
+              <div className="ap-wk">{WEEK.map((d, i) => <span key={i} className={a.workDays[i] === "1" ? "on" : ""}>{d}</span>)}</div>
+            )}
+            {a.travelKm ? <div className="ap-travel">Travels up to {a.travelKm} km</div> : null}
+          </div>
+        </div>
+      )}
       <div className="ap-sec">
         <h2 className="ap-h">Verification</h2>
         <div className="ap-card">
@@ -1752,7 +1850,7 @@ function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan, onSendDirect 
                 {list.map((a) => { const [bg, fg] = tintFor(a.id); return (
                   <div key={a.id} className="rf-card">
                     <div className="rf-card-top">
-                      <span className="rf-av" style={{ background: bg, color: fg }}>{initials(a.user.name)}</span>
+                      <span className="rf-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
                       <div className="rf-id"><b>{a.user.name}</b><span>{tradeLabel(a.trade)}{a.area === wiz.area ? " · Same area" : ""}</span></div>
                       <span className="rf-rate"><Star size={14} fill="#B5651D" stroke="none" /><b>{fmtStars(a.rating)}</b></span>
                     </div>
@@ -1877,6 +1975,15 @@ function reqBucket(r, meId) {
   return "active";
 }
 
+const REPLY_WINDOW_MIN = 30;
+function ReplyTimer({ since }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 30000); return () => clearInterval(id); }, []);
+  const left = Math.ceil((new Date(since).getTime() + REPLY_WINDOW_MIN * 60000 - Date.now()) / 60000);
+  if (left <= 0) return <span className="rq-timer rq-timer--late"><Clock size={13} /> Reply overdue</span>;
+  return <span className="rq-timer"><Clock size={13} /> Reply in {left} min</span>;
+}
+
 function RequestsListView({ requests, user, onOpen, onRespond, onRequestService, onCheckAvailability, onJob }) {
   const isArtisan = user.role === "ARTISAN";
   const tabs = isArtisan
@@ -1912,6 +2019,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
                 {r.area && <div><dt>Location</dt><dd>{r.area}</dd></div>}
               </dl>
               <p className="rq-job">{r.hasImage && <Camera size={13} style={{ marginRight: 5, verticalAlign: "-2px" }} />}{r.job}</p>
+              {artisanSide && r.status === "PENDING" && <ReplyTimer since={r.createdAt} />}
               {artisanSide && r.status === "PENDING" && (
                 <div className="rq-acts">
                   <button className="d" onClick={() => onRespond(r.id, "DECLINED")}>Decline</button>
@@ -2028,7 +2136,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
 
       <div className="tk-card">
         <div className="tk-ac">
-          <span className="tk-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+          <span className="tk-av" style={{ background: bg, color: fg }}><Face u={other} /></span>
           <div><b>{other.name}</b><span>{artisanSide ? "Customer" : `Vetted · ${fmtStars(ap.rating)} ★ · ${ap.jobsCompleted} jobs completed`}</span></div>
         </div>
         <button className="tk-msg" onClick={onMessage}><MessageCircle size={20} /> Message {artisanSide ? "customer" : "artisan"}</button>
@@ -2068,7 +2176,7 @@ function ReviewView({ request: r, onClose, onSubmit }) {
       <h1 className="rv-h">How was {first}'s work?</h1>
       <p className="rv-sub">Your honest review helps the next customer hire with confidence, and builds {first}'s track record.</p>
       <div className="rv-who">
-        <span className="tk-av" style={{ background: bg, color: fg }}>{initials(who.name)}</span>
+        <span className="tk-av" style={{ background: bg, color: fg }}><Face u={who} /></span>
         <div><b>{who.name}</b><small>{tradeLabel(r.artisanProfile.trade)} · {r.job.slice(0, 32)}{r.job.length > 32 ? "…" : ""}</small></div>
       </div>
       <div className="rv-stars">
@@ -2114,7 +2222,7 @@ function ReportView({ request: r, user, onClose, onSubmit }) {
       <h1 className="rv-h" style={{ marginTop: 14 }}>{artisanSide ? "Report a customer" : "Report a problem"}</h1>
       <p className="rv-sub">{artisanSide ? "Customer wasn't there, or something felt wrong? Tell us so we can act." : "Tell us what went wrong with this job. Our team reviews every report and may contact you."}</p>
       <div className="rv-who">
-        <span className="tk-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+        <span className="tk-av" style={{ background: bg, color: fg }}><Face u={other} /></span>
         <div><b>{other.name} · {tradeLabel(r.artisanProfile.trade)}</b><small>{r.when}{r.area ? " · " + r.area : ""}</small></div>
       </div>
       <div className="rv-label" style={{ marginTop: 22 }}>What happened?</div>
@@ -2132,8 +2240,53 @@ function ReportView({ request: r, user, onClose, onSubmit }) {
   );
 }
 
+/* ---------------- Report about you ---------------- */
+function ReportReplyView({ request, token, flash, fail, onBack }) {
+  const [data, setData] = useState(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api(`/api/requests/${request.id}/report-about-me`, { token }).then(setData).catch((e) => { fail(e); onBack(); });
+  }, [request.id]);
+  async function send() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api(`/api/requests/${request.id}/report-response`, { method: "POST", token, body: { text: text.trim() } });
+      flash("Your response was sent");
+      onBack();
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  }
+  if (!data) return <div className="screen rv"><div className="rv-top"><button className="tk-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button><span>Loading…</span></div></div>;
+  const r = data.report;
+  const closed = r.status === "RESOLVED" || r.status === "DISMISSED";
+  return (
+    <div className="screen rv">
+      <div className="rv-top"><button className="tk-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button><span>Report · Request {reqCode(request.id)}</span></div>
+      <h1 className="rv-h" style={{ marginTop: 14 }}>A report was filed about this job</h1>
+      <p className="rv-sub">Our team reviews every report fairly. You can share your side below.</p>
+      <div className="rv-who" style={{ display: "block" }}>
+        <b>{r.reason}</b>
+        <small style={{ display: "block", marginTop: 6 }}>{data.job}</small>
+        {r.note && <small style={{ display: "block", marginTop: 8, fontStyle: "italic" }}>"{r.note}"</small>}
+      </div>
+      {r.respondedAt ? (
+        <div className="tk-note">Your response was sent: "{r.respondentNote}"</div>
+      ) : closed ? (
+        <div className="tk-note">This report has been closed by our team.</div>
+      ) : (
+        <>
+          <div className="rv-label" style={{ marginTop: 18 }}>Your side of the story</div>
+          <textarea className="rf-text" rows={5} maxLength={600} value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened from your point of view?" />
+          <button className="rv-submit" disabled={busy || text.trim().length < 5} onClick={send}>{busy ? "Sending…" : "Send response"}</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Customer profile ---------------- */
-function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onHelp, onLogout, onEmailPref }) {
+function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onHelp, onLogout, onEmailPref, pushOn, onPushToggle }) {
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
@@ -2142,6 +2295,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onBeco
     [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
     [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
     [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoRequests],
+    [Bell, "Push alerts", pushOn ? "On. Tap to turn off" : "Off. Tap to turn on", onPushToggle],
     [Bell, "Email alerts", user.emailOptOut ? "Off. Tap to turn on" : "On. Tap to turn off", () => onEmailPref(!user.emailOptOut)],
     [HelpCircle, "Help and support", "Answers, badges and how to reach us", onHelp],
   ];
@@ -2149,7 +2303,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onBeco
     <div className="screen cp">
       <h1 className="cp-h">Profile</h1>
       <div className="cp-card">
-        <span className="cp-av">{initials(user.name)}</span>
+        <span className="cp-av"><Face u={user} /></span>
         <div className="cp-id"><b>{user.name}</b><span>{user.area ? user.area + ", Ado-Ekiti" : "Ado-Ekiti"}</span><span>{user.email}</span></div>
       </div>
       <div className="cp-menu">
@@ -2258,7 +2412,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
         </div>
         <div className="hm-top-r">
           <button className="hm-bell" onClick={onOpenNotifs} aria-label="Notifications"><Bell size={22} />{hasAlerts && <span className="hm-bell-dot" />}</button>
-          <button className="hm-me" onClick={onOpenMe} aria-label="Profile">{initials(user.name)}</button>
+          <button className="hm-me" onClick={onOpenMe} aria-label="Profile"><Face u={user} /></button>
         </div>
       </div>
 
@@ -2330,7 +2484,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout, onEmailPref, onEditProfile }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout, onEmailPref, onEditProfile, pushOn, onPushToggle }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
@@ -2358,6 +2512,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
       <div className="ao-menu">
         <button className="ao-row" onClick={onEditProfile}><Pen size={22} /><span>Edit profile</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={onPushToggle}><Bell size={22} /><span>Push alerts: {pushOn ? "On" : "Off"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
       </div>
@@ -2657,7 +2812,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -2696,7 +2851,7 @@ function NotificationsView({ items, readIds, onBack, onMarkAll, onOpen }) {
           </div>
         </div>
       ))}
-      {items.length > 0 && <p className="nf-foot">Email alerts are coming soon.</p>}
+      {items.length > 0 && <p className="nf-foot">We also email you about important updates.</p>}
     </div>
   );
 }
@@ -2732,7 +2887,7 @@ function MessagesListView({ requests, user, onOpen }) {
           const preview = m ? (m.senderType === "SYSTEM" ? m.text : (mine ? "You: " : "") + (m.audioSecs ? "Voice note · " + fmtSecs(m.audioSecs) : m.text)) : r.job;
           return (
             <button key={r.id} className={"ms-row" + (unread ? " ms-row--new" : "")} onClick={() => onOpen(r.id)}>
-              <span className="ms-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+              <span className="ms-av" style={{ background: bg, color: fg }}><Face u={other} /></span>
               <span className="ms-main">
                 <span className="ms-top"><b>{name}</b><time className={unread ? "new" : ""}>{listTime(at)}</time></span>
                 <span className="ms-sub">{tradeLabel(r.artisanProfile.trade)} · {reqCode(r.id)}</span>
@@ -2839,7 +2994,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
     <div className="screen cv">
       <div className="cv-head">
         <button className="cv-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
-        <span className="cv-av" style={{ background: bg, color: fg }}>{initials(other.name)}</span>
+        <span className="cv-av" style={{ background: bg, color: fg }}><Face u={other} /></span>
         <div className="cv-who">
           <div className="cv-name">{other.name}{!iAmArtisanSide && <ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />}</div>
           <div className="cv-sub">{sub}</div>
@@ -3001,7 +3156,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
           <div className="pf-hero">
             <div className="pf-title">Profile</div>
             <div className="pf-id">
-              <span className="pf-av">{initials(user.name)}</span>
+              <span className="pf-av"><Face u={user} /></span>
               <div>
                 <div className="pf-name">{user.name}</div>
                 <div className="pf-trade">{tradeLabel(user.artisanProfile.trade)} · {user.artisanProfile.area}</div>
@@ -3638,9 +3793,18 @@ function Style() {
       .auth-info { background:#E3EFE9; color:var(--primary); border-radius:10px; padding:11px 13px; font-size:12px; }
       .ap-av { overflow:hidden; }
       .ep { padding:0 18px 40px; }
-      .ep-top { display:flex; align-items:center; justify-content:space-between; padding:14px 0; }
-      .ep-top button { background:none; border:none; font-family:inherit; cursor:pointer; color:var(--ink); }
+      .ep-top { position:sticky; top:0; z-index:20; background:var(--bg); display:flex; align-items:center; justify-content:space-between; margin:0 -18px; padding:calc(env(safe-area-inset-top, 0px) + 22px) 14px 12px; }
+      .ep-top button { background:none; border:none; font-family:inherit; cursor:pointer; color:var(--ink); min-width:48px; min-height:48px; display:flex; align-items:center; justify-content:center; }
+      .face { width:100%; height:100%; object-fit:cover; display:block; }
+      .hm-me, .hm-ac-av, .ms-av, .cv-av, .rf-av, .tk-av, .pf-av { overflow:hidden; }
+      .ap-wk { display:flex; gap:8px; }
+      .ap-wk span { width:36px; height:36px; border-radius:50%; background:#ECE7D8; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; }
+      .ap-wk span.on { background:var(--primary); color:#fff; }
+      .ap-travel { margin-top:12px; font-size:13.5px; color:var(--ink-soft); font-weight:600; }
       .ep-save { color:var(--primary) !important; font-weight:800; font-size:15px; }
+      .ep-cert { display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+      .ep-cert a { color:var(--primary); font-weight:700; text-decoration:underline; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .ep-cert button { background:none; border:none; color:var(--danger); cursor:pointer; }
       .ep-ph { display:flex; flex-direction:column; align-items:center; gap:10px; margin:6px 0 10px; }
       .ep-av { width:92px; height:92px; border-radius:50%; background:#E3EFE9; color:var(--primary); font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:28px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
       .ep-av img { width:100%; height:100%; object-fit:cover; }
@@ -3811,6 +3975,14 @@ function Style() {
       .rq-link { background:none; border:none; padding:0; width:100%; display:flex; justify-content:space-between; align-items:center; font-family:inherit; font-size:14px; font-weight:700; color:var(--primary); cursor:pointer; }
       .rq-cta { background:var(--primary); color:#fff; border:none; border-radius:14px; padding:14px 26px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
       .rq-note { text-align:center; color:var(--ink-soft); font-size:12.5px; line-height:1.5; margin:22px 10px 0; }
+      .rq-timer { display:inline-flex; align-items:center; gap:6px; margin-top:12px; background:#FBEBC8; color:#8A5A12; border-radius:999px; padding:6px 12px; font-size:12px; font-weight:700; }
+      .rq-timer--late { background:#F8E1DB; color:#A8402D; }
+      .screen { animation:scrIn .22s ease-out backwards; }
+      @keyframes scrIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+      button { -webkit-user-select:none; user-select:none; }
+      button:active:not(:disabled) { transform:scale(.97); }
+      .content { -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+      @media (prefers-reduced-motion:reduce) { .screen { animation:none; } button:active:not(:disabled) { transform:none; } }
 
       /* ===== Tracking ===== */
       .tk { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
