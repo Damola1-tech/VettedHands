@@ -600,7 +600,7 @@ function Artisans({ token, flash, refreshStats, param, openImage }) {
 
 function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
   if (!res.data) return <div className="card empty">{res.error || "Loading…"}</div>;
-  const { artisan: a, jobs, reviews, reports } = res.data;
+  const { artisan: a, jobs, reviews, reports, certificates = [] } = res.data;
   const name = a.user.name;
   async function patch(body, msg) { try { await api(`/api/admin/artisans/${a.id}`, { method: "PATCH", token, body }); flash(msg); onChanged(); } catch (e) { flash(e.message); } }
   function suspend() { const r = window.prompt("Reason for suspending (admins only)"); if (r === null) return; patch({ suspended: true, reason: r.trim() }, `${name} suspended and hidden from customers`); }
@@ -633,6 +633,9 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
       <div className="vrow"><span>Skill Verified</span><b className={a.skillVerified ? "good" : "soft"}>{a.skillVerified ? "Verified" : "Not verified"}</b></div>
       <div className="vrow"><span>Top Rated</span><b className={a.badge === "TOP_RATED" ? "good" : "soft"}>{topLine}</b></div>
       <div className="vrow"><span>Pro listing</span><span><b className={a.isPro ? "good" : "soft"}>{a.isPro ? "On" : "Off"}</b> <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={pro}>{a.isPro ? "Remove" : "Grant"}</button></span></div>
+      <div className="h4">Certificates</div>
+      {certificates.map((c) => <div className="mini" key={c.id}><span className="t">{c.title}</span><button className="btn btn-sm" onClick={() => openImage(c.url)}>Open</button></div>)}
+      {!certificates.length && <p className="soft">None uploaded.</p>}
       <div className="h4">Recent jobs</div>
       {jobs.slice(0, 5).map((j) => <div className="mini" key={j.id}><span className="t">{j.student.name} · {j.job}</span><ReqPill status={j.status} /></div>)}
       {!jobs.length && <p className="soft">No jobs yet.</p>}
@@ -930,9 +933,10 @@ function ReportDetail({ token, id, flash, onChanged }) {
       </div>
       {r.reportedRole === "artisan" && <div style={{ marginTop: 14 }}><label className="lbl">Artisan record</label><b>{artisan.jobsCompleted} jobs · {Number(artisan.rating).toFixed(1)} ★ · {plural(priorReports, "prior report")}</b></div>}
       <div className="stmt"><b>{r.reporterRole === "artisan" ? "Artisan" : "Customer"} statement:</b> {r.note ? `"${r.note}"` : <span className="soft">No details were added.</span>}</div>
+      <div className="stmt"><b>Response from {r.reportedName} ({r.reportedRole}):</b> {r.respondentNote ? `"${r.respondentNote}"` : <span className="soft">No response yet.</span>}</div>
       <div className="h4">Timeline from the request log</div>
       <ul className="tl">
-        {messages.map((m) => <li key={m.id}><time>{fmtTime(m.createdAt)}</time><span>{m.senderType === "SYSTEM" ? m.text : `${m.senderType === "CUSTOMER" ? "Customer" : "Artisan"}: "${m.text}"`}</span></li>)}
+        {messages.map((m) => <li key={m.id}><time>{fmtTime(m.createdAt)}</time><span>{m.audio ? <>{m.senderType === "CUSTOMER" ? "Customer" : "Artisan"}: voice note ({m.audioSecs || 0}s)<br /><audio controls preload="none" src={m.audio} style={{ height: 34, marginTop: 4, maxWidth: "100%" }} /></> : m.senderType === "SYSTEM" ? m.text : `${m.senderType === "CUSTOMER" ? "Customer" : "Artisan"}: "${m.text}"`}</span></li>)}
         <li><time>{fmtTime(r.createdAt)}</time><span><b>Report filed: {r.reason}</b></span></li>
       </ul>
       {r.reportedRole === "artisan" && recentReports > 0 && <div className="callout"><b>Pattern:</b> {artisan.name} has {plural(recentReports, "other report")} in the last 30 days.</div>}
