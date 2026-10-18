@@ -16,6 +16,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script>
+// Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
+(function(){var r=document.documentElement,vv=window.visualViewport;if(!vv)return;
+function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}}
+set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);})();
+</script>
 <style>
   html,body{margin:0;background:#F5F0E4;min-height:100%}
   .sp{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:radial-gradient(120% 90% at 50% 0%,#14644B 0%,#0F4D3A 45%,#0A3A2B 100%);color:#F4EFE0;font-family:'Figtree',system-ui,-apple-system,Segoe UI,sans-serif;padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom)}
@@ -732,14 +738,6 @@ function App() {
 
 function MainApp({ auth, intent }) {
   const { user, token, logout, setUser, setToken } = auth;
-  useEffect(() => {
-    // Keep the app exactly as tall as the visible screen, so the on-screen keyboard never leaves a gap
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const set = () => { document.documentElement.style.setProperty("--vvh", vv.height + "px"); if (vv.offsetTop > 0) window.scrollTo(0, 0); };
-    set(); vv.addEventListener("resize", set); vv.addEventListener("scroll", set);
-    return () => { vv.removeEventListener("resize", set); vv.removeEventListener("scroll", set); };
-  }, []);
   const isArtisan = user.role === "ARTISAN";
   const isAdmin = user.role === "ADMIN";
 
@@ -4717,7 +4715,8 @@ function Style() {
       }
 
       @media (max-width: 480px) {
-        .app { padding: 0; min-height: 0; position: fixed; top: 0; left: 0; right: 0; bottom: 0; height: var(--vvh, auto); overflow: hidden; background: var(--bg); }
+        .app { padding:0; min-height:0; position:fixed; top:0; left:0; right:0; bottom:0; height:auto; overflow:hidden; background:var(--bg); }
+        html.kb .app { bottom:auto; height:var(--vvh); }
         .phone { max-width: 100%; min-height: 0; height: 100%; border-radius: 0; border: none; box-shadow: none; }
         .bottomnav { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
         .topbar { padding-top: calc(16px + env(safe-area-inset-top)); }
