@@ -649,7 +649,7 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
 }
 
 /* ============ customers ============ */
-function Customers({ token }) {
+function Customers({ token, flash }) {
   const res = useFetch(token, "/api/admin/customers");
   const [sel, setSel] = useState(null); const [q, setQ] = useState(""); const [chip, setChip] = useState("all");
   const detail = useFetch(token, sel ? `/api/admin/customers/${sel}` : null);
@@ -679,6 +679,13 @@ function Customers({ token }) {
             <div className="h4">Recent requests</div>
             {detail.data ? detail.data.requests.slice(0, 6).map((r) => <div className="mini" key={r.id}><span className="t">{shortId(r.id)} · {tradeLabel(r.artisanProfile.trade)}</span><ReqPill status={r.status} /></div>) : <p className="soft">Loading…</p>}
             {detail.data && !detail.data.requests.length && <p className="soft">No requests yet.</p>}
+            <div className="h4" style={{ marginTop: 18 }}>Delete account</div>
+            <p className="soft" style={{ margin: "4px 0 10px" }}>For when this person asked to be deleted. Removes their profile, requests, messages and photos. Cannot be undone.</p>
+            <button className="btn btn-danger wide" onClick={async () => {
+              if (window.prompt(`Type DELETE to permanently remove ${cur.name} (${cur.email})`) !== "DELETE") return;
+              try { await api(`/api/admin/users/${cur.id}`, { method: "DELETE", token }); flash(`${cur.name} was deleted`); setSel(null); res.reload(); }
+              catch (e) { flash(e.message || "Could not delete"); }
+            }}>Delete this account</button>
           </div>
         ) : <div className="card empty">Select a customer to see their activity.</div>}
       </div>

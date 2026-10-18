@@ -275,7 +275,7 @@ function useAuth() {
     return { token, setToken, user, setUser, loading, error, login, register, logout, verifyEmail, resendCode, forgotPassword, resetPassword };
 }
 
-function Landing({ onSignIn, onStart }) {
+function Landing({ onSignIn, onStart, onLegal }) {
   const trust = [
     ["Vetted professionals", "Identity and contact checked before anyone is listed."],
     ["Real reviews", "Only from customers whose job was actually completed."],
@@ -321,6 +321,10 @@ function Landing({ onSignIn, onStart }) {
             <div><div className="how-t">{t}</div><div className="how-d">{d}</div></div>
           </div>
         ))}
+        <div className="landing-foot">
+          <button onClick={() => onLegal("privacy")}>Privacy</button><span>·</span><button onClick={() => onLegal("terms")}>Terms</button><span>·</span><a href={"mailto:" + SUPPORT_EMAIL}>Support</a>
+          <div>VettedHands · Ado-Ekiti, Ekiti State, Nigeria</div>
+        </div>
       </div>
     </div>
   );
@@ -373,14 +377,14 @@ function CodeBoxes({ value, onChange }) {
   );
 }
 
-function AuthScreen({ initialMode, onBack, auth }) {
+function AuthScreen({ initialMode, onBack, auth, onLegal }) {
   const [mode, setMode] = useState(initialMode || "login"); // register | login | forgot | code
   const [after, setAfter] = useState("verify"); // what the code screen finishes: verify | reset
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [area, setArea] = useState(areas[1]);
-  const [agree, setAgree] = useState(true);
+  const [agree, setAgree] = useState(false);
   const [code, setCode] = useState("");
   const [wait, setWait] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -503,7 +507,7 @@ function AuthScreen({ initialMode, onBack, auth }) {
                 <label>Where are you? <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
               )}
               {mode === "register" && (
-                <label className="auth-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><span>I agree to the Terms of Use and Privacy Policy.</span></label>
+                <label className="auth-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><span>I am 18 or older and agree to the <button type="button" className="auth-link" onClick={() => onLegal("terms")}>Terms</button> and <button type="button" className="auth-link" onClick={() => onLegal("privacy")}>Privacy Policy</button>.</span></label>
               )}
               {err && <div className="auth-err">{err}</div>}
               <button className="auth-submit" disabled={busy || (mode === "register" && !agree)}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
@@ -624,7 +628,7 @@ function EditArtisanProfile({ user, token, flash, fail, onBack, onSave, onAvatar
       <div className="photo-picker">
         {photos.map((p) => (
           <div key={p.id} style={{ position: "relative" }}>
-            <img src={p.url} className="photo-thumb" alt="" style={{ objectFit: "cover", width: 84, height: 84 }} />
+            <img src={p.url} className="photo-thumb" alt="Your work photo" style={{ objectFit: "cover", width: 84, height: 84 }} />
             <button type="button" onClick={() => onRemovePhoto(p.id)} aria-label="Remove photo" style={{ position: "absolute", top: -6, right: -6, width: 24, height: 24, borderRadius: "50%", background: "var(--danger)", color: "#fff", border: "2px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><X size={13} /></button>
           </div>
         ))}
@@ -656,7 +660,8 @@ function App() {
   useEffect(() => {
     api("/api/artisans/services").then((d) => { applyServices(d.services); bumpServices((n) => n + 1); }).catch(() => {});
   }, []);
-  const [screen, setScreen] = useState("landing"); // landing | auth
+  const [screen, setScreen] = useState("landing"); // landing | auth | legal
+  const [legalTab, setLegalTab] = useState("privacy");
   const [authMode, setAuthMode] = useState("register");
   const [intent, setIntent] = useState(null); // "request" | "artisan" | null
 
@@ -666,10 +671,13 @@ function App() {
   if (auth.loading) {
     body = <Splash />;
   } else if (!auth.token || !auth.user) {
-    body = screen === "auth"
-      ? <AuthScreen initialMode={authMode} onBack={() => setScreen("landing")} auth={auth} />
+    body = screen === "legal"
+      ? <LegalView initial={legalTab} onBack={() => setScreen("auth")} />
+      : screen === "auth"
+      ? <AuthScreen initialMode={authMode} onBack={() => setScreen("landing")} auth={auth} onLegal={(t) => { setLegalTab(t); setScreen("legal"); }} />
       : <Landing
           onSignIn={() => { setIntent(null); setAuthMode("login"); setScreen("auth"); }}
+          onLegal={(t) => { setLegalTab(t); setScreen("legal"); }}
           onStart={(i) => { setIntent(i); setAuthMode("register"); setScreen("auth"); }} />;
   } else {
     body = <MainApp auth={auth} intent={intent} />;
@@ -685,6 +693,14 @@ function App() {
 
 function MainApp({ auth, intent }) {
   const { user, token, logout, setUser, setToken } = auth;
+  useEffect(() => {
+    // Keep the app exactly as tall as the visible screen, so the on-screen keyboard never leaves a gap
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const set = () => { document.documentElement.style.setProperty("--vvh", vv.height + "px"); if (vv.offsetTop > 0) window.scrollTo(0, 0); };
+    set(); vv.addEventListener("resize", set); vv.addEventListener("scroll", set);
+    return () => { vv.removeEventListener("resize", set); vv.removeEventListener("scroll", set); };
+  }, []);
   const isArtisan = user.role === "ARTISAN";
   const isAdmin = user.role === "ADMIN";
 
@@ -707,6 +723,7 @@ function MainApp({ auth, intent }) {
   const [artisans, setArtisans] = useState([]);
   const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
   const [openGroups, setOpenGroups] = useState([]);
+  const [legalBack, setLegalBack] = useState("help");
   const [messages, setMessages] = useState([]);
   const [application, setApplication] = useState(null);
   const [requestImage, setRequestImage] = useState(null);
@@ -1068,7 +1085,7 @@ function MainApp({ auth, intent }) {
           <VettedWelcome user={user} onOpen={() => { setView("home"); setNavTab("home"); }} />
         )}
         {view === "help" && (
-          <HelpView onBack={() => setView("userProfile")} onReport={() => goNav("requests")} />
+          <HelpView onBack={() => setView("userProfile")} onReport={() => goNav("requests")} onLegal={() => { setLegalBack("help"); setView("legal"); }} />
         )}
         {view === "trackRecord" && isArtisan && user.artisanProfile && (
           <TrackRecordView user={user} requests={requests} myReviews={myReviews} onBack={() => setView("userProfile")} />
@@ -1183,8 +1200,10 @@ function MainApp({ auth, intent }) {
         {view === "userProfile" && !isArtisan && !applyOpen && (
           <CustomerProfileView user={user} requests={requests} application={application} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
             onGoRequests={() => goNav("requests")}
+            onGoReviews={() => setView("myReviews")}
             onBecomeArtisan={() => setApplyOpen(true)}
             onHelp={() => setView("help")}
+            onPrivacy={() => { setLegalBack("userProfile"); setView("legal"); }}
             onLogout={logout} />
         )}
                 {view === "editProfile" && isArtisan && user.artisanProfile && (
@@ -1195,7 +1214,12 @@ function MainApp({ auth, intent }) {
           <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
             onEditProfile={() => setView("editProfile")}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
-            onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onLogout={logout} />
+            onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onPrivacy={() => { setLegalBack("userProfile"); setView("legal"); }} onLogout={logout} />
+        )}
+        {view === "legal" && <LegalView user={user} token={token} onDeleted={logout} onBack={() => setView(legalBack)} />}
+        {view === "myReviews" && (
+          <MyReviewsView requests={requests} user={user} onBack={() => setView("userProfile")}
+            onReview={(id) => { setActiveRequestId(id); setView("review"); }} onOpen={(id) => openTrack(id)} />
         )}
         {view === "userProfile" && !isArtisan && applyOpen && (
           <ApplyView user={user} onBack={() => setApplyOpen(false)} onApply={applyAsArtisan} />
@@ -1708,7 +1732,7 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
       {a.photos && a.photos.length > 0 && (
         <div className="ap-sec">
           <h2 className="ap-h">Recent work</h2>
-          <div className="ap-work">{a.photos.map((p) => <img key={p.id} src={p.url} alt="" />)}</div>
+          <div className="ap-work">{a.photos.map((p) => <img key={p.id} src={p.url} alt={"Work sample by " + a.user.name} />)}</div>
         </div>
       )}
 
@@ -1880,7 +1904,7 @@ function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan, onSendDirect 
             </label>
             {wiz.image && (
               <div className="rf-thumb">
-                <img src={wiz.image} alt="" />
+                <img src={wiz.image} alt="Photo of the problem" />
                 <button type="button" onClick={() => set({ image: null })} aria-label="Remove photo"><X size={12} /></button>
               </div>
             )}
@@ -1976,7 +2000,7 @@ function RequestView({ artisan, openJobGroups, initialJob, onBack, onSend }) {
             <label>Photo of the problem (optional)
               {image ? (
                 <div className="id-preview">
-                  <img src={image} className="id-preview-img" />
+                  <img src={image} className="id-preview-img" alt="Preview of your ID photo" />
                   <button type="button" className="id-remove-btn" onClick={() => setImage(null)}><X size={12} /> Remove</button>
                 </div>
               ) : (
@@ -2444,19 +2468,135 @@ function ReportReplyView({ request, token, flash, fail, onBack }) {
   );
 }
 
+/* ---------------- Legal: privacy, terms, your data ---------------- */
+const LEGAL_DATE = "18 October 2026";
+const LEGAL = {
+  privacy: ["Privacy", [
+    ["Who we are", "VettedHands connects customers in Ado-Ekiti with vetted artisans. VettedHands is the data controller for the information described here. Contact: " + SUPPORT_EMAIL + "."],
+    ["What we collect", "Your name, email address, password (stored scrambled, never readable), and your area. For artisans we also collect trade, bio, phone number, social handle, work photos, certificates and a photo of a government ID. When you use the app we store your requests, messages, voice notes, photos you attach, reviews, blog posts, notifications and, if you turn push alerts on, a push subscription for your device."],
+    ["Why we use it", "To create your account, match you with artisans, let you chat, verify artisans, keep people safe, handle reports, and send alerts about your jobs. We do not sell your data and we do not show ads."],
+    ["Who can see it", "An artisan you send a request to sees your first name, the job, your area and any photo you attach. Customers see an artisan's public profile. The VettedHands team can see accounts, requests, messages and ID photos where needed to review applications, reports and safety issues. An artisan's ID photo is seen only by our admins."],
+    ["Services we use", "We rely on trusted providers to run VettedHands: Render (server), Neon (database, hosted in Germany), Cloudinary (photos and voice notes), Brevo (emails), GitHub Pages (this website) and Google Fonts and cdnjs (fonts and code libraries, which receive your IP address when the page loads). Push alerts go through your device maker's push service (Apple, Google or Mozilla). Some of these are outside Nigeria, so your data may be processed abroad under their security terms."],
+    ["How long we keep it", "While your account is active. If you ask us to delete your account we delete your profile, requests, messages and uploaded files within 30 days. We may keep a minimal record where the law requires it or to deal with a dispute or report."],
+    ["Your rights", "Under the Nigeria Data Protection Act 2023 you can ask to see your data, correct it, delete it, object to how we use it, or take it elsewhere. Email " + SUPPORT_EMAIL + " and we will reply within 30 days. You can also complain to the Nigeria Data Protection Commission."],
+    ["Children", "VettedHands is for people aged 18 and over. If you think a child has signed up, tell us and we will remove the account."],
+    ["Changes", "If we change this policy in a way that matters we will tell you in the app. Last updated " + LEGAL_DATE + "."],
+  ]],
+  terms: ["Terms", [
+    ["Using VettedHands", "You must be 18 or older and give true information. One person, one account. Keep your password private. You are responsible for what happens on your account."],
+    ["What we do and don't do", "VettedHands is a place to find and contact artisans. We are not the employer or agent of any artisan, and we do not do the work. You and the artisan make your own agreement about the job, the price and the time."],
+    ["What \"Vetted\" means", "Before an artisan is listed, our team checks their application, contact details and a photo of an ID, and looks at their portfolio. \"Skill Verified\" means we have also seen certificates, references or work that support the trade. \"Top Rated\" is calculated from completed jobs and ratings. These checks reduce risk, they are not a guarantee, insurance or a certificate of quality."],
+    ["Payments and refunds", "VettedHands does not take payment and does not hold money. You agree the price with the artisan and pay them directly. Because we never receive your money we cannot refund it. Do not pay for work that has not started and never share your PIN, card or bank login. If something goes wrong, use Report a problem on the job and we will look into it."],
+    ["Requests, booking and cancelling", "You can send a request to one or more artisans. When you confirm one artisan, your other requests for the same job close. Before a booking is confirmed either side can withdraw. After a booking is confirmed, cancelling needs both sides to agree and to confirm that no money has been exchanged. If money has changed hands, report the job instead."],
+    ["Reviews", "Only a customer whose job was completed can review it. Reviews must be honest and about the work. No fake, paid or swapped reviews. We may hide or remove reviews that break these rules or the blog rules."],
+    ["Blog and messages", "Posts are read by our team before they appear. No phone numbers, payment details, abuse, discrimination, or false claims about people. Reports about a post hide it for review. Messages are tied to a job so reports can be investigated."],
+    ["Behaviour", "No harassment, fraud, impersonation, illegal work or taking people off the app to avoid these rules. We may warn, suspend or remove accounts that break them."],
+    ["Our responsibility", "We try to keep VettedHands working but cannot promise it will always be available. To the extent the law allows, we are not responsible for the quality, safety or timing of work done by artisans, or for losses from deals made outside the app."],
+    ["Law and contact", "These terms are governed by the laws of Nigeria. Questions: " + SUPPORT_EMAIL + ". Last updated " + LEGAL_DATE + "."],
+  ]],
+  data: ["Your data", [
+    ["Cookies and storage", "VettedHands does not use advertising or tracking cookies. Your browser keeps a sign-in token and a few settings (like your sound preference) on your device so the app works. That is all it is used for, so there is no cookie banner. Clearing your browser data signs you out."],
+    ["Emails", "We email you about your account and your jobs, for example a sign-in code or a new request. To stop job emails, turn off Email alerts in Profile. We still send security emails such as sign-in codes."],
+    ["Download your data", "Want a copy of what we hold about you? Ask and we will send it to your email within 30 days."],
+    ["Delete your account", "You can delete your account yourself below. It removes your profile, requests, messages and photos. This cannot be undone."],
+  ]],
+};
+function LegalView({ onBack, initial, user, token, onDeleted }) {
+  const [tab, setTab] = useState(initial || "privacy");
+  const [del, setDel] = useState(false);
+  const [pw, setPw] = useState("");
+  const [delBusy, setDelBusy] = useState(false);
+  const [delErr, setDelErr] = useState("");
+  async function doDelete() {
+    if (delBusy) return;
+    setDelBusy(true); setDelErr("");
+    try { await api("/api/auth/me", { method: "DELETE", token, body: { password: pw } }); onDeleted(); }
+    catch (e) { setDelErr(e.message || "Could not delete your account."); setDelBusy(false); }
+  }
+  const [title, sections] = LEGAL[tab];
+  const who = user ? user.email : "";
+  const mail = (subject, body) => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; };
+  return (
+    <div className="screen hp lg">
+      <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+      <h1 className="trk-h">Privacy and terms</h1>
+      <p className="trk-sub">Plain words about how VettedHands works with your information.</p>
+      <div className="lg-tabs" role="tablist">
+        {Object.entries(LEGAL).map(([k, v]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{v[0]}</button>)}
+      </div>
+      <div className="lg-body">
+        {sections.map(([h, p]) => <section key={h}><h2>{h}</h2><p>{p}</p></section>)}
+        {tab === "data" && (
+          <div className="lg-acts">
+            <button className="o" onClick={() => mail("Send me my VettedHands data", `Please send me a copy of the data you hold about my account${who ? " (" + who + ")" : ""}.`)}>Ask for a copy of my data</button>
+            {user && token && !del && <button className="d" onClick={() => setDel(true)}>Delete my account</button>}
+            {user && token && del && (
+              <div className="lg-del">
+                <b>This permanently deletes your account.</b>
+                <span>Your profile, requests, messages, reviews and photos are removed. Artisans: your profile and the jobs on it go too. This cannot be undone. If you have a booked job in progress, finish or cancel it first.</span>
+                <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Enter your password to confirm" autoComplete="current-password" aria-label="Your password" />
+                {delErr && <div className="auth-err">{delErr}</div>}
+                <div className="cx-row"><button className="ghost-btn" onClick={() => { setDel(false); setPw(""); setDelErr(""); }}>Keep my account</button><button className="settle-btn lg-del-go" disabled={!pw || delBusy} onClick={doDelete}>{delBusy ? "Deleting…" : "Delete forever"}</button></div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="lg-note"><ShieldCheck size={20} style={{ flexShrink: 0 }} /><span>Questions about your data? Email <b>{SUPPORT_EMAIL}</b>.</span></div>
+    </div>
+  );
+}
+
+/* ---------------- My reviews (customer) ---------------- */
+function MyReviewsView({ requests, user, onBack, onReview, onOpen }) {
+  const mine = requests.filter((r) => r.student && r.student.id === user.id);
+  const waiting = mine.filter((r) => r.status === "CONFIRMED" && r.artisanDoneAt);
+  const given = mine.filter((r) => r.status === "COMPLETED" && r.rating);
+  return (
+    <div className="screen hp mr">
+      <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+      <h1 className="trk-h">Your reviews</h1>
+      <p className="trk-sub">Reviews you have written, and jobs waiting for one.</p>
+      {waiting.length > 0 && (
+        <>
+          <div className="mr-h">Waiting for your review</div>
+          {waiting.map((r) => (
+            <div className="mr-card mr-card--wait" key={r.id}>
+              <div><b>{r.artisanProfile.user.name}</b><span>{tradeLabel(r.artisanProfile.trade)} · marked the job done</span></div>
+              <button className="a" onClick={() => onReview(r.id)}>Confirm and review</button>
+            </div>
+          ))}
+        </>
+      )}
+      <div className="mr-h">Reviews you've given</div>
+      {given.map((r) => (
+        <button className="mr-card" key={r.id} onClick={() => onOpen(r.id)}>
+          <div className="mr-top"><b>{r.artisanProfile.user.name}</b><span className="mr-stars" aria-label={`${r.rating} out of 5`}>{"★".repeat(r.rating)}<i>{"★".repeat(5 - r.rating)}</i></span></div>
+          <span className="mr-trade">{tradeLabel(r.artisanProfile.trade)} · {dayLabel(r.updatedAt || r.createdAt)}</span>
+          {r.reviewText && <p>"{r.reviewText}"</p>}
+          {r.reviewStatus === "REMOVED" && <em>Removed by VettedHands moderators</em>}
+          {r.reviewStatus === "FLAGGED" && <em>Under review by VettedHands</em>}
+        </button>
+      ))}
+      {given.length === 0 && <div className="mr-empty">No reviews yet. Once an artisan marks a job done and you confirm it, you can review them here.</div>}
+    </div>
+  );
+}
+
 /* ---------------- Customer profile ---------------- */
-function CustomerProfileView({ user, requests, application, onGoRequests, onBecomeArtisan, onHelp, onLogout, onEmailPref, pushOn, onPushToggle }) {
+function CustomerProfileView({ user, requests, application, onGoRequests, onGoReviews, onBecomeArtisan, onHelp, onPrivacy, onLogout, onEmailPref, pushOn, onPushToggle }) {
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
-  const waiting = requests.filter((r) => r.status === "CONFIRMED").length;
+  const waiting = requests.filter((r) => r.status === "CONFIRMED" && r.artisanDoneAt).length;
   const rows = [
     [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
     [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
-    [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoRequests],
+    [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoReviews],
     [Bell, "Push alerts", pushOn ? "On. Tap to turn off" : "Off. Tap to turn on", onPushToggle],
     [Bell, "Email alerts", user.emailOptOut ? "Off. Tap to turn on" : "On. Tap to turn off", () => onEmailPref(!user.emailOptOut)],
     [HelpCircle, "Help and support", "Answers, badges and how to reach us", onHelp],
+    [ShieldCheck, "Privacy and terms", "Your data, terms, delete your account", onPrivacy],
   ];
   return (
     <div className="screen cp">
@@ -2643,7 +2783,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onLogout, onEmailPref, onEditProfile, pushOn, onPushToggle }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, pushOn, onPushToggle }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
@@ -2674,6 +2814,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
         <button className="ao-row" onClick={onPushToggle}><Bell size={22} /><span>Push alerts: {pushOn ? "On" : "Off"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={onPrivacy}><ShieldCheck size={22} /><span>Privacy and terms</span><ChevronRight size={18} /></button>
       </div>
       <button className="ao-out" onClick={onLogout}>Sign out</button>
     </div>
@@ -2815,14 +2956,14 @@ function ApplyView({ user, onBack, onApply }) {
       <div className="rf-label">Portfolio / work photos <small>(at least {MIN_PORTFOLIO})</small></div>
       <div className="rf-photo">
         {photos.map((p, i) => (
-          <div className="rf-thumb" key={i}><img src={p} alt="" /><button type="button" onClick={() => setPhotos((x) => x.filter((_, j) => j !== i))} aria-label="Remove photo"><X size={12} /></button></div>
+          <div className="rf-thumb" key={i}><img src={p} alt={"Photo " + (i + 1)} /><button type="button" onClick={() => setPhotos((x) => x.filter((_, j) => j !== i))} aria-label="Remove photo"><X size={12} /></button></div>
         ))}
         {photos.length < 6 && <label className="rf-add"><input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={addPhotos} /><span>{upBusy ? "…" : "+"}</span>Add</label>}
       </div>
 
       <div className="rf-label">Identity</div>
       <div className="rf-photo">
-        {idDoc ? <div className="rf-thumb"><img src={idDoc} alt="" /><button type="button" onClick={() => setIdDoc(null)} aria-label="Remove ID"><X size={12} /></button></div>
+        {idDoc ? <div className="rf-thumb"><img src={idDoc} alt="Your ID photo" /><button type="button" onClick={() => setIdDoc(null)} aria-label="Remove ID"><X size={12} /></button></div>
           : <label className="rf-add"><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickId} /><span>{upBusy ? "…" : "+"}</span>ID</label>}
         <p>National ID, driver's license or voter's card. Clear photo, all four corners visible.</p>
       </div>
@@ -2868,24 +3009,43 @@ function VettedWelcome({ user, onOpen }) {
 
 const FAQ = [
   ["How does VettedHands find artisans for me?", "You describe the job once. We match by trade, who is available now, area, verification, rating and jobs completed, then show you the best fits."],
+  ["Can I send my request to more than one artisan?", "Yes. When you send another request while one is still open, we ask if it is the same job. Say yes and they are grouped, so when you confirm one artisan the others close on their own."],
+  ["When can I chat with an artisan?", "Artisans can message you only after they accept your request. You can message an artisan you have sent a request to, to describe the job."],
+  ["How do I book an artisan?", "When an artisan accepts, open the request and tap Confirm booking. That books them and closes your other requests for the same job."],
+  ["An artisan has not replied. What can I do?", "Give them a little time. If they stay quiet you can cancel the request and send it to someone else. Tap the request, then Cancel request."],
+  ["Can I cancel after booking?", "Yes, but both sides have to agree. Tap Cancel booking in the chat, pick a reason and confirm that no money has been exchanged. If money has changed hands, use Report a problem instead."],
+  ["Do I pay through the app?", "Not yet. You agree the price with the artisan and pay them directly after the work is done. Do not pay in advance for a job that has not started, and never share your PIN or bank login. Because we do not hold your money, we cannot refund it."],
   ["What do the badges mean?", "badges"],
+  ["How are artisans checked?", "Before anyone is listed our team checks their application, phone number and a photo of an ID, and looks at their work. These checks reduce risk but they are not a guarantee. Always agree the price first."],
   ["Why can I not review yet?", "Reviews unlock after the artisan marks the job done and you confirm it. That keeps every review tied to real work."],
-  ["Do I pay through the app?", "Not yet. You agree the price with the artisan and pay them directly after the work is done. Do not pay in advance for a job that has not started, and never share your PIN or bank login."],
+  ["Where do I see my reviews?", "Go to Profile, then Reviews given. You will see the reviews you wrote and any jobs waiting for one."],
   ["An artisan did not show up. What now?", "Open the job under Requests and tap Report a problem with this job. Our team reviews every report."],
+  ["Someone behaved badly or I feel unsafe.", "Report the job straight away from Requests or the chat. In an emergency call 112. Keep chatting inside VettedHands so we can investigate."],
   ["Can I send a voice note instead of typing?", "Yes. Open a chat and tap the microphone to record a short voice note."],
-  ["How do I become an artisan?", "Go to Profile and tap Become an artisan. Our team reviews every application, usually within 3 working days."],
+  ["I did not get my sign-in code.", "Check your spam folder, then tap Resend on the code screen. Make sure you typed your email correctly."],
+  ["I forgot my password.", "On the sign-in screen tap Forgot password. We email you a 6-digit code to set a new one."],
+  ["How do I turn notifications off?", "Go to Profile. Push alerts and Email alerts each have their own switch."],
+  ["How do I become an artisan?", "Go to Profile and tap Become an artisan. Our team reviews every application, usually within 3 working days. You will need a photo of a valid ID."],
+  ["My service is not listed.", "Email us the service you offer. If it fits we add it so you can apply."],
+  ["What is the blog?", "A place for customers to share stories about artisans after a job, and for artisans to post updates. Every post is read by our team first."],
+  ["What happens to my information?", "We use it to run VettedHands and never sell it. Read the details under Privacy and terms at the bottom of this page."],
+  ["How do I delete my account or get my data?", "Go to Profile, then Privacy and terms, then Your data. You can delete your account there yourself, or ask for a copy of your data and we reply within 30 days."],
 ];
-function HelpView({ onBack, onReport }) {
+function HelpView({ onBack, onReport, onLegal }) {
   const [open, setOpen] = useState(0);
+  const [q, setQ] = useState("");
+  const items = FAQ.filter(([qq, aa]) => !q.trim() || (qq + " " + (aa === "badges" ? "vetted skill verified top rated badge" : aa)).toLowerCase().includes(q.trim().toLowerCase()));
   return (
     <div className="screen hp">
       <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
       <h1 className="trk-h">How can we help?</h1>
       <p className="trk-sub">Quick answers first. A real person is one tap away.</p>
+      <input className="hp-search" type="search" value={q} onChange={(e) => { setQ(e.target.value); setOpen(0); }} placeholder="Search questions" aria-label="Search questions" />
       <div className="hp-list">
-        {FAQ.map(([q, a], i) => (
-          <div key={q}>
-            <button className={"hp-q" + (open === i ? " open" : "")} onClick={() => setOpen(open === i ? -1 : i)}><span>{q}</span><ChevronDown size={20} /></button>
+        {items.length === 0 && <div className="hp-q" style={{ cursor: "default" }}><span>No match. Message support below.</span></div>}
+        {items.map(([qq, a], i) => (
+          <div key={qq}>
+            <button className={"hp-q" + (open === i ? " open" : "")} onClick={() => setOpen(open === i ? -1 : i)}><span>{qq}</span><ChevronDown size={20} /></button>
             {open === i && (
               <div className="hp-a">
                 {a === "badges" ? (<>
@@ -2904,6 +3064,7 @@ function HelpView({ onBack, onReport }) {
         <button className="w" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("VettedHands support")}`; }}>Message support</button>
         <button className="o" onClick={onReport}>Report a problem with a job</button>
       </div>
+      <button className="hp-legal" onClick={onLegal}>Privacy and terms</button>
       <div className="hp-emg"><AlertTriangle size={20} style={{ flexShrink: 0 }} /><span>In an emergency call <b>112</b>. VettedHands support is not an emergency service.</span></div>
     </div>
   );
@@ -3131,6 +3292,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
     try { await vr.start(async (audio, secs) => { setVoiceBusy(true); try { await onSendVoice(audio, secs); } finally { setVoiceBusy(false); } }); }
     catch (e) { setVErr(e.message); }
   }
+  const [typing, setTyping] = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
   useEffect(() => {
@@ -3165,7 +3327,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {label}</span><b>View job <ChevronRight size={15} /></b></button>
       {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
-      {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" />}
+      {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" alt="Photo of the problem" />}
 
       <div className="cv-msgs">
         {messages.map((m) => {
@@ -3191,7 +3353,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         <div ref={bottomRef} />
       </div>
 
-      {canAct && !locked && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
+      {canAct && !locked && !typing && <div className="cv-quick">{quick.map((q) => <button key={q} type="button" onClick={() => send(q)}>{q}</button>)}</div>}
       {vr.recording && (
         <div className="cv-rec">
           <button type="button" className="cv-rec-x" onClick={() => vr.stop(false)} aria-label="Cancel"><Trash size={18} /></button>
@@ -3202,11 +3364,11 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       {vErr && <div className="cv-verr">{vErr}</div>}
       {locked && <div className="cv-lock">Accept this request to start chatting with {other.name.split(" ")[0]}.</div>}
       <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
+        <input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
       </form>
-      <div className="cv-safe">Tap the mic to record a voice note. Never share your PIN or send money outside VettedHands.</div>
+      {!typing && <div className="cv-safe">Tap the mic to record a voice note. Never share your PIN or send money outside VettedHands.</div>}
     </div>
   );
 }
@@ -3394,7 +3556,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
             <div className="photo-picker" style={{ marginTop: 10 }}>
               {user.artisanProfile.photos.map((p) => (
                 <div key={p.id} style={{ position: "relative" }}>
-                  <img src={p.url} className="photo-thumb" style={{ objectFit: "cover" }} />
+                  <img src={p.url} className="photo-thumb" alt="Your work photo" style={{ objectFit: "cover" }} />
                   <button onClick={() => onRemovePhoto(p.id)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "var(--danger)", color: "#fff", border: "2px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X size={11} /></button>
                 </div>
               ))}
@@ -3423,7 +3585,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
               <label>Government ID (NIN slip, driver's license, or voter's card) — seen only by VettedHands admin
                 {idDocument ? (
                   <div className="id-preview">
-                    <img src={idDocument} className="id-preview-img" />
+                    <img src={idDocument} className="id-preview-img" alt="Preview of your ID photo" />
                     <button type="button" className="id-remove-btn" onClick={() => setIdDocument(null)}><X size={12} /> Remove</button>
                   </div>
                 ) : (
@@ -3435,7 +3597,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
               </label>
               <label>Photos of past work
                 <div className="photo-picker">
-                  {photos.map((p, i) => <img key={i} src={p} className="photo-thumb" style={{ objectFit: "cover" }} />)}
+                  {photos.map((p, i) => <img key={i} src={p} className="photo-thumb" alt={"Work photo " + (i + 1)} style={{ objectFit: "cover" }} />)}
                   {photos.length < 4 && (
                     <label className="photo-add" style={{ cursor: uploading ? "wait" : "pointer" }}>
                       <input type="file" accept="image/*" multiple onChange={handlePhotoPick} style={{ display: "none" }} disabled={uploading} />
@@ -3708,6 +3870,40 @@ function Style() {
       .cx-check { display:flex; align-items:flex-start; gap:10px; background:var(--bg); border:1.5px solid var(--line); border-radius:11px; padding:11px 12px; font-size:13px; font-weight:600; margin-top:4px; }
       .cx-check input { margin-top:2px; width:18px; height:18px; accent-color:var(--primary); }
       .cx-hint { display:block; color:var(--ink-soft); font-size:11.5px; margin-top:6px; line-height:1.4; }
+      :focus-visible { outline:3px solid #B5651D; outline-offset:2px; }
+      .hp-search { width:100%; border:1.5px solid var(--line); background:var(--surface); border-radius:14px; padding:12px 14px; font-family:inherit; margin:0 0 14px; color:var(--ink); }
+      .hp-legal { display:block; margin:16px auto 0; background:none; border:none; color:var(--primary); font-family:inherit; font-weight:700; font-size:14px; text-decoration:underline; cursor:pointer; }
+      .lg-tabs { display:flex; gap:8px; margin:0 0 14px; overflow-x:auto; }
+      .lg-tabs button { flex-shrink:0; background:var(--surface); border:1.5px solid var(--line); border-radius:999px; padding:9px 16px; font-family:inherit; font-weight:600; font-size:13px; color:var(--ink); cursor:pointer; }
+      .lg-tabs button.on { background:var(--primary); border-color:var(--primary); color:#fff; }
+      .lg-body { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:6px 18px 10px; }
+      .lg-body section { padding:12px 0; border-bottom:1px solid var(--line); }
+      .lg-body section:last-of-type { border-bottom:none; }
+      .lg-body h2 { font-family:'Bricolage Grotesque',sans-serif; font-size:15.5px; margin:0 0 4px; }
+      .lg-body p { margin:0; font-size:13.5px; line-height:1.55; color:var(--ink-soft); }
+      .lg-acts { display:flex; flex-direction:column; gap:8px; padding:6px 0 8px; }
+      .lg-acts button { border-radius:12px; padding:13px; font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; background:var(--surface); border:1.5px solid var(--primary); color:var(--primary); }
+      .lg-acts button.d { border-color:#C9806F; color:var(--danger); }
+      .lg-del { display:flex; flex-direction:column; gap:8px; background:#F8E3DD; border:1px solid #E9C7BD; border-radius:14px; padding:14px; font-size:13px; }
+      .lg-del span { color:var(--ink-soft); line-height:1.45; }
+      .lg-del input { border:1.5px solid var(--line); border-radius:11px; padding:12px; font-family:inherit; background:#fff; }
+      .lg-del-go { background:var(--danger) !important; }
+      .lg-note { display:flex; gap:10px; align-items:center; background:#E3EFE9; color:var(--primary); border-radius:14px; padding:14px 16px; margin-top:16px; font-size:13px; }
+      .landing-foot { margin:30px 0 8px; text-align:center; font-size:12.5px; color:var(--ink-soft); }
+      .landing-foot button, .landing-foot a { background:none; border:none; color:var(--primary); font-family:inherit; font-size:12.5px; font-weight:700; text-decoration:underline; cursor:pointer; padding:4px 6px; }
+      .landing-foot span { margin:0 2px; } .landing-foot div { margin-top:8px; }
+      .auth-agree .auth-link { display:inline; padding:0; font-size:inherit; text-decoration:underline; }
+      .mr-h { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:16px; margin:18px 0 10px; }
+      .mr-card { display:block; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-bottom:10px; font-family:inherit; color:var(--ink); cursor:pointer; }
+      .mr-card--wait { display:flex; align-items:center; justify-content:space-between; gap:12px; border-color:var(--primary); cursor:default; }
+      .mr-card b { display:block; font-size:15px; } .mr-card span { color:var(--ink-soft); font-size:12.5px; }
+      .mr-card .a { background:var(--primary); color:#fff; border:none; border-radius:999px; padding:9px 14px; font-weight:700; font-size:12.5px; cursor:pointer; font-family:inherit; flex-shrink:0; }
+      .mr-top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+      .mr-stars { color:#B5651D !important; letter-spacing:1px; font-size:14px !important; } .mr-stars i { color:#D9CFB8; font-style:normal; }
+      .mr-trade { display:block; margin-top:2px; }
+      .mr-card p { margin:8px 0 0; font-size:13.5px; line-height:1.45; }
+      .mr-card em { display:block; margin-top:8px; font-size:12px; color:var(--danger); font-style:normal; font-weight:600; }
+      .mr-empty { background:var(--surface); border:1px dashed var(--line); border-radius:16px; padding:22px; text-align:center; color:var(--ink-soft); font-size:13.5px; line-height:1.5; }
       .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#F6F1E4; padding:10px 18px; border-radius:20px; font-size:12.5px; font-weight:600; box-shadow:0 10px 24px -10px rgba(0,0,0,0.5); z-index:30; }
 
       .hero { background:linear-gradient(135deg,#0F4D3A 0%,#0A3A2B 100%); border-radius:0 0 28px 28px; padding:calc(20px + env(safe-area-inset-top)) 18px 22px; }
@@ -3902,11 +4098,11 @@ function Style() {
       .cv-time { display:flex; align-items:center; font-size:11px; color:var(--ink-soft); margin:4px 4px 0; }
       .cv-quick { display:flex; gap:8px; overflow-x:auto; padding:10px 14px 4px; background:var(--bg); }
       .cv-quick button { flex-shrink:0; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:10px 16px; font-family:inherit; font-size:13px; font-weight:600; color:var(--ink); cursor:pointer; }
-      .cv-input { display:flex; gap:10px; padding:10px 14px 4px; background:var(--bg); }
+      .cv-input { display:flex; gap:10px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); background:var(--bg); }
       .cv-input input { flex:1; min-width:0; border:none; outline:none; background:#EDE5D1; border-radius:999px; padding:14px 18px; font-family:inherit; font-size:16px; color:var(--ink); }
       .cv-send { width:48px; height:48px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
       .cv-send:disabled { opacity:.4; cursor:default; }
-      .cv-safe { text-align:center; font-size:11px; color:var(--ink-soft); padding:6px 16px 12px; background:var(--bg); }
+      .cv-safe { text-align:center; font-size:11px; color:var(--ink-soft); padding:0 16px 8px; background:var(--bg); margin-top:-4px; }
       @media (min-width:760px) { .cv-msgs { max-height:calc(100vh - 360px); } }
 
             .tk-note { background:#E3EFE9; color:var(--primary); border-radius:14px; padding:14px; font-size:13px; line-height:1.45; }
@@ -4480,8 +4676,8 @@ function Style() {
       }
 
       @media (max-width: 480px) {
-        .app { padding: 0; }
-        .phone { max-width: 100%; min-height: 100dvh; height: 100dvh; border-radius: 0; border: none; box-shadow: none; }
+        .app { padding: 0; min-height: 0; height: var(--vvh, 100dvh); overflow: hidden; }
+        .phone { max-width: 100%; min-height: 0; height: var(--vvh, 100dvh); border-radius: 0; border: none; box-shadow: none; }
         .bottomnav { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
         .topbar { padding-top: calc(16px + env(safe-area-inset-top)); }
       }
