@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#0F4D3A" />
+<meta name="theme-color" id="themeColor" content="#F5F0E4" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="VettedHands" />
@@ -153,6 +153,41 @@ const Mic = (p) => <Icon name="mic" {...p} />;
 const Play = (p) => <Icon name="play" {...p} />;
 const Pause = (p) => <Icon name="pause" {...p} />;
 const Trash = (p) => <Icon name="trash" {...p} />;
+Object.assign(ICON_PATHS, {
+  printer: <><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>,
+  wrench: <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>,
+  utensils: <><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></>,
+  truck: <><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></>,
+  flame: <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>,
+  car: <><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></>,
+  snowflake: <><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/></>,
+  leaf: <><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></>,
+  music: <><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>,
+  briefcase: <><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></>,
+});
+const SERVICE_ICON_RULES = [
+  [/print|brand|graphic|banner|design/i, "printer"],
+  [/photo|video|camera|film/i, "camera"],
+  [/cook|cater|chef|bak|food|cake/i, "utensils"],
+  [/hair|barb|salon|braid|makeup|beaut|nail/i, "scissors"],
+  [/weld|metal|iron|steel/i, "flame"],
+  [/mechanic|\bcar\b|auto|vulcan|tyre|tire/i, "car"],
+  [/deliver|dispatch|haul|logistic|transport|driver|moving/i, "truck"],
+  [/\bac\b|air.?cond|fridge|refriger|cooling/i, "snowflake"],
+  [/garden|landscap|farm|lawn/i, "leaf"],
+  [/music|\bdj\b|sound|event/i, "music"],
+  [/tutor|lesson|teach|class/i, "bookOpen"],
+  [/generator|solar|inverter|power|wiring/i, "zap"],
+  [/pipe|water|borehole/i, "droplet"],
+  [/fix|repair|install|maint|tile|mason|build/i, "wrench"],
+];
+const SERVICE_ICON_POOL = ["wrench", "briefcase", "leaf", "truck", "printer", "flame", "music", "car", "snowflake", "utensils"];
+function iconForService(key, label, icon) {
+  const hit = icon ? null : SERVICE_ICON_RULES.find(([re]) => re.test(label || ""));
+  let name = icon || (hit && hit[1]);
+  if (!name) { let h = 0; for (const c of String(key)) h += c.charCodeAt(0); name = SERVICE_ICON_POOL[h % SERVICE_ICON_POOL.length]; }
+  return (p) => <Icon name={name} {...p} />;
+}
 const Search = (p) => <Icon name="search" {...p} />;
 const Bell = (p) => <Icon name="bell" {...p} />;
 const MapPin = (p) => <Icon name="mapPin" {...p} />;
@@ -224,7 +259,7 @@ function applyServices(list) {
   (list || []).forEach((s) => {
     EXTRA_LABELS[s.key] = s.label;
     const i = trades.findIndex((t) => t.id === s.key);
-    if (s.active && i < 0) trades.push({ id: s.key, label: s.label, icon: Sparkle });
+    if (s.active && i < 0) trades.push({ id: s.key, label: s.label, icon: iconForService(s.key, s.label, s.icon) });
     if (s.active && i >= 0) trades[i].label = s.label;
     if (!s.active && i >= 0 && !CORE_TRADE_IDS.includes(s.key)) trades.splice(i, 1);
   });
@@ -666,6 +701,10 @@ function App() {
   const [intent, setIntent] = useState(null); // "request" | "artisan" | null
 
   useEffect(() => { if (!auth.token) setScreen("landing"); }, [auth.token]);
+  useEffect(() => {
+    const m = document.getElementById("themeColor");
+    if (m) m.setAttribute("content", auth.loading ? "#0F4D3A" : "#F5F0E4");
+  }, [auth.loading]);
 
   let body;
   if (auth.loading) {
@@ -4678,7 +4717,7 @@ function Style() {
       }
 
       @media (max-width: 480px) {
-        .app { padding: 0; min-height: 0; position: fixed; top: 0; left: 0; right: 0; height: var(--vvh, 100%); overflow: hidden; }
+        .app { padding: 0; min-height: 0; position: fixed; top: 0; left: 0; right: 0; bottom: 0; height: var(--vvh, auto); overflow: hidden; background: var(--bg); }
         .phone { max-width: 100%; min-height: 0; height: 100%; border-radius: 0; border: none; box-shadow: none; }
         .bottomnav { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
         .topbar { padding-top: calc(16px + env(safe-area-inset-top)); }
