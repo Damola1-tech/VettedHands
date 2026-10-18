@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0F4D3A" />
 <meta name="robots" content="noindex, nofollow" />
 <link rel="icon" href="favicon.ico" sizes="48x48" />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="icon" type="image/png" sizes="96x96" href="favicon-96.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-<link rel="manifest" href="manifest.webmanifest" />
+<link rel="manifest" href="admin.webmanifest" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="VH Admin" />
 <title>VettedHands Admin</title>
+<script>if ("serviceWorker" in navigator) window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });</script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -421,7 +425,7 @@ function Dashboard({ statsRes, go }) {
 }
 
 /* ============ notifications ============ */
-const ADMIN_GO = { ADMIN_NEW_APP: "applications", ADMIN_NEW_REPORT: "reports", ADMIN_NEW_POST: "blog", ADMIN_POST_REPORTED: "blog", ADMIN_ACCOUNT_DELETED: "customers" };
+const ADMIN_GO = { ADMIN_NEW_APP: "applications", ADMIN_NEW_REPORT: "reports", ADMIN_NEW_POST: "blog", ADMIN_POST_REPORTED: "blog" };
 function AdminNotifications({ token, nfRes, go }) {
   const w = wait(nfRes); if (w) return w;
   const items = nfRes.data.notifications;
@@ -1015,8 +1019,6 @@ function Settings({ token, flash, statsRes, reloadServices }) {
   const [busy, setBusy] = useState("");
   const sv = useFetch(token, "/api/admin/services");
   const [newSvc, setNewSvc] = useState("");
-  const [newIcon, setNewIcon] = useState("");
-  const ICONS = [["", "Auto from name"], ["wrench", "Wrench"], ["printer", "Printer"], ["camera", "Camera"], ["utensils", "Food"], ["scissors", "Scissors"], ["flame", "Welding"], ["car", "Car"], ["truck", "Truck"], ["snowflake", "Cooling"], ["leaf", "Garden"], ["music", "Music"], ["briefcase", "Business"], ["bookOpen", "Lessons"], ["zap", "Power"], ["droplet", "Water"], ["hammer", "Hammer"], ["paintRoller", "Paint"], ["smartphone", "Phone"], ["laptop", "Laptop"], ["sparkle", "Sparkle"]];
   useEffect(() => { if (d) { setSupport(d.settings.supportEmail); setAcct((a) => ({ ...a, email: d.me.email })); } }, [d && d.me.email, d && d.settings.supportEmail]);
   if (res.loading && !d) return <><Head title="Settings" sub="Loading…" /></>;
   if (!d) return <><Head title="Settings" sub="Could not load settings." /></>;
@@ -1035,7 +1037,7 @@ function Settings({ token, flash, statsRes, reloadServices }) {
     await api("/api/admin/account", { method: "PATCH", token, body });
     setAcct((a) => ({ ...a, cur: "", next: "" })); res.reload();
   }, "Account updated. Use the new details next time you sign in.");
-  const addSvc = () => run("svc", async () => { await api("/api/admin/services", { method: "POST", token, body: { label: newSvc, icon: newIcon || undefined } }); setNewSvc(""); setNewIcon(""); sv.reload(); if (reloadServices) reloadServices(); }, "Service added. It now shows in the app.");
+  const addSvc = () => run("svc", async () => { await api("/api/admin/services", { method: "POST", token, body: { label: newSvc } }); setNewSvc(""); sv.reload(); if (reloadServices) reloadServices(); }, "Service added. It now shows in the app.");
   const toggleSvc = (s) => run("svc" + s.key, async () => { await api(`/api/admin/services/${s.key}`, { method: "PATCH", token, body: { active: !s.active } }); sv.reload(); if (reloadServices) reloadServices(); }, s.active ? "Hidden from the app" : "Visible in the app");
   const delSvc = (s) => { if (!window.confirm(`Delete "${s.label}"?`)) return; run("svc" + s.key, async () => { await api(`/api/admin/services/${s.key}`, { method: "DELETE", token }); sv.reload(); if (reloadServices) reloadServices(); }, "Service deleted"); };
   const doClear = () => run("clear", async () => {
@@ -1085,7 +1087,6 @@ function Settings({ token, flash, statsRes, reloadServices }) {
           ))}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <input className="search" style={{ flex: 1, minWidth: 0 }} value={newSvc} onChange={(e) => setNewSvc(e.target.value)} placeholder="e.g. Printing and Branding" maxLength={40} />
-            <select className="search" style={{ minWidth: 0, width: 130 }} value={newIcon} onChange={(e) => setNewIcon(e.target.value)} aria-label="Icon">{ICONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
             <button className="btn btn-primary" disabled={!!busy || newSvc.trim().length < 3} onClick={addSvc}>{busy === "svc" ? "Adding…" : "Add"}</button>
           </div>
           <p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p>
