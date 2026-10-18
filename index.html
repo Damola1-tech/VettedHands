@@ -18,12 +18,24 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script>
 // Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
-(function(){var r=document.documentElement,vv=window.visualViewport;if(!vv)return;
-function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}}
-set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);})();
+(function(){var r=document.documentElement,vv=window.visualViewport;
+var standalone=function(){return window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);};
+function set(){
+  var h=vv?vv.height:window.innerHeight;
+  var kb=vv&&(window.innerHeight-vv.height)>120;
+  if(kb){r.classList.add("kb");r.style.setProperty("--vvh",h+"px");if(vv.offsetTop>0)window.scrollTo(0,0);r.style.removeProperty("--fullh");return;}
+  r.classList.remove("kb");r.style.removeProperty("--vvh");
+  // Some iPhones report the installed app as shorter than the screen, which leaves a strip at the bottom. Use the real screen height.
+  var portrait=window.innerHeight>=window.innerWidth;
+  if(standalone()&&portrait&&window.innerWidth<=480&&window.innerHeight<screen.height-8){r.style.setProperty("--fullh",screen.height+"px");}
+  else r.style.removeProperty("--fullh");
+}
+set();window.addEventListener("resize",set);window.addEventListener("orientationchange",function(){setTimeout(set,300);});
+if(vv){vv.addEventListener("resize",set);vv.addEventListener("scroll",set);}})();
 </script>
 <style>
   html,body{margin:0;background:#0A3A2B;min-height:100%}
+  .sp{height:var(--fullh,auto)}
   .sp{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:radial-gradient(120% 90% at 50% 0%,#14644B 0%,#0F4D3A 45%,#0A3A2B 100%);color:#F4EFE0;font-family:'Figtree',system-ui,-apple-system,Segoe UI,sans-serif;padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom)}
   .sp-mark{width:84px;height:84px;border-radius:26px;background:rgba(244,239,224,.12);border:1px solid rgba(244,239,224,.18);display:flex;align-items:center;justify-content:center;animation:spIn .7s cubic-bezier(.2,.8,.2,1) both}
   .sp-name{margin-top:20px;font-size:28px;font-weight:800;letter-spacing:-.02em;animation:spIn .7s .12s cubic-bezier(.2,.8,.2,1) both}
@@ -4719,7 +4731,7 @@ function Style() {
       }
 
       @media (max-width: 480px) {
-        .app { padding:0; min-height:0; position:fixed; top:0; left:0; right:0; bottom:0; height:auto; overflow:hidden; background:var(--bg); }
+        .app { padding:0; min-height:0; position:fixed; top:0; left:0; right:0; bottom:0; height:var(--fullh, auto); overflow:hidden; background:var(--bg); }
         html.kb .app { bottom:auto; height:var(--vvh); }
         .phone { max-width: 100%; min-height: 0; height: 100%; border-radius: 0; border: none; box-shadow: none; }
         .bottomnav { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
