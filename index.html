@@ -4721,8 +4721,6 @@ function Style() {
         .content:has(+ .bottomnav--hide)::after { display:none; }
         .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:max(10px, calc(var(--sab, env(safe-area-inset-bottom)) - 6px)); z-index:20; padding:6px; gap:2px; background:rgba(255,255,255,.97); border:1px solid var(--line); border-radius:999px; box-shadow:0 14px 30px -12px rgba(20,32,27,.4); }
         .phone .bottomnav--hide { display:none; }
-        .phone::after { content:""; position:absolute; left:0; right:0; bottom:0; height:calc(64px + var(--sab, env(safe-area-inset-bottom))); background:linear-gradient(to top, var(--bg) 55%, rgba(245,240,228,0)); pointer-events:none; z-index:15; }
-        .phone:has(.bottomnav--hide)::after { display:none; }
         .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:11px; font-weight:600; color:var(--ink-soft); }
         .phone .nav-item--active { background:var(--primary); color:#fff; }
         .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
