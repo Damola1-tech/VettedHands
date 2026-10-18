@@ -23,7 +23,7 @@ function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add(
 set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);})();
 </script>
 <style>
-  html,body{margin:0;background:#F5F0E4;min-height:100%}
+  html,body{margin:0;background:#0A3A2B;min-height:100%}
   .sp{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:radial-gradient(120% 90% at 50% 0%,#14644B 0%,#0F4D3A 45%,#0A3A2B 100%);color:#F4EFE0;font-family:'Figtree',system-ui,-apple-system,Segoe UI,sans-serif;padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom)}
   .sp-mark{width:84px;height:84px;border-radius:26px;background:rgba(244,239,224,.12);border:1px solid rgba(244,239,224,.18);display:flex;align-items:center;justify-content:center;animation:spIn .7s cubic-bezier(.2,.8,.2,1) both}
   .sp-name{margin-top:20px;font-size:28px;font-weight:800;letter-spacing:-.02em;animation:spIn .7s .12s cubic-bezier(.2,.8,.2,1) both}
@@ -709,7 +709,11 @@ function App() {
   useEffect(() => { if (!auth.token) setScreen("landing"); }, [auth.token]);
   useEffect(() => {
     const m = document.getElementById("themeColor");
-    if (m) m.setAttribute("content", auth.loading ? "#0F4D3A" : "#F5F0E4");
+    const c = auth.loading ? "#0F4D3A" : "#F5F0E4";
+    if (m) m.setAttribute("content", c);
+    // Whatever shows under the home bar matches the screen: dark green on the splash, cream in the app
+    const bg = auth.loading ? "#0A3A2B" : "#F5F0E4";
+    document.documentElement.style.background = bg; document.body.style.background = bg;
   }, [auth.loading]);
 
   let body;
