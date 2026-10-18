@@ -17,7 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <style>
-  html,body{margin:0;background:#0A3A2B}
+  html,body{margin:0;background:#F5F0E4;min-height:100%}
   .sp{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:radial-gradient(120% 90% at 50% 0%,#14644B 0%,#0F4D3A 45%,#0A3A2B 100%);color:#F4EFE0;font-family:'Figtree',system-ui,-apple-system,Segoe UI,sans-serif;padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom)}
   .sp-mark{width:84px;height:84px;border-radius:26px;background:rgba(244,239,224,.12);border:1px solid rgba(244,239,224,.18);display:flex;align-items:center;justify-content:center;animation:spIn .7s cubic-bezier(.2,.8,.2,1) both}
   .sp-name{margin-top:20px;font-size:28px;font-weight:800;letter-spacing:-.02em;animation:spIn .7s .12s cubic-bezier(.2,.8,.2,1) both}
@@ -2476,7 +2476,7 @@ const LEGAL = {
     ["What we collect", "Your name, email address, password (stored scrambled, never readable), and your area. For artisans we also collect trade, bio, phone number, social handle, work photos, certificates and a photo of a government ID. When you use the app we store your requests, messages, voice notes, photos you attach, reviews, blog posts, notifications and, if you turn push alerts on, a push subscription for your device."],
     ["Why we use it", "To create your account, match you with artisans, let you chat, verify artisans, keep people safe, handle reports, and send alerts about your jobs. We do not sell your data and we do not show ads."],
     ["Who can see it", "An artisan you send a request to sees your first name, the job, your area and any photo you attach. Customers see an artisan's public profile. The VettedHands team can see accounts, requests, messages and ID photos where needed to review applications, reports and safety issues. An artisan's ID photo is seen only by our admins."],
-    ["Services we use", "We rely on trusted providers to run VettedHands: Render (server), Neon (database, hosted in Germany), Cloudinary (photos and voice notes), Brevo (emails), GitHub Pages (this website) and Google Fonts and cdnjs (fonts and code libraries, which receive your IP address when the page loads). Push alerts go through your device maker's push service (Apple, Google or Mozilla). Some of these are outside Nigeria, so your data may be processed abroad under their security terms."],
+    ["Who helps us run it", "We use trusted technology providers to host the app, store data and files, and send emails and alerts. They handle your data only to provide these services to us. Some are outside Nigeria, so your data may be processed abroad with appropriate security."],
     ["How long we keep it", "While your account is active. If you ask us to delete your account we delete your profile, requests, messages and uploaded files within 30 days. We may keep a minimal record where the law requires it or to deal with a dispute or report."],
     ["Your rights", "Under the Nigeria Data Protection Act 2023 you can ask to see your data, correct it, delete it, object to how we use it, or take it elsewhere. Email " + SUPPORT_EMAIL + " and we will reply within 30 days. You can also complain to the Nigeria Data Protection Commission."],
     ["Children", "VettedHands is for people aged 18 and over. If you think a child has signed up, tell us and we will remove the account."],
@@ -3871,6 +3871,8 @@ function Style() {
       .cx-check input { margin-top:2px; width:18px; height:18px; accent-color:var(--primary); }
       .cx-hint { display:block; color:var(--ink-soft); font-size:11.5px; margin-top:6px; line-height:1.4; }
       :focus-visible { outline:3px solid #B5651D; outline-offset:2px; }
+      .phone > .screen.lg { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:calc(28px + env(safe-area-inset-bottom)); }
+      @media (min-width:760px) { .phone > .screen.lg { width:100%; max-width:720px; margin:0 auto; } }
       .hp-search { width:100%; border:1.5px solid var(--line); background:var(--surface); border-radius:14px; padding:12px 14px; font-family:inherit; margin:0 0 14px; color:var(--ink); }
       .hp-legal { display:block; margin:16px auto 0; background:none; border:none; color:var(--primary); font-family:inherit; font-weight:700; font-size:14px; text-decoration:underline; cursor:pointer; }
       .lg-tabs { display:flex; gap:8px; margin:0 0 14px; overflow-x:auto; }
@@ -4676,8 +4678,8 @@ function Style() {
       }
 
       @media (max-width: 480px) {
-        .app { padding: 0; min-height: 0; height: var(--vvh, 100dvh); overflow: hidden; }
-        .phone { max-width: 100%; min-height: 0; height: var(--vvh, 100dvh); border-radius: 0; border: none; box-shadow: none; }
+        .app { padding: 0; min-height: 0; position: fixed; top: 0; left: 0; right: 0; height: var(--vvh, 100%); overflow: hidden; }
+        .phone { max-width: 100%; min-height: 0; height: 100%; border-radius: 0; border: none; box-shadow: none; }
         .bottomnav { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
         .topbar { padding-top: calc(16px + env(safe-area-inset-top)); }
       }
