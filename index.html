@@ -1016,6 +1016,13 @@ function MainApp({ auth, intent }) {
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
     } catch (e) { /* silent */ }
   }
+  // Typing indicator: memory-only on the server, so it costs no database reads or writes.
+  function pingTyping(requestId) { api(`/api/typing/${requestId}`, { method: "POST", token }).catch(() => {}); }
+  async function checkTyping(requestId) {
+    if (document.hidden) return false;
+    const d = await api(`/api/typing/${requestId}`, { token });
+    return !!d.typing;
+  }
   async function sendMessage(requestId, text) {
     try {
       const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
@@ -1242,7 +1249,7 @@ function MainApp({ auth, intent }) {
             onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
             onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)}
             onRespond={(status) => respondToRequest(activeRequest.id, status)}
-            onPoll={pollConversation}
+            onPoll={pollConversation} onTypingPing={pingTyping} onTypingCheck={checkTyping}
             onViewJob={() => openTrack(activeRequest.id)}
             onOpenReport={() => setView("report")}
             onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)}
@@ -3333,7 +3340,7 @@ function VoiceBubble({ src, secs, mine }) {
     </div>
   );
 }
-function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onViewJob, onOpenReport, onSendVoice, onCancelAction }) {
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onTypingPing, onTypingCheck, onViewJob, onOpenReport, onSendVoice, onCancelAction }) {
   const [text, setText] = useState("");
   const vr = useRecorder(60);
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -3350,6 +3357,26 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
     const id = setInterval(() => { onPoll(request.id); }, 4000);
     return () => clearInterval(id);
   }, [request.id]);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingOff = useRef(false);
+  const lastPing = useRef(0);
+  useEffect(() => {
+    typingOff.current = false;
+    const id = setInterval(async () => {
+      if (typingOff.current || !onTypingCheck) return;
+      try { setOtherTyping(await onTypingCheck(request.id)); }
+      catch (e) { if (/404|not found/i.test(e.message || "")) typingOff.current = true; setOtherTyping(false); }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [request.id]);
+  // The other person's message arrived, so they are no longer typing
+  useEffect(() => { setOtherTyping(false); }, [messages.length]);
+  useEffect(() => { if (otherTyping) bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [otherTyping]);
+  function onType(v) {
+    setText(v);
+    const now = Date.now();
+    if (v.trim() && onTypingPing && now - lastPing.current > 3000) { lastPing.current = now; onTypingPing(request.id); }
+  }
   const iAmArtisanSide = request.artisanProfile.user.id === user.id;
   const other = iAmArtisanSide ? request.student : request.artisanProfile.user;
   const canAct = !["COMPLETED", "DECLINED", "CLOSED", "CANCELLED"].includes(request.status);
@@ -3371,7 +3398,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         <span className="cv-av" style={{ background: bg, color: fg }}><Face u={other} /></span>
         <div className="cv-who">
           <div className="cv-name">{other.name}{!iAmArtisanSide && <ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />}</div>
-          <div className="cv-sub">{sub}</div>
+          <div className={"cv-sub" + (otherTyping ? " cv-sub--typing" : "")}>{otherTyping ? "typing…" : sub}</div>
         </div>
         {canAct && <button className="cv-flag" onClick={onOpenReport} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
@@ -3401,6 +3428,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         {request.status === "COMPLETED" && request.rating && (
           <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> Rated {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
         )}
+        {otherTyping && <div className="cv-row cv-row--them"><div className="cv-bubble cv-bubble--them cv-typing" aria-label={other.name + " is typing"}><i /><i /><i /></div></div>}
         <div ref={bottomRef} />
       </div>
 
@@ -3415,7 +3443,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       {vErr && <div className="cv-verr">{vErr}</div>}
       {locked && <div className="cv-lock">Accept this request to start chatting with {other.name.split(" ")[0]}.</div>}
       <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <input placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
+        <input placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
       </form>
@@ -4149,6 +4177,12 @@ function Style() {
       .cv-bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:6px; }
       .cv-bubble--them { background:var(--surface); color:var(--ink); border-bottom-left-radius:6px; }
       .cv-time { display:flex; align-items:center; font-size:11px; color:var(--ink-soft); margin:4px 4px 0; }
+      .cv-sub--typing { color:var(--primary); font-weight:700; }
+      .cv-typing { display:inline-flex; align-items:center; gap:4px; padding:14px 16px; }
+      .cv-typing i { width:7px; height:7px; border-radius:50%; background:var(--ink-soft); opacity:.45; animation:cvDot 1.2s infinite ease-in-out; }
+      .cv-typing i:nth-child(2) { animation-delay:.18s; }
+      .cv-typing i:nth-child(3) { animation-delay:.36s; }
+      @keyframes cvDot { 0%,60%,100% { transform:translateY(0); opacity:.35; } 30% { transform:translateY(-4px); opacity:1; } }
       .cv-quick { display:flex; gap:8px; overflow-x:auto; padding:10px 14px 4px; background:var(--bg); }
       .cv-quick button { flex-shrink:0; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:10px 16px; font-family:inherit; font-size:13px; font-weight:600; color:var(--ink); cursor:pointer; }
       .cv-input { display:flex; gap:10px; padding:10px 14px calc(10px + var(--sab, env(safe-area-inset-bottom))); background:var(--bg); }
