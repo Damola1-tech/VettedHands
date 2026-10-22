@@ -17,20 +17,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script>
-// Fit the screen. Shrink the app only while the keyboard is open.
-// Some iPhones report the installed app's bottom safe area even though the page already ends above it; then we drop that extra gap.
-(function(){var r=document.documentElement,vv=window.visualViewport;
-var standalone=function(){return window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);};
-function set(){
-  var kb=vv&&(window.innerHeight-vv.height)>120;
-  if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);return;}
-  r.classList.remove("kb");r.style.removeProperty("--vvh");
-  var portrait=window.innerHeight>=window.innerWidth;
-  if(standalone()&&portrait&&window.innerWidth<=480&&window.innerHeight<screen.height-8){r.style.setProperty("--sab","0px");}
-  else r.style.removeProperty("--sab");
-}
-set();window.addEventListener("resize",set);window.addEventListener("orientationchange",function(){setTimeout(set,300);});
-if(vv){vv.addEventListener("resize",set);vv.addEventListener("scroll",set);}})();
+// Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
+(function(){var r=document.documentElement,vv=window.visualViewport;if(!vv)return;
+function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}}
+set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);})();
 </script>
 <style>
   html,body{margin:0;background:#0A3A2B;min-height:100%}
@@ -4753,7 +4743,7 @@ function Style() {
         .phone { position:relative; }
         .content::after { content:""; display:block; flex:0 0 calc(96px + var(--sab, env(safe-area-inset-bottom))); }
         .content:has(+ .bottomnav--hide)::after { display:none; }
-        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:max(10px, calc(var(--sab, env(safe-area-inset-bottom)) - 6px)); z-index:20; padding:6px; gap:2px; background:#fff; border:1px solid var(--line); border-radius:999px; box-shadow:0 14px 30px -12px rgba(20,32,27,.4), 0 2px 6px rgba(20,32,27,.06); }
+        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:#fff; border:1px solid var(--line); border-radius:999px; box-shadow:0 14px 30px -12px rgba(20,32,27,.4), 0 2px 6px rgba(20,32,27,.06); }
         .phone .bottomnav--hide { display:none; }
         .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:11px; font-weight:600; color:var(--ink-soft); }
         .phone .nav-item--active { background:var(--primary); color:#fff; }
