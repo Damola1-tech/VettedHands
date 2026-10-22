@@ -20,7 +20,7 @@
 // Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
 (function(){var r=document.documentElement,vv=window.visualViewport;if(!vv)return;
 function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}
-  // Some installed iPhone apps get a window a little shorter than the screen. Mark that case so the nav and the bottom edge can adapt.
+  // Some installed iPhone apps get a window a little shorter than the screen. Mark that case so the nav can adapt.
   var st=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
   var short=!kb&&st&&window.innerWidth<=480&&window.innerHeight>=window.innerWidth&&window.innerHeight<screen.height-8;
   r.classList.toggle("short",short);}
@@ -4757,8 +4757,6 @@ function Style() {
         /* Short installed window: no home-bar gap to respect, and cards fade out softly at the bottom edge instead of being cut off */
         html.short { --sab:0px; }
         html.short .phone .bottomnav { bottom:10px; }
-        html.short .phone::after { content:""; position:absolute; left:0; right:0; bottom:0; height:56px; background:linear-gradient(to top, var(--bg) 25%, rgba(245,240,228,0)); pointer-events:none; z-index:15; }
-        html.short .phone:has(.bottomnav--hide)::after { display:none; }
       }
 
       @media (max-width: 480px) {
