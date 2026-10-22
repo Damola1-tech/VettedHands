@@ -23,8 +23,7 @@ function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add(
   // Some installed iPhone apps get a window a little shorter than the screen. Mark that case so the nav and the bottom edge can adapt.
   var st=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
   var short=!kb&&st&&window.innerWidth<=480&&window.innerHeight>=window.innerWidth&&window.innerHeight<screen.height-8;
-  r.classList.toggle("short",short);
-  if(short)r.style.setProperty("--fullh",screen.height+"px");else r.style.removeProperty("--fullh");}
+  r.classList.toggle("short",short);}
 set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);})();
 </script>
 <style>
@@ -4755,8 +4754,11 @@ function Style() {
         .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
         .phone .nav-badge { top:-6px; right:-10px; }
         .toast { bottom:calc(100px + var(--sab, env(safe-area-inset-bottom))); }
-        /* Installed iPhone app whose page height is reported shorter than the screen: stretch the app to the real screen height so cards run under the nav down to the bottom edge */
-        html.short .app { bottom:auto; height:var(--fullh); }
+        /* Short installed window: no home-bar gap to respect, and cards fade out softly at the bottom edge instead of being cut off */
+        html.short { --sab:0px; }
+        html.short .phone .bottomnav { bottom:10px; }
+        html.short .phone::after { content:""; position:absolute; left:0; right:0; bottom:0; height:56px; background:linear-gradient(to top, var(--bg) 25%, rgba(245,240,228,0)); pointer-events:none; z-index:15; }
+        html.short .phone:has(.bottomnav--hide)::after { display:none; }
       }
 
       @media (max-width: 480px) {
