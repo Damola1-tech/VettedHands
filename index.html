@@ -4747,12 +4747,15 @@ function Style() {
         .phone { position:relative; }
         .content::after { content:""; display:block; flex:0 0 calc(96px + var(--sab, env(safe-area-inset-bottom))); }
         .content:has(+ .bottomnav--hide)::after { display:none; }
-        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:#fff; border:1px solid var(--line); border-radius:999px; box-shadow:0 14px 30px -12px rgba(20,32,27,.4), 0 2px 6px rgba(20,32,27,.06); }
+        .phone .bottomnav { position:absolute; left:16px; right:16px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:rgba(255,255,255,.78); -webkit-backdrop-filter:blur(22px) saturate(1.8); backdrop-filter:blur(22px) saturate(1.8); border:1px solid rgba(255,255,255,.9); border-radius:999px; box-shadow:0 18px 36px -14px rgba(20,32,27,.45), 0 4px 10px -4px rgba(20,32,27,.12), inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(20,32,27,.06); }
         .phone .bottomnav--hide { display:none; }
-        .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:11px; font-weight:600; color:var(--ink-soft); }
-        .phone .nav-item--active { background:var(--primary); color:#fff; }
+        .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:10.5px; font-weight:600; letter-spacing:.01em; color:var(--ink-soft); transition:background .28s ease, color .2s ease, transform .15s ease, box-shadow .28s ease; }
+        .phone .nav-item:active { transform:scale(.94); }
+        .phone .nav-item--active { background:linear-gradient(180deg,#14644B 0%,#0F4D3A 100%); color:#fff; box-shadow:0 8px 16px -8px rgba(15,77,58,.8), inset 0 1px 0 rgba(255,255,255,.18); }
+        .phone .nav-item--active .nav-icon-wrap { animation:navPop .38s cubic-bezier(.3,1.6,.5,1); }
+        @keyframes navPop { 0% { transform:scale(.8) translateY(2px); } 100% { transform:scale(1) translateY(0); } }
         .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
-        .phone .nav-badge { top:-6px; right:-10px; }
+        .phone .nav-badge { top:-6px; right:-10px; border:2px solid #fff; box-sizing:content-box; line-height:1.15; box-shadow:0 2px 4px rgba(20,32,27,.25); }
         .toast { bottom:calc(100px + var(--sab, env(safe-area-inset-bottom))); }
         /* Short installed window: no home-bar gap to respect, and cards fade out softly at the bottom edge instead of being cut off */
         html.short { --sab:0px; }
