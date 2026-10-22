@@ -1017,6 +1017,11 @@ function MainApp({ auth, intent }) {
     const d = await api(`/api/typing/${requestId}`, { token });
     return !!d.typing;
   }
+  async function checkTypingMany(ids) {
+    if (document.hidden || !ids.length) return [];
+    const d = await api(`/api/typing?ids=${ids.slice(0, 30).join(",")}`, { token });
+    return d.typing || [];
+  }
   async function sendMessage(requestId, text) {
     try {
       const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
@@ -1225,7 +1230,7 @@ function MainApp({ auth, intent }) {
             onClose={() => setView("track")}
             onSubmit={async (reason, note) => { const ok = await reportRequest(activeRequest.id, reason, note); if (ok) setView("track"); }} />
         )}
-        {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={(id) => openConversation(id)} />}
+        {view === "messagesList" && <MessagesListView requests={requests} user={user} onOpen={(id) => openConversation(id)} onTypingList={checkTypingMany} />}
         {view === "reportReply" && activeRequest && (
           <ReportReplyView request={activeRequest} token={token} flash={flash} fail={fail} onBack={() => setView("notifications")} />
         )}
@@ -3231,8 +3236,22 @@ function NotificationsView({ items, readIds, onBack, onMarkAll, onOpen }) {
 }
 
 /* ---------------- Messages tab ---------------- */
-function MessagesListView({ requests, user, onOpen }) {
+function MessagesListView({ requests, user, onOpen, onTypingList }) {
   const [tab, setTab] = useState("active");
+  const [typingIds, setTypingIds] = useState([]);
+  const idsKey = requests.filter((r) => !["COMPLETED", "DECLINED", "CLOSED", "CANCELLED"].includes(r.status)).map((r) => r.id).join(",");
+  useEffect(() => {
+    if (!onTypingList || !idsKey) return;
+    let off = false, stop = false;
+    const tick = async () => {
+      if (stop) return;
+      try { const t = await onTypingList(idsKey.split(",")); if (!off) setTypingIds(t); }
+      catch (e) { if (/404|not found/i.test(e.message || "")) stop = true; if (!off) setTypingIds([]); }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { off = true; clearInterval(id); };
+  }, [idsKey]);
   const [q, setQ] = useState("");
   const done = (r) => ["COMPLETED", "DECLINED", "CLOSED", "CANCELLED"].includes(r.status);
   const rows = requests
@@ -3266,7 +3285,9 @@ function MessagesListView({ requests, user, onOpen }) {
                 <span className="ms-top"><b>{name}</b><time className={unread ? "new" : ""}>{listTime(at)}</time></span>
                 <span className="ms-sub">{tradeLabel(r.artisanProfile.trade)} · {reqCode(r.id)}</span>
                 <span className="ms-prev">
-                  <span className={"ms-txt" + (unread ? " new" : "")}>{mine && <Ticks lead read={!!m.read} />}<span className="ms-t">{preview}</span></span>
+                  {typingIds.includes(r.id)
+                    ? <span className="ms-txt ms-typing">typing…</span>
+                    : <span className={"ms-txt" + (unread ? " new" : "")}>{mine && <Ticks lead read={!!m.read} />}<span className="ms-t">{preview}</span></span>}
                   {unread > 0 && <span className="ms-count">{unread}</span>}
                 </span>
               </span>
@@ -4171,6 +4192,7 @@ function Style() {
       .cv-bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:6px; }
       .cv-bubble--them { background:var(--surface); color:var(--ink); border-bottom-left-radius:6px; }
       .cv-time { display:flex; align-items:center; font-size:11px; color:var(--ink-soft); margin:4px 4px 0; }
+      .ms-typing { color:var(--primary); font-weight:700; }
       .cv-sub--typing { color:var(--primary); font-weight:700; }
       .cv-typing { display:inline-flex; align-items:center; gap:4px; padding:14px 16px; }
       .cv-typing i { width:7px; height:7px; border-radius:50%; background:var(--ink-soft); opacity:.45; animation:cvDot 1.2s infinite ease-in-out; }
