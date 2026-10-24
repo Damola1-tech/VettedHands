@@ -190,7 +190,7 @@ tr.sel td{background:#EEF6F1}
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect } = React;
-const API_BASE = "https://vettedhands-backend.onrender.com";
+const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname) ? "http://localhost:4000" : "https://vettedhands-backend.onrender.com";
 
 async function api(path, { method = "GET", body, token } = {}) {
   const headers = { "Content-Type": "application/json" };
@@ -205,7 +205,7 @@ async function api(path, { method = "GET", body, token } = {}) {
 /* ============ helpers ============ */
 const TRADES = { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair", LAPTOP_REPAIR: "Laptop Repair", PAINTER: "Painter", CARPENTER: "Carpenter", CLEANER: "Cleaner" };
 const tradeLabel = (t) => TRADES[t] || String(t || "").toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-const NAV = [["dashboard", "Dashboard"], ["notifications", "Notifications"], ["applications", "Artisan Applications"],["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["verification", "Verification"], ["settings", "Settings"]];
+const NAV = [["dashboard", "Dashboard"], ["notifications", "Notifications"], ["applications", "Artisan Applications"],["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["payments", "Payments"], ["verification", "Verification"], ["settings", "Settings"]];
 const PAGES = NAV.map((n) => n[0]);
 const initials = (n = "") => n.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -218,6 +218,7 @@ const shortId = (id, p = "VH") => `${p}-${String(id).slice(0, 4).toUpperCase()}`
 const firstLast = (name = "") => { const p = name.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; };
 const match = (q, ...f) => !q.trim() || f.join(" ").toLowerCase().includes(q.trim().toLowerCase());
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const naira = (kobo) => "₦" + (Number(kobo || 0) / 100).toLocaleString("en-NG");
 
 function downloadCsv(rows, name) {
   const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
@@ -369,6 +370,7 @@ function Shell({ token, user, onLogout }) {
   else if (page === "reviews") body = <Reviews {...c} />;
   else if (page === "blog") body = <BlogMod {...c} />;
   else if (page === "reports") body = <Reports {...c} />;
+  else if (page === "payments") body = <Payments {...c} />;
   else if (page === "verification") body = <Verification {...c} />;
   else body = <Settings {...c} user={user} />;
 
@@ -965,6 +967,105 @@ function ReportDetail({ token, id, flash, onChanged }) {
   );
 }
 
+/* ============ payments ============ */
+const PAY_STATUS = { PENDING: ["Awaiting payment", "p-grey"], HELD: ["Held", "p-blue"], DISPUTED: ["Disputed", "p-red"], RELEASED: ["Released", "p-green"], REFUNDED: ["Refunded", "p-amber"], FAILED: ["Needs refund", "p-red"] };
+const PayPill = ({ s }) => { const [t, c] = PAY_STATUS[s] || [s, "p-grey"]; return <span className={"pill " + c}>{t}</span>; };
+
+function Payments({ token, flash, go }) {
+  const res = useFetch(token, "/api/admin/payments");
+  const [chip, setChip] = useState("action");
+  const [sel, setSel] = useState(null);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const w = wait(res); if (w) return w;
+  const all = res.data.payments, s = res.data.summary;
+  const needs = (p) => p.status === "DISPUTED" || p.status === "FAILED" || (p.status === "HELD" && !!p.adminNote);
+  const n = (st) => all.filter((p) => p.status === st).length;
+  const rows = all.filter((p) => (chip === "all" ? true : chip === "action" ? needs(p) : p.status === chip) && match(q, shortId(p.requestId), p.request.student.name, p.request.artisanProfile.user.name, p.request.job));
+  const cur = all.find((p) => p.id === sel);
+
+  async function act(p, action) {
+    if (busy) return;
+    const body = { action };
+    if (action === "split") {
+      const v = window.prompt(`How much (in naira) goes back to the customer? The rest, minus commission, goes to the artisan. Total paid: ${naira(p.amount)}`);
+      if (v === null) return;
+      const amt = Number(v);
+      if (!amt || amt <= 0 || amt * 100 >= p.amount) return flash("Enter an amount above 0 and below the total");
+      body.refundNaira = amt;
+    } else if (!window.confirm(action === "release" ? `Release ${naira(p.artisanPayout)} to the artisan?` : `Refund ${naira(p.amount)} to the customer?`)) return;
+    const note = window.prompt("Note for the record (optional)");
+    if (note === null) return;
+    body.note = note;
+    setBusy(true);
+    try { const d = await api(`/api/admin/payments/${p.id}/resolve`, { method: "POST", token, body }); flash(d.message); res.reload(); }
+    catch (e) { flash(e.message); }
+    setBusy(false);
+  }
+  async function retry(p) {
+    if (busy) return;
+    setBusy(true);
+    try { const d = await api(`/api/admin/payments/${p.id}/retry`, { method: "POST", token }); flash(d.message); res.reload(); }
+    catch (e) { flash(e.message); }
+    setBusy(false);
+  }
+  const Card = ({ l, v, sub, tone }) => <div className={"stat" + (tone ? " " + tone : "")}><div className="stat-l">{l}</div><div className="stat-n" style={{ fontSize: 26 }}>{v}</div><div className="stat-s">{sub}</div></div>;
+  return (
+    <>
+      <Head title="Payments" sub="Money VettedHands is holding, and what needs your decision" right={<SearchBox value={q} onChange={setQ} placeholder="Search job, customer or artisan" />} />
+      <div className="stats">
+        <Card l="Held right now" v={naira(s.heldKobo)} sub="Paid by customers, not yet released" />
+        <Card l="Disputed" v={s.disputed} tone={s.disputed ? "red" : ""} sub="Frozen until you decide" />
+        <Card l="Needs action" v={s.needsAction} tone={s.needsAction ? "amber" : ""} sub="Disputes, failed payouts, late payments" />
+        <Card l="Commission earned" v={naira(s.earnedKobo)} sub="From released payments" />
+      </div>
+      <Chips value={chip} onChange={setChip} items={[["action", "Needs action", s.needsAction], ["HELD", "Held", n("HELD")], ["RELEASED", "Released", n("RELEASED")], ["REFUNDED", "Refunded", n("REFUNDED")], ["all", "All", all.length]]} />
+      <div className="split">
+        <div className="tbl-wrap"><table>
+          <thead><tr><th>Job</th><th>Customer</th><th>Artisan</th><th>Amount</th><th>Status</th><th>Updated</th></tr></thead>
+          <tbody>{rows.map((p) => (
+            <tr key={p.id} className={"row" + (sel === p.id ? " sel" : "")} onClick={() => setSel(p.id)}>
+              <td><b className="good">{shortId(p.requestId)}</b></td><td>{p.request.student.name}</td><td>{p.request.artisanProfile.user.name}</td>
+              <td><b>{naira(p.amount)}</b></td><td><PayPill s={p.status} /></td><td>{ago(p.updatedAt)}</td>
+            </tr>))}</tbody>
+        </table>{!rows.length && <div className="empty">Nothing here.</div>}</div>
+        {cur ? (
+          <div className="card" style={{ border: "2px solid var(--green)" }}>
+            <div className="rep-top"><h3>{shortId(cur.requestId)} · {naira(cur.amount)}</h3><PayPill s={cur.status} /></div>
+            <p className="soft" style={{ margin: "6px 0 0" }}>{cur.request.job}</p>
+            {cur.adminNote && <div className="panel-warn">{cur.adminNote}</div>}
+            <div className="h4">Money</div>
+            <div className="vrow"><span>Customer paid</span><b>{naira(cur.amount)}</b></div>
+            <div className="vrow"><span>Commission ({cur.commissionRate}%)</span><b>{naira(cur.commission)}</b></div>
+            <div className="vrow"><span>Artisan payout</span><b>{naira(cur.artisanPayout)}</b></div>
+            {cur.refundAmount > 0 && <div className="vrow"><span>Refunded to customer</span><b>{naira(cur.refundAmount)}</b></div>}
+            <div className="h4">People</div>
+            <div className="vrow"><span>Customer</span><b>{cur.request.student.name}</b></div>
+            <div className="vrow"><span>Artisan</span><b>{cur.request.artisanProfile.user.name}</b></div>
+            <div className="vrow"><span>Payout account</span><b>{cur.request.artisanProfile.bankName ? `${cur.request.artisanProfile.bankName} ····${cur.request.artisanProfile.accountLast4}` : "Not added"}</b></div>
+            <div className="h4">Record</div>
+            <div className="vrow"><span>Reference</span><b style={{ fontSize: 11.5 }}>{cur.reference}</b></div>
+            {cur.heldAt && <div className="vrow"><span>Paid</span><b>{fmtDateLong(cur.heldAt)} · {fmtTime(cur.heldAt)}</b></div>}
+            {cur.releaseAfter && <div className="vrow"><span>Auto-release</span><b>{fmtDateLong(cur.releaseAfter)} · {fmtTime(cur.releaseAfter)}</b></div>}
+            {cur.releasedAt && <div className="vrow"><span>Released</span><b>{fmtDateLong(cur.releasedAt)}</b></div>}
+            {cur.refundedAt && <div className="vrow"><span>Refunded</span><b>{fmtDateLong(cur.refundedAt)}</b></div>}
+            <div className="stack">
+              {["HELD", "DISPUTED"].includes(cur.status) && <>
+                <button className="btn btn-primary wide" disabled={busy} onClick={() => act(cur, "release")}>Release to artisan</button>
+                <button className="btn btn-danger wide" disabled={busy} onClick={() => act(cur, "refund")}>Refund customer</button>
+                <button className="btn wide" disabled={busy} onClick={() => act(cur, "split")}>Split…</button>
+              </>}
+              {cur.status === "HELD" && cur.adminNote && <button className="btn btn-info wide" disabled={busy} onClick={() => retry(cur)}>Retry payout</button>}
+              {cur.status === "FAILED" && <button className="btn btn-danger wide" disabled={busy} onClick={() => act(cur, "refund")}>Refund customer</button>}
+              {cur.status === "DISPUTED" && <button className="btn wide" onClick={() => go("reports")}>Open reports</button>}
+            </div>
+          </div>
+        ) : <div className="card empty">Select a payment to see the details.</div>}
+      </div>
+    </>
+  );
+}
+
 /* ============ verification ============ */
 function Verification({ token, flash, go, refreshStats }) {
   const res = useFetch(token, "/api/admin/verification");
@@ -1090,7 +1191,7 @@ function Settings({ token, flash, statsRes, reloadServices }) {
             <button className="btn btn-primary" disabled={!!busy || newSvc.trim().length < 3} onClick={addSvc}>{busy === "svc" ? "Adding…" : "Add"}</button>
           </div>
           <p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p>
-          <div className="vrow" style={{ marginTop: 8 }}><span>Payments</span><b className="soft">Out of scope for the MVP</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Live</b></div></div>
+          <div className="vrow" style={{ marginTop: 8 }}><span>Payments</span><b className="soft">Escrow via Paystack</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Live</b></div></div>
 
         <div className="card" style={{ borderColor: "#E9C7BD" }}><h3 style={{ color: "var(--red)" }}>Clear test data</h3>
           <p className="soft">Deletes every customer and artisan account, with their requests, messages, reports, reviews, posts and notifications. Admin accounts stay. Uploaded photos stay on Cloudinary. This cannot be undone.</p>

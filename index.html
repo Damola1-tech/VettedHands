@@ -2323,6 +2323,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
       {(() => {
   const pay = r.payments && r.payments[0];
   if (!pay || ["PENDING", "FAILED"].includes(pay.status)) return null;
+if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><b>Refund in progress</b><span>The booking was cancelled. {artisanSide ? "The customer is being refunded." : `Your ${naira(pay.amount)} is being returned to you. This usually takes a minute, then a few days to show in your account.`}</span></div>;
   const when = pay.releaseAfter ? ` Auto-release: ${new Date(pay.releaseAfter).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.` : "";
   const m = {
     HELD: ["Payment secured", artisanSide ? `${naira(pay.artisanPayout)} will be paid to you when ${first} confirms the job.${when}` : `${naira(pay.amount)} is held safely by VettedHands. It is released to ${first} when you confirm the job is done.${when}`],
@@ -2386,14 +2387,14 @@ function CancelBar({ request: r, user, onAction, compact }) {
   const [sheet, setSheet] = useState(null); // "ask" | "reply"
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
-  const [noFunds, setNoFunds] = useState(false);
+  const noFunds = true, setNoFunds = () => {}; // payments are held by VettedHands now, so the old "no money exchanged" tick is gone
   const [busy, setBusy] = useState(false);
   const s = r.status;
   const booked = s === "CONFIRMED";
   const iAsked = booked && r.cancelRequestedById === user.id;
   const theyAsked = booked && !!r.cancelRequestedAt && r.cancelRequestedById !== user.id;
   if (booked && r.artisanDoneAt) return null;
-  if (booked && r.payments && r.payments[0] && ["HELD", "DISPUTED"].includes(r.payments[0].status)) return null; // money is held: use "Report a problem" until refunds are built
+  if (booked && r.payments && r.payments[0] && ["DISPUTED"].includes(r.payments[0].status)) return null; // frozen while VettedHands reviews
   if (s === "PENDING" && artisanSide) return null; // artisans decline pending requests instead
   if (!["PENDING", "ACCEPTED", "CONFIRMED"].includes(s)) return null;
   const list = CANCEL_REASONS[artisanSide ? "artisan" : "customer"];
@@ -2424,7 +2425,7 @@ function CancelBar({ request: r, user, onAction, compact }) {
         <div className="sg-back" onClick={() => setSheet(null)}>
           <div className="sg-card" onClick={(e) => e.stopPropagation()}>
             <h3>{label}</h3>
-            <p>{booked ? `${first} has to agree before this booking is cancelled.` : `${first} will be told. This can't be undone.`} Why are you cancelling?</p>
+            <p>{booked ? (r.startedAt ? `${first} has to agree before this booking is cancelled.` : "The booking is cancelled right away and the customer is refunded in full.") : `${first} will be told. This can't be undone.`} Why are you cancelling?</p>
             <div className="cx-reasons">
               {list.map((x) => (
                 <label key={x} className={"cx-reason" + (reason === x ? " on" : "")}><input type="radio" name="cxr" checked={reason === x} onChange={() => setReason(x)} />{x}</label>
@@ -2432,12 +2433,12 @@ function CancelBar({ request: r, user, onAction, compact }) {
             </div>
             {reason === "Other" && <textarea className="cx-note" rows={2} maxLength={300} placeholder="Tell us in a few words" value={note} onChange={(e) => setNote(e.target.value)} />}
             {booked && (
-              <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>No money has been exchanged for this job.</span></label>
+              <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>The payment is held by VettedHands and refunded in full to the customer.</span></label>
             )}
             {booked && <small className="cx-hint">If money has already changed hands, don't cancel here. Use "Report a problem" instead.</small>}
             <button className="primary-btn" style={{ margin: "10px 0 0" }} disabled={busy || !reasonOk || (booked && !noFunds)}
-              onClick={() => go(booked ? "cancel" : "withdraw", booked ? "POST" : "PATCH", { reason, note: note.trim() || undefined, noFunds: booked ? true : undefined }, booked ? "Cancellation sent" : "Request cancelled")}>
-              {busy ? "Sending…" : booked ? "Send cancellation request" : "Cancel request"}
+              onClick={() => go(booked ? "cancel" : "withdraw", booked ? "POST" : "PATCH", { reason, note: note.trim() || undefined, noFunds: booked ? true : undefined }, booked ? (r.startedAt ? "Cancellation sent" : "Booking cancelled") : "Request cancelled")}>
+              {busy ? "Sending…" : booked ? (r.startedAt ? "Send cancellation request" : "Cancel booking") : "Cancel request"}
             </button>
             <button className="sg-x" onClick={() => setSheet(null)}>Back</button>
           </div>
@@ -2447,9 +2448,9 @@ function CancelBar({ request: r, user, onAction, compact }) {
         <div className="sg-back" onClick={() => setSheet(null)}>
           <div className="sg-card" onClick={(e) => e.stopPropagation()}>
             <h3>Agree to cancel?</h3>
-            <p>Both of you have to confirm that no money has been exchanged.</p>
-            <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>No money has been exchanged for this job.</span></label>
-            <small className="cx-hint">If money has changed hands, leave this unticked. The booking stays and you can use "Report a problem".</small>
+            <p>Agreeing cancels the booking, and the held payment is refunded to the customer.p>
+            <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>The payment is held by VettedHands and refunded in full to the customer.</span></label>
+            <small className="cx-hint"></If the work was partly done and you disagree about money, use "Report a problem" instead.small>
             <button className="primary-btn" style={{ margin: "10px 0 0" }} disabled={busy} onClick={() => go("cancel-respond", "POST", { agree: true, noFunds }, noFunds ? "Booking cancelled" : "Booking kept")}>
               {busy ? "Sending…" : noFunds ? "Cancel the booking" : "Money was exchanged, keep booking"}
             </button>
@@ -2613,7 +2614,7 @@ const LEGAL = {
     ["What we do and don't do", "VettedHands is a place to find and contact artisans. We are not the employer or agent of any artisan, and we do not do the work. You and the artisan make your own agreement about the job, the price and the time."],
     ["What \"Vetted\" means", "Before an artisan is listed, our team checks their application, contact details and a photo of an ID, and looks at their portfolio. \"Skill Verified\" means we have also seen certificates, references or work that support the trade. \"Top Rated\" is calculated from completed jobs and ratings. These checks reduce risk, they are not a guarantee, insurance or a certificate of quality."],
     ["Payments and refunds", "VettedHands does not take payment and does not hold money. You agree the price with the artisan and pay them directly. Because we never receive your money we cannot refund it. Do not pay for work that has not started and never share your PIN, card or bank login. If something goes wrong, use Report a problem on the job and we will look into it."],
-    ["Requests, booking and cancelling", "You can send a request to one or more artisans. When you confirm one artisan, your other requests for the same job close. Before a booking is confirmed either side can withdraw. After a booking is confirmed, cancelling needs both sides to agree and to confirm that no money has been exchanged. If money has changed hands, report the job instead."],
+    ["Requests, booking and cancelling", "You can send a request to one or more artisans. When you confirm one artisan, your other requests for the same job close. Before a booking is confirmed either side can withdraw. After a booking is confirmed and paid, either side can cancel before the artisan starts the job and the customer is refunded in full. After the job has started, both sides must agree to cancel. Once the artisan marks the job done, use Report a problem and VettedHands decides how the held payment is released, refunded or split."],
     ["Reviews", "Only a customer whose job was completed can review it. Reviews must be honest and about the work. No fake, paid or swapped reviews. We may hide or remove reviews that break these rules or the blog rules."],
     ["Blog and messages", "Posts are read by our team before they appear. No phone numbers, payment details, abuse, discrimination, or false claims about people. Reports about a post hide it for review. Messages are tied to a job so reports can be investigated."],
     ["Behaviour", "No harassment, fraud, impersonation, illegal work or taking people off the app to avoid these rules. We may warn, suspend or remove accounts that break them."],
@@ -3032,6 +3033,30 @@ function TrackRecordView({ user, requests, myReviews, onBack }) {
 }
 function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
 
+function BankPicker({ banks, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const sorted = useMemo(() => [...banks].sort((a, b) => a.name.localeCompare(b.name)), [banks]);
+  const sel = sorted.find((b) => b.code === value);
+  const list = sorted.filter((b) => b.name.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className="bp">
+      <button type="button" className="apl-in bp-btn" onClick={() => setOpen(!open)}>
+        <span>{sel ? sel.name : "Choose your bank"}</span><ChevronDown size={18} />
+      </button>
+      {open && (
+        <div className="bp-panel">
+          <input className="apl-in" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search banks" />
+          <div className="bp-list">
+            {list.map((b) => <button type="button" key={b.code} className={"bp-opt" + (b.code === value ? " on" : "")} onClick={() => { onChange(b.code); setOpen(false); setQ(""); }}>{b.name}</button>)}
+            {!list.length && <div className="bp-none">No bank matches "{q}"</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BankView({ token, flash, fail, onBack }) {
   const [banks, setBanks] = useState([]);
   const [saved, setSaved] = useState(undefined);
@@ -3059,10 +3084,7 @@ function BankView({ token, flash, fail, onBack }) {
       <p className="trk-sub">This is where VettedHands sends your money when a job is confirmed. The account name must match the name on your profile.</p>
       {saved && <div className="tk-note" style={{ marginBottom: 16 }}><b>{saved.accountName}</b><br />{saved.bankName} · ending {saved.accountLast4}</div>}
       <div className="rf-label">{saved ? "Change account" : "Add your account"}</div>
-      <select className="apl-in" value={code} onChange={(e) => setCode(e.target.value)}>
-        <option value="">Choose your bank</option>
-        {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
-      </select>
+      <BankPicker banks={banks} value={code} onChange={setCode} />
       <input className="apl-in" style={{ marginTop: 10 }} inputMode="numeric" maxLength={10} value={acct} onChange={(e) => setAcct(e.target.value.replace(/\D/g, ""))} placeholder="10-digit account number" />
       {err && <div className="auth-err" style={{ marginTop: 10 }}>{err}</div>}
       <button className="rf-go" style={{ marginTop: 16 }} disabled={!ok || busy} onClick={save}>{busy ? "Checking account…" : "Verify and save"}</button>
@@ -3185,7 +3207,7 @@ const FAQ = [
   ["When can I chat with an artisan?", "Artisans can message you only after they accept your request. You can message an artisan you have sent a request to, to describe the job."],
   ["How do I book an artisan?", "When an artisan accepts, open the request and tap Confirm booking. That books them and closes your other requests for the same job."],
   ["An artisan has not replied. What can I do?", "Give them a little time. If they stay quiet you can cancel the request and send it to someone else. Tap the request, then Cancel request."],
-  ["Can I cancel after booking?", "Yes, but both sides have to agree. Tap Cancel booking in the chat, pick a reason and confirm that no money has been exchanged. If money has changed hands, use Report a problem instead."],
+  ["Can I cancel after booking?", "Yes. Before the artisan starts the job you can cancel any time and your payment is refunded in full. After the job has started, both sides have to agree. If the job is marked done and something is wrong, use Report a problem and VettedHands will decide where the money goes."],
       ["Payments and refunds", "When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus VettedHands's commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
   ["What do the badges mean?", "badges"],
   ["How are artisans checked?", "Before anyone is listed our team checks their application, phone number and a photo of an ID, and looks at their work. These checks reduce risk but they are not a guarantee. Always agree the price first."],
@@ -3307,7 +3329,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -4622,6 +4644,13 @@ function Style() {
       .tk-pay { background:#E3EFE9; border-radius:14px; padding:14px 16px; margin-bottom:16px; display:flex; flex-direction:column; gap:4px; }
 .tk-pay b { font-size:14px; color:var(--primary); }
 .tk-pay span { font-size:13px; line-height:1.45; color:var(--ink-soft); }
+.bp-btn { display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left; cursor:pointer; }
+.bp-panel { margin-top:8px; border:1.5px solid var(--line); border-radius:14px; background:var(--surface); padding:10px; }
+.bp-list { max-height:260px; overflow-y:auto; margin-top:8px; }
+.bp-opt { display:block; width:100%; text-align:left; background:none; border:none; border-radius:10px; padding:12px; font-family:inherit; font-size:14px; color:var(--ink); cursor:pointer; }
+.bp-opt:hover, .bp-opt.on { background:#E3EFE9; color:var(--primary); font-weight:600; }
+.bp-none { padding:14px; color:var(--ink-soft); font-size:13px; text-align:center; }
+.cx-check input { display:none; }
 /* ===== Review and report ===== */
       .rv { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
       .rv-top { display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:13.5px; font-weight:600; }
