@@ -2448,9 +2448,9 @@ function CancelBar({ request: r, user, onAction, compact }) {
         <div className="sg-back" onClick={() => setSheet(null)}>
           <div className="sg-card" onClick={(e) => e.stopPropagation()}>
             <h3>Agree to cancel?</h3>
-            <p>Agreeing cancels the booking, and the held payment is refunded to the customer.p>
+            <p>Agreeing cancels the booking, and the held payment is refunded to the customer.</p>
             <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>The payment is held by VettedHands and refunded in full to the customer.</span></label>
-            <small className="cx-hint"></If the work was partly done and you disagree about money, use "Report a problem" instead.small>
+            <small className="cx-hint">If the work was partly done and you disagree about money, use "Report a problem" instead.</small>
             <button className="primary-btn" style={{ margin: "10px 0 0" }} disabled={busy} onClick={() => go("cancel-respond", "POST", { agree: true, noFunds }, noFunds ? "Booking cancelled" : "Booking kept")}>
               {busy ? "Sending…" : noFunds ? "Cancel the booking" : "Money was exchanged, keep booking"}
             </button>
