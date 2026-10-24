@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <link rel="manifest" href="manifest.webmanifest" />
 <title>VettedHands</title>
+<script src="https://js.paystack.co/v2/inline.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -1057,6 +1058,13 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: { ...d.message, audio: undefined } } : r)));
     } catch (e) { fail(e); }
   }
+  async function sendImageMessage(requestId, image) {
+    try {
+      const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { image } });
+      setMessages((prev) => [...prev, d.message]);
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: { ...d.message, hasImage: true } } : r)));
+    } catch (e) { fail(e); }
+  }
   async function submitPrice() {
   const p = priceAsk;
   if (!p || p.busy) return;
@@ -1079,10 +1087,35 @@ async function respondToRequest(requestId, status) {
       setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
     } catch (e) { fail(e); }
   }
+  function payWithPopup(d) {
+    return new Promise((resolve) => {
+      const redirect = () => { window.location.href = d.authorizationUrl; };
+      if (!window.PaystackPop || !d.accessCode) { redirect(); return resolve(); }
+      let loaded = false;
+      const timer = setTimeout(() => { if (!loaded) redirect(); }, 12000);
+      const popup = new window.PaystackPop();
+      popup.resumeTransaction(d.accessCode, {
+        onLoad: () => { loaded = true; clearTimeout(timer); },
+        onSuccess: async () => {
+          flash("Confirming your payment…");
+          try {
+            const v = await api(`/api/payments/verify/${encodeURIComponent(d.reference)}`, { token });
+            await loadRequests();
+            if (v.status === "HELD") flash("Payment secured. Booking confirmed.");
+            else if (v.status === "REFUNDED") flash("That payment arrived too late and was refunded.");
+            else flash("We're still confirming your payment. Check back in a minute.");
+          } catch (e) { fail(e); }
+          resolve();
+        },
+        onCancel: () => { clearTimeout(timer); flash("Payment cancelled. You can try again."); resolve(); },
+        onError: () => { clearTimeout(timer); redirect(); resolve(); },
+      });
+    });
+  }
   async function confirmRequest(requestId) {
     try {
       const d = await api("/api/payments/initialize", { method: "POST", token, body: { requestId } });
-window.location.href = d.authorizationUrl;
+await payWithPopup(d);
 return d;
       await loadRequests();
       setMessages((prev) => [...prev]);
@@ -1291,7 +1324,7 @@ return d;
             onViewJob={() => openTrack(activeRequest.id)}
             onOpenReport={() => setView("report")}
             onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)}
-            onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} />
+            onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} onSendImage={(img) => sendImageMessage(activeRequest.id, img)} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
           <CustomerProfileView user={user} requests={requests} application={application} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
@@ -2169,6 +2202,7 @@ function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
   if (s === "ACCEPTED") return artisanSide ? ["Accepted", "blue"] : ["Pay to confirm", "amber"];
+  if (s === "CONFIRMED" && r.payments && r.payments[0] && r.payments[0].status === "DISPUTED") return ["Under review", "red"];
   if (s === "CONFIRMED" && r.cancelRequestedAt) return ["Cancel requested", "amber"];
   if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : r.startedAt ? ["In progress", "green"] : ["Booked", "green"];
   if (s === "COMPLETED") return ["Completed", "dark"];
@@ -2234,7 +2268,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
                   <button className="a" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
                 </div>
               )}
-              {!artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onOpen(r.id)}>Review and confirm booking</button></div>}
+              {!artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onOpen(r.id)}>Review price and pay</button></div>}
               {artisanSide && r.status === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "start")}>Start job</button></div>}
               {artisanSide && r.status === "CONFIRMED" && r.startedAt && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "done")}>Mark completed</button></div>}
               <div className="rq-foot">
@@ -2280,6 +2314,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   const booked = s === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt;
   const working = s === "CONFIRMED" && !!r.startedAt && !r.artisanDoneAt;
   const waitingConfirm = s === "CONFIRMED" && !!r.artisanDoneAt;
+  const disputed = !!(r.payments && r.payments[0] && r.payments[0].status === "DISPUTED");
   const done = ended || s === "PENDING" ? 1 : s === "ACCEPTED" ? 2 : booked || working ? 3 : waitingConfirm ? 4 : 6;
   const current = ended ? -1 : s === "PENDING" ? 1 : s === "ACCEPTED" ? 2 : booked || working ? 3 : waitingConfirm ? 4 : -1;
   const [label, cls] = pillFor(r, artisanSide);
@@ -2290,7 +2325,7 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   else if (s === "CLOSED") head = "This request was closed";
   else if (s === "CANCELLED") head = "This request was cancelled";
   else if (s === "PENDING") head = artisanSide ? `${first} is waiting for your reply` : `Waiting for ${first} to reply`;
-  else if (s === "ACCEPTED") head = artisanSide ? `Waiting for ${first} to confirm the booking` : `${first} accepted. Confirm to book them`;
+  else if (s === "ACCEPTED") head = artisanSide ? `Waiting for ${first} to confirm the booking` : `${first} accepted for ${naira(r.quotedPrice)}. Pay to book them`;
   else if (booked) head = artisanSide ? `${first} booked you. Start when you're ready` : `${first} is booked for your job`;
   else if (working) head = artisanSide ? `You're working on ${first}'s job` : `${first} is working on your job`;
   else if (waitingConfirm) head = artisanSide ? `Waiting for ${first} to confirm` : `${first} marked the job done`;
@@ -2353,7 +2388,8 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
         )}
         {artisanSide && booked && <button className="tk-btn" disabled={busy} onClick={() => run(onStart)}>{busy ? "Starting…" : "Start job"}</button>}
         {artisanSide && working && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
-        {!artisanSide && waitingConfirm && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
+        {!artisanSide && waitingConfirm && !disputed && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
+        {!artisanSide && waitingConfirm && disputed && <div className="tk-note">This job is under review by VettedHands. We will decide what happens to the payment and update you here.</div>}
       </div>
 
       <div className="tk-card">
@@ -2613,7 +2649,7 @@ const LEGAL = {
     ["Using VettedHands", "You must be 18 or older and give true information. One person, one account. Keep your password private. You are responsible for what happens on your account."],
     ["What we do and don't do", "VettedHands is a place to find and contact artisans. We are not the employer or agent of any artisan, and we do not do the work. You and the artisan make your own agreement about the job, the price and the time."],
     ["What \"Vetted\" means", "Before an artisan is listed, our team checks their application, contact details and a photo of an ID, and looks at their portfolio. \"Skill Verified\" means we have also seen certificates, references or work that support the trade. \"Top Rated\" is calculated from completed jobs and ratings. These checks reduce risk, they are not a guarantee, insurance or a certificate of quality."],
-    ["Payments and refunds", "VettedHands does not take payment and does not hold money. You agree the price with the artisan and pay them directly. Because we never receive your money we cannot refund it. Do not pay for work that has not started and never share your PIN, card or bank login. If something goes wrong, use Report a problem on the job and we will look into it."],
+    ["Payments and refunds", "When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus our commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
     ["Requests, booking and cancelling", "You can send a request to one or more artisans. When you confirm one artisan, your other requests for the same job close. Before a booking is confirmed either side can withdraw. After a booking is confirmed and paid, either side can cancel before the artisan starts the job and the customer is refunded in full. After the job has started, both sides must agree to cancel. Once the artisan marks the job done, use Report a problem and VettedHands decides how the held payment is released, refunded or split."],
     ["Reviews", "Only a customer whose job was completed can review it. Reviews must be honest and about the work. No fake, paid or swapped reviews. We may hide or remove reviews that break these rules or the blog rules."],
     ["Blog and messages", "Posts are read by our team before they appear. No phone numbers, payment details, abuse, discrimination, or false claims about people. Reports about a post hide it for review. Messages are tied to a job so reports can be investigated."],
@@ -2677,7 +2713,7 @@ function LegalView({ onBack, initial, user, token, onDeleted }) {
 /* ---------------- My reviews (customer) ---------------- */
 function MyReviewsView({ requests, user, onBack, onReview, onOpen }) {
   const mine = requests.filter((r) => r.student && r.student.id === user.id);
-  const waiting = mine.filter((r) => r.status === "CONFIRMED" && r.artisanDoneAt);
+  const waiting = mine.filter((r) => r.status === "CONFIRMED" && r.artisanDoneAt && !(r.payments && r.payments[0] && r.payments[0].status === "DISPUTED"));
   const given = mine.filter((r) => r.status === "COMPLETED" && r.rating);
   return (
     <div className="screen hp mr">
@@ -2715,7 +2751,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onGoRe
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
-  const waiting = requests.filter((r) => r.status === "CONFIRMED" && r.artisanDoneAt).length;
+  const waiting = requests.filter((r) => r.status === "CONFIRMED" && r.artisanDoneAt && !(r.payments && r.payments[0] && r.payments[0].status === "DISPUTED")).length;
   const rows = [
     [ClipboardList, "My requests", `${active} active · ${requests.length} in total`, onGoRequests],
     [Check, "Completed jobs", `${completed} ${completed === 1 ? "job" : "jobs"} done through VettedHands`, onGoRequests],
@@ -3205,10 +3241,10 @@ const FAQ = [
   ["How does VettedHands find artisans for me?", "You describe the job once. We match by trade, who is available now, area, verification, rating and jobs completed, then show you the best fits."],
   ["Can I send my request to more than one artisan?", "Yes. When you send another request while one is still open, we ask if it is the same job. Say yes and they are grouped, so when you confirm one artisan the others close on their own."],
   ["When can I chat with an artisan?", "Artisans can message you only after they accept your request. You can message an artisan you have sent a request to, to describe the job."],
-  ["How do I book an artisan?", "When an artisan accepts, open the request and tap Confirm booking. That books them and closes your other requests for the same job."],
+  ["How do I book an artisan?", "When an artisan accepts, open the request, check the price and tap Pay. Your payment books them and closes your other requests for the same job."],
   ["An artisan has not replied. What can I do?", "Give them a little time. If they stay quiet you can cancel the request and send it to someone else. Tap the request, then Cancel request."],
   ["Can I cancel after booking?", "Yes. Before the artisan starts the job you can cancel any time and your payment is refunded in full. After the job has started, both sides have to agree. If the job is marked done and something is wrong, use Report a problem and VettedHands will decide where the money goes."],
-      ["Payments and refunds", "When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus VettedHands's commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
+      ["Do I pay through the app?", "Yes. When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus VettedHands's commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
   ["What do the badges mean?", "badges"],
   ["How are artisans checked?", "Before anyone is listed our team checks their application, phone number and a photo of an ID, and looks at their work. These checks reduce risk but they are not a guarantee. Always agree the price first."],
   ["Why can I not review yet?", "Reviews unlock after the artisan marks the job done and you confirm it. That keeps every review tied to real work."],
@@ -3415,7 +3451,7 @@ function MessagesListView({ requests, user, onOpen, onTypingList }) {
           const unread = r.unreadCount || 0;
           const mine = !!m && m.senderId === user.id;
           const [bg, fg] = tintFor(other.id || r.id);
-          const preview = m ? (m.senderType === "SYSTEM" ? m.text : (mine ? "You: " : "") + (m.audioSecs ? "Voice note · " + fmtSecs(m.audioSecs) : m.text)) : r.job;
+          const preview = m ? (m.senderType === "SYSTEM" ? m.text : (mine ? "You: " : "") + (m.audioSecs ? "Voice note · " + fmtSecs(m.audioSecs) : m.hasImage && (!m.text || m.text === "Photo") ? "Photo" : m.text)) : r.job;
           return (
             <button key={r.id} className={"ms-row" + (unread ? " ms-row--new" : "")} onClick={() => onOpen(r.id)}>
               <span className="ms-av" style={{ background: bg, color: fg }}><Face u={other} /></span>
@@ -3493,10 +3529,17 @@ function VoiceBubble({ src, secs, mine }) {
     </div>
   );
 }
-function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onTypingPing, onTypingCheck, onViewJob, onOpenReport, onSendVoice, onCancelAction }) {
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onTypingPing, onTypingCheck, onViewJob, onOpenReport, onSendVoice, onSendImage, onCancelAction }) {
   const [text, setText] = useState("");
   const vr = useRecorder(60);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [zoom, setZoom] = useState(null);
+  async function pickChatImage(e) {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    setVoiceBusy(true);
+    try { await onSendImage(await fileToDataUrl(f, 1200, 0.75)); } finally { setVoiceBusy(false); }
+  }
   const [vErr, setVErr] = useState(null);
   async function startVoice() {
     setVErr(null);
@@ -3560,6 +3603,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
       {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" alt="Photo of the problem" />}
 
+      {zoom && ReactDOM.createPortal(<div className="lb" onClick={() => setZoom(null)}><img src={zoom} alt="Shared photo" /></div>, document.body)}
       <div className="cv-msgs">
         {messages.map((m) => {
           const day = new Date(m.createdAt).toDateString();
@@ -3571,7 +3615,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
               {showDay && <div className="cv-day"><span>{dayLabel(m.createdAt)}</span></div>}
               {sys ? <div className="cv-sys">{m.text}</div> : (
                 <div className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
-                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them")}>{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : m.text}</div>
+                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them")}>{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : <>{m.imageUrl && <img className="cv-img" src={m.imageUrl} alt="Shared photo" onClick={() => setZoom(m.imageUrl)} />}{m.text && !(m.imageUrl && m.text === "Photo") ? m.text : null}</>}</div>
                   <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>
                 </div>
               )}
@@ -3597,6 +3641,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       {locked && <div className="cv-lock">Accept this request to start chatting with {other.name.split(" ")[0]}.</div>}
       <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <input placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
+        <label className="cv-mic" aria-label="Send a photo" style={voiceBusy ? { opacity: .5, pointerEvents: "none" } : { cursor: "pointer" }}><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickChatImage} /><Camera size={20} /></label>
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
       </form>
@@ -4651,6 +4696,10 @@ function Style() {
 .bp-opt:hover, .bp-opt.on { background:#E3EFE9; color:var(--primary); font-weight:600; }
 .bp-none { padding:14px; color:var(--ink-soft); font-size:13px; text-align:center; }
 .cx-check input { display:none; }
+.phone:has(.sg-back) .bottomnav { visibility:hidden; }
+.cv-img { display:block; width:100%; max-width:230px; border-radius:12px; cursor:pointer; }
+.lb { position:fixed; inset:0; background:rgba(10,20,16,.9); z-index:80; display:flex; align-items:center; justify-content:center; padding:16px; }
+.lb img { max-width:100%; max-height:100%; border-radius:12px; }
 /* ===== Review and report ===== */
       .rv { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
       .rv-top { display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:13.5px; font-weight:600; }
