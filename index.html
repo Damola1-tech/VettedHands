@@ -773,6 +773,26 @@ function MainApp({ auth, intent }) {
   const [application, setApplication] = useState(null);
   const [requestImage, setRequestImage] = useState(null);
   const [myReviews, setMyReviews] = useState([]);
+const [bank, setBank] = useState(undefined); // undefined = loading, null = none saved
+useEffect(() => {
+  if (!isArtisan) return;
+  api("/api/payments/bank", { token }).then((d) => setBank(d.bank)).catch(() => {});
+}, [isArtisan, view === "bank"]);
+// Coming back from Paystack: the URL carries ?reference=...
+useEffect(() => {
+  const ref = new URLSearchParams(window.location.search).get("reference");
+  if (!ref) return;
+  window.history.replaceState({}, "", window.location.pathname);
+  flash("Checking your payment…");
+  api(`/api/payments/verify/${encodeURIComponent(ref)}`, { token })
+    .then(async (d) => {
+      await loadRequests();
+      if (d.status === "HELD") { flash("Payment secured. Booking confirmed."); openTrack(d.requestId); }
+      else if (d.status === "REFUNDED") flash("That payment arrived too late and was refunded.");
+      else flash("Payment not completed. You can try again from your request.");
+    })
+    .catch(fail);
+}, []);
   const [profileOrigin, setProfileOrigin] = useState("home"); // where artisanProfile's back button returns to
   const blankWiz = { step: 1, trade: null, problem: "", area: user.area && areas.includes(user.area) ? user.area : areas[1], when: "asap", whenDate: "", image: null, results: [], loading: false, searched: false, sort: "best" };
   const [wiz, setWiz] = useState(blankWiz);
@@ -940,7 +960,8 @@ function MainApp({ auth, intent }) {
     else setView("userProfile");
   }
 
-  const [askGroup, setAskGroup] = useState(null); // { args, groups } while we ask "same job?"
+  const [askGroup, setAskGroup] = useState(null);
+const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when accepting // { args, groups } while we ask "same job?"
   // Open jobs (still waiting or accepted) that this artisan is not already part of
   function openJobsFor(artisanProfileId) {
     const m = new Map();
@@ -1036,7 +1057,23 @@ function MainApp({ auth, intent }) {
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: { ...d.message, audio: undefined } } : r)));
     } catch (e) { fail(e); }
   }
-  async function respondToRequest(requestId, status) {
+  async function submitPrice() {
+  const p = priceAsk;
+  if (!p || p.busy) return;
+  const price = Number(String(p.value).replace(/[^0-9.]/g, ""));
+  if (!price || price < 500) { setPriceAsk({ ...p, err: "Enter the job price in naira (at least ₦500)." }); return; }
+  setPriceAsk({ ...p, busy: true, err: null });
+  try {
+    const d = await api(`/api/requests/${p.id}/status`, { method: "PATCH", token, body: { status: "ACCEPTED", price } });
+    setRequests((prev) => prev.map((r) => (r.id === p.id ? d.request : r)));
+    setPriceAsk(null);
+    flash("Accepted. The customer can now pay to confirm.");
+  } catch (e) {
+    setPriceAsk({ ...p, busy: false, err: e.message, needBank: /bank/i.test(e.message) });
+  }
+}
+async function respondToRequest(requestId, status) {
+  if (status === "ACCEPTED") { setPriceAsk({ id: requestId, value: "", busy: false, err: null }); return; }
     try {
       const d = await api(`/api/requests/${requestId}/status`, { method: "PATCH", token, body: { status } });
       setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
@@ -1044,7 +1081,9 @@ function MainApp({ auth, intent }) {
   }
   async function confirmRequest(requestId) {
     try {
-      const d = await api(`/api/requests/${requestId}/confirm`, { method: "PATCH", token });
+      const d = await api("/api/payments/initialize", { method: "POST", token, body: { requestId } });
+window.location.href = d.authorizationUrl;
+return d;
       await loadRequests();
       setMessages((prev) => [...prev]);
       flash("Booking confirmed");
@@ -1149,7 +1188,7 @@ function MainApp({ auth, intent }) {
         )}
         {view === "home" && isArtisan && user.artisanProfile && (
           <ArtisanHome user={user} requests={requests} myReviews={myReviews}
-            onToggleOnline={toggleOnline} onOpenNotifs={() => setView("notifications")} hasAlerts={unreadNotifs > 0}
+            onToggleOnline={toggleOnline} onOpenNotifs={() => setView("notifications")} hasAlerts={unreadNotifs > 0} bankMissing={bank === null} onBank={() => setView("bank")}
             onOpenMe={() => goNav("profile")} onRespond={respondToRequest}
             onOpenTrack={(id) => openTrack(id)} onOpenRequests={() => goNav("requests")}
             onRequestArtisan={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
@@ -1269,11 +1308,12 @@ function MainApp({ auth, intent }) {
         )}
         {view === "userProfile" && isArtisan && user.artisanProfile && (
           <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
-            onEditProfile={() => setView("editProfile")}
+            onEditProfile={() => setView("editProfile")} onBank={() => setView("bank")}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onPrivacy={() => { setLegalBack("userProfile"); setView("legal"); }} onLogout={logout} />
         )}
-        {view === "legal" && <LegalView user={user} token={token} onDeleted={logout} onBack={() => setView(legalBack)} />}
+        {view === "bank" && isArtisan && <BankView token={token} flash={flash} fail={fail} onBack={() => setView("userProfile")} />}
+{view === "legal" && <LegalView user={user} token={token} onDeleted={logout} onBack={() => setView(legalBack)} />}
         {view === "myReviews" && (
           <MyReviewsView requests={requests} user={user} onBack={() => setView("userProfile")}
             onReview={(id) => { setActiveRequestId(id); setView("review"); }} onOpen={(id) => openTrack(id)} />
@@ -1309,7 +1349,23 @@ function MainApp({ auth, intent }) {
           </div>
         </div>
       )}
-      {toast && <div className="toast">{toast}</div>}
+      {priceAsk && (
+  <div className="sg-back" onClick={() => !priceAsk.busy && setPriceAsk(null)}>
+    <div className="sg-card" onClick={(e) => e.stopPropagation()}>
+      <h3>Set your price</h3>
+      <p>The customer pays this amount to VettedHands first. We hold it safely and release it to you when the job is confirmed. VettedHands keeps a small commission.</p>
+      <input className="apl-in" type="number" inputMode="numeric" min="500" placeholder="Price in naira, e.g. 15000" value={priceAsk.value} onChange={(e) => setPriceAsk({ ...priceAsk, value: e.target.value, err: null })} />
+      {priceAsk.err && <div className="auth-err" style={{ marginTop: 10 }}>{priceAsk.err}</div>}
+      {priceAsk.needBank ? (
+        <button className="primary-btn" style={{ margin: "12px 0 0" }} onClick={() => { setPriceAsk(null); setNavTab("profile"); setView("bank"); }}>Add bank details</button>
+      ) : (
+        <button className="primary-btn" style={{ margin: "12px 0 0" }} disabled={priceAsk.busy} onClick={submitPrice}>{priceAsk.busy ? "Accepting…" : "Accept request"}</button>
+      )}
+      <button className="sg-x" onClick={() => setPriceAsk(null)}>Cancel</button>
+    </div>
+  </div>
+)}
+{toast && <div className="toast">{toast}</div>}
     </>
   );
 }
@@ -2112,7 +2168,7 @@ function statusMeta(status) {
 function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
-  if (s === "ACCEPTED") return artisanSide ? ["Accepted", "blue"] : ["Confirm booking", "amber"];
+  if (s === "ACCEPTED") return artisanSide ? ["Accepted", "blue"] : ["Pay to confirm", "amber"];
   if (s === "CONFIRMED" && r.cancelRequestedAt) return ["Cancel requested", "amber"];
   if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : r.startedAt ? ["In progress", "green"] : ["Booked", "green"];
   if (s === "COMPLETED") return ["Completed", "dark"];
@@ -2264,7 +2320,19 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
         ))}
       </div>
 
-      <div className="tk-actions">
+      {(() => {
+  const pay = r.payments && r.payments[0];
+  if (!pay || ["PENDING", "FAILED"].includes(pay.status)) return null;
+  const when = pay.releaseAfter ? ` Auto-release: ${new Date(pay.releaseAfter).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.` : "";
+  const m = {
+    HELD: ["Payment secured", artisanSide ? `${naira(pay.artisanPayout)} will be paid to you when ${first} confirms the job.${when}` : `${naira(pay.amount)} is held safely by VettedHands. It is released to ${first} when you confirm the job is done.${when}`],
+    DISPUTED: ["Payment on hold", "A report was filed on this job. VettedHands is reviewing it and the money stays held until we decide."],
+    RELEASED: ["Payment released", artisanSide ? `${naira(pay.artisanPayout)} was sent to your bank account.` : `${naira(pay.amount)} was released to ${first}.`],
+    REFUNDED: ["Payment refunded", artisanSide ? "The customer was refunded." : "Your money was returned to you."],
+  }[pay.status];
+  return m ? <div className="tk-pay"><b>{m[0]}</b><span>{m[1]}</span></div> : null;
+})()}
+<div className="tk-actions">
         {artisanSide && s === "PENDING" && (
           <div className="rq-acts" style={{ marginTop: 0 }}>
             <button className="d" onClick={() => onRespond("DECLINED")}>Decline</button>
@@ -2272,13 +2340,13 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
           </div>
         )}
         {artisanSide && s === "ACCEPTED" && <div className="tk-note">Waiting for {first} to confirm the booking. You can message each other once you have both agreed.</div>}
-        {!artisanSide && s === "ACCEPTED" && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Confirm booking with {first}</button>}
+        {!artisanSide && s === "ACCEPTED" && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Pay {naira(r.quotedPrice)} to confirm {first}</button>}
         {!artisanSide && s === "ACCEPTED" && confirming && (
           <div className="inline-confirm">
-            <div className="inline-confirm-text">This books {first} for the job and closes your other requests for it. Confirm?</div>
+            <div className="inline-confirm-text">You pay {naira(r.quotedPrice)} now. VettedHands holds it safely and releases it to {first} only after you confirm the job is done. Your other requests for this job close once payment goes through.</div>
             <div className="settle-actions">
               <button className="ghost-btn" onClick={() => setConfirming(false)}>Cancel</button>
-              <button className="settle-btn" disabled={busy} onClick={() => run(async () => { await onConfirm(); setConfirming(false); })}>{busy ? "Confirming…" : "Yes, confirm"}</button>
+              <button className="settle-btn" disabled={busy} onClick={() => run(async () => { await onConfirm(); setConfirming(false); })}>{busy ? "Opening payment…" : "Pay now"}</button>
             </div>
           </div>
         )}
@@ -2325,6 +2393,7 @@ function CancelBar({ request: r, user, onAction, compact }) {
   const iAsked = booked && r.cancelRequestedById === user.id;
   const theyAsked = booked && !!r.cancelRequestedAt && r.cancelRequestedById !== user.id;
   if (booked && r.artisanDoneAt) return null;
+  if (booked && r.payments && r.payments[0] && ["HELD", "DISPUTED"].includes(r.payments[0].status)) return null; // money is held: use "Report a problem" until refunds are built
   if (s === "PENDING" && artisanSide) return null; // artisans decline pending requests instead
   if (!["PENDING", "ACCEPTED", "CONFIRMED"].includes(s)) return null;
   const list = CANCEL_REASONS[artisanSide ? "artisan" : "customer"];
@@ -2412,7 +2481,7 @@ function ReviewView({ request: r, onClose, onSubmit }) {
   return (
     <div className="screen rv">
       <div className="rv-top"><button className="tk-back" onClick={onClose} aria-label="Close"><X size={22} /></button><span>Review · Request {reqCode(r.id)}</span></div>
-      <div className="rv-banner"><Check size={18} strokeWidth={3} /> Your review marks this job complete</div>
+      <div className="rv-banner"><Check size={18} strokeWidth={3} /> Confirming marks this job complete and releases payment to the artisan</div>
       <h1 className="rv-h">How was {first}'s work?</h1>
       <p className="rv-sub">Your honest review helps the next customer hire with confidence, and builds {first}'s track record.</p>
       <div className="rv-who">
@@ -2744,7 +2813,7 @@ function repeatStats(requests, meId) {
   return { total: ids.length, repeat: rep.length, repeatIds: new Set(rep) };
 }
 
-function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests, onRequestArtisan, onOpenBlog }) {
+function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, hasAlerts, onOpenMe, onRespond, onOpenTrack, onOpenRequests, onRequestArtisan, onOpenBlog, bankMissing, onBank }) {
   const ap = user.artisanProfile;
   const first = user.name.split(" ")[0];
   const [busy, setBusy] = useState(false);
@@ -2772,7 +2841,13 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
         </div>
       </div>
 
-      <div className={"ah-avail" + (ap.online ? "" : " ah-avail--off")}>
+      {bankMissing && (
+  <button className="ah-ask" style={{ background: "#FBEBC8", color: "#7A4F0C" }} onClick={onBank}>
+    <span><b>Add your payout account</b><small style={{ opacity: 1 }}>You need it to accept jobs and get paid.</small></span>
+    <ArrowRight size={18} />
+  </button>
+)}
+<div className={"ah-avail" + (ap.online ? "" : " ah-avail--off")}>
         <div className="ah-avail-top">
           <div>
             <div className="ah-avail-t"><i />{ap.online ? "Available for jobs" : "Unavailable"}</div>
@@ -2840,7 +2915,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, pushOn, onPushToggle }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, onBank, pushOn, onPushToggle }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
@@ -2868,6 +2943,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
       <div className="ao-menu">
         <button className="ao-row" onClick={onEditProfile}><Pen size={22} /><span>Edit profile</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
+<button className="ao-row" onClick={onBank}><Award size={22} /><span>Payout account</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onPushToggle}><Bell size={22} /><span>Push alerts: {pushOn ? "On" : "Off"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
@@ -2955,6 +3031,45 @@ function TrackRecordView({ user, requests, myReviews, onBack }) {
   );
 }
 function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
+
+function BankView({ token, flash, fail, onBack }) {
+  const [banks, setBanks] = useState([]);
+  const [saved, setSaved] = useState(undefined);
+  const [code, setCode] = useState("");
+  const [acct, setAcct] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    api("/api/payments/bank", { token }).then((d) => setSaved(d.bank)).catch((e) => { setSaved(null); fail(e); });
+    api("/api/payments/banks", { token }).then((d) => setBanks(d.banks)).catch(() => {});
+  }, []);
+  async function save() {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const d = await api("/api/payments/bank", { method: "POST", token, body: { bankCode: code, accountNumber: acct } });
+      setSaved(d.bank); setAcct(""); setCode(""); flash("Payout account saved");
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  const ok = code && /^\d{10}$/.test(acct);
+  return (
+    <div className="screen hp">
+      <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+      <h1 className="trk-h">Payout account</h1>
+      <p className="trk-sub">This is where VettedHands sends your money when a job is confirmed. The account name must match the name on your profile.</p>
+      {saved && <div className="tk-note" style={{ marginBottom: 16 }}><b>{saved.accountName}</b><br />{saved.bankName} · ending {saved.accountLast4}</div>}
+      <div className="rf-label">{saved ? "Change account" : "Add your account"}</div>
+      <select className="apl-in" value={code} onChange={(e) => setCode(e.target.value)}>
+        <option value="">Choose your bank</option>
+        {banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+      </select>
+      <input className="apl-in" style={{ marginTop: 10 }} inputMode="numeric" maxLength={10} value={acct} onChange={(e) => setAcct(e.target.value.replace(/\D/g, ""))} placeholder="10-digit account number" />
+      {err && <div className="auth-err" style={{ marginTop: 10 }}>{err}</div>}
+      <button className="rf-go" style={{ marginTop: 16 }} disabled={!ok || busy} onClick={save}>{busy ? "Checking account…" : "Verify and save"}</button>
+      <p className="apl-help">We check the account with your bank. After a change, payouts pause for 24 hours to protect you.</p>
+    </div>
+  );
+}
 
 function ApplyView({ user, onBack, onApply }) {
   const [trade, setTrade] = useState(null);
@@ -3071,7 +3186,7 @@ const FAQ = [
   ["How do I book an artisan?", "When an artisan accepts, open the request and tap Confirm booking. That books them and closes your other requests for the same job."],
   ["An artisan has not replied. What can I do?", "Give them a little time. If they stay quiet you can cancel the request and send it to someone else. Tap the request, then Cancel request."],
   ["Can I cancel after booking?", "Yes, but both sides have to agree. Tap Cancel booking in the chat, pick a reason and confirm that no money has been exchanged. If money has changed hands, use Report a problem instead."],
-  ["Do I pay through the app?", "Not yet. You agree the price with the artisan and pay them directly after the work is done. Do not pay in advance for a job that has not started, and never share your PIN or bank login. Because we do not hold your money, we cannot refund it."],
+      ["Payments and refunds", "When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus VettedHands's commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
   ["What do the badges mean?", "badges"],
   ["How are artisans checked?", "Before anyone is listed our team checks their application, phone number and a photo of an ID, and looks at their work. These checks reduce risk but they are not a guarantee. Always agree the price first."],
   ["Why can I not review yet?", "Reviews unlock after the artisan marks the job done and you confirm it. That keeps every review tied to real work."],
@@ -3129,6 +3244,7 @@ function HelpView({ onBack, onReport, onLegal }) {
 
 /* ---------------- Chat helpers ---------------- */
 const reqCode = (id) => "VH-" + String(id).slice(0, 4).toUpperCase();
+const naira = (kobo) => "₦" + (Number(kobo || 0) / 100).toLocaleString("en-NG");
 function shortName(name = "") { const p = name.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; }
 function clockTime(d) { return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); }
 function listTime(d) {
@@ -3191,7 +3307,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -4503,7 +4619,10 @@ function Style() {
       .tk-lock { display:flex; gap:12px; align-items:center; background:#F3EEDF; border-radius:12px; padding:14px; margin-top:12px; color:var(--ink-soft); font-size:13px; line-height:1.4; }
       .tk-report { display:block; margin:20px auto 0; background:none; border:none; color:var(--danger); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; }
 
-      /* ===== Review and report ===== */
+      .tk-pay { background:#E3EFE9; border-radius:14px; padding:14px 16px; margin-bottom:16px; display:flex; flex-direction:column; gap:4px; }
+.tk-pay b { font-size:14px; color:var(--primary); }
+.tk-pay span { font-size:13px; line-height:1.45; color:var(--ink-soft); }
+/* ===== Review and report ===== */
       .rv { padding:calc(14px + env(safe-area-inset-top)) 20px 28px; }
       .rv-top { display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:13.5px; font-weight:600; }
       .rv-banner { display:flex; align-items:center; gap:10px; background:#E3EFE9; color:var(--primary); border-radius:12px; padding:13px 16px; font-weight:700; font-size:13.5px; margin:14px 0 22px; }
