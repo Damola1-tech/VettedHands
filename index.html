@@ -785,10 +785,11 @@ useEffect(() => {
   if (!ref) return;
   window.history.replaceState({}, "", window.location.pathname);
   flash("Checking your payment…");
-  api(`/api/payments/verify/${encodeURIComponent(ref)}`, { token })
+  api(`/api/payments/${ref.startsWith("VHM_") ? "membership/" : ""}verify/${encodeURIComponent(ref)}`, { token })
     .then(async (d) => {
       await loadRequests();
-      if (d.status === "HELD") { flash("Payment secured. Booking confirmed."); openTrack(d.requestId); }
+      if (d.status === "PAID") { flash("Membership active."); api("/api/auth/me", { token }).then((m) => setUser(m.user)).catch(() => {}); }
+      else if (d.status === "HELD") { flash("Payment secured. Booking confirmed."); openTrack(d.requestId); }
       else if (d.status === "REFUNDED") flash("That payment arrived too late and was refunded.");
       else flash("Payment not completed. You can try again from your request.");
     })
@@ -884,7 +885,8 @@ useEffect(() => {
     if (!localStorage.getItem(key)) { localStorage.setItem(key, "1"); setView("welcome"); setNavTab("home"); }
   }, [isArtisan]);
 
-  const onlineNow = artisans.filter((a) => a.online);
+  const onlineNow = artisans.filter((a) => a.online).sort((a, b) => Number(!!b.isPro) - Number(!!a.isPro));
+  const quoteCtx = { token, flash, fail, onChanged: loadRequests };
   const activeRequest = requests.find((r) => r.id === activeRequestId);
   const notifications = notifs.map((n) => ({ ...n, time: n.createdAt, kind: NOTIF_KIND[n.type] || "job" }));
   const unreadNotifs = notifs.filter((n) => !n.readAt).length;
@@ -1081,7 +1083,7 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
   }
 }
 async function respondToRequest(requestId, status) {
-  if (status === "ACCEPTED") { setPriceAsk({ id: requestId, value: "", busy: false, err: null }); return; }
+  // the price is agreed in the chat now (see QuotePanel)
     try {
       const d = await api(`/api/requests/${requestId}/status`, { method: "PATCH", token, body: { status } });
       setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
@@ -1290,7 +1292,7 @@ return d;
             onStart={() => jobAction(activeRequest.id, "start")}
             onDone={() => jobAction(activeRequest.id, "done")}
             onReport={() => setView("report")}
-            onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)} />
+            onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)} quote={quoteCtx} />
         )}
         {view === "review" && activeRequest && (
           <ReviewView request={activeRequest}
@@ -1324,7 +1326,7 @@ return d;
             onViewJob={() => openTrack(activeRequest.id)}
             onOpenReport={() => setView("report")}
             onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)}
-            onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} onSendImage={(img) => sendImageMessage(activeRequest.id, img)} />
+            onSendVoice={(audio, secs) => sendVoiceMessage(activeRequest.id, audio, secs)} onSendImage={(img) => sendImageMessage(activeRequest.id, img)} quote={quoteCtx} />
         )}
         {view === "userProfile" && !isArtisan && !applyOpen && (
           <CustomerProfileView user={user} requests={requests} application={application} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
@@ -1341,11 +1343,12 @@ return d;
         )}
         {view === "userProfile" && isArtisan && user.artisanProfile && (
           <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
-            onEditProfile={() => setView("editProfile")} onBank={() => setView("bank")}
+            onEditProfile={() => setView("editProfile")} onBank={() => setView("bank")} onMembership={() => setView("membership")}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onPrivacy={() => { setLegalBack("userProfile"); setView("legal"); }} onLogout={logout} />
         )}
         {view === "bank" && isArtisan && <BankView token={token} flash={flash} fail={fail} onBack={() => setView("userProfile")} />}
+        {view === "membership" && isArtisan && <MembershipView token={token} flash={flash} fail={fail} onBack={() => setView("userProfile")} onPaid={async () => { const me = await api("/api/auth/me", { token }); setUser(me.user); }} />}
 {view === "legal" && <LegalView user={user} token={token} onDeleted={logout} onBack={() => setView(legalBack)} />}
         {view === "myReviews" && (
           <MyReviewsView requests={requests} user={user} onBack={() => setView("userProfile")}
@@ -1518,7 +1521,7 @@ function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setAre
   const [onlyOn, setOnlyOn] = useState(false);
   const [sort, setSort] = useState("rating");
   let list = onlyOn ? filtered.filter((a) => a.online) : filtered.slice();
-  list.sort((x, y) => sort === "jobs" ? y.jobsCompleted - x.jobsCompleted : (y.rating || 0) - (x.rating || 0));
+  list.sort((x, y) => (Number(!!y.isPro) - Number(!!x.isPro)) || (sort === "jobs" ? y.jobsCompleted - x.jobsCompleted : (y.rating || 0) - (x.rating || 0)));
   return (
     <div className="screen">
       <div className="bw-head">
@@ -1551,7 +1554,7 @@ function ArtisanCard({ artisan: a, onOpen }) {
       <div className="hm-ac-top">
         <span className="hm-ac-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
         <div className="hm-ac-id">
-          <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />{a.isPro && <span className="badge badge--pro">Pro</span>}</div>
+          <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />{a.isPro && <span className="badge badge--pro">Member</span>}</div>
           <div className="hm-ac-trade">{tradeLabel(a.trade)}{top ? " · Top Rated" : ""}</div>
         </div>
         {a.online ? <span className="hm-on"><i />Available now</span> : <span className="bw-off">Unavailable</span>}
@@ -1839,6 +1842,7 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
         <div className="ap-pills">
           <span className="ap-pill"><ShieldCheck size={15} /> Vetted Artisan</span>
           {a.skillVerified && <span className="ap-pill ap-pill--b">Skill Verified</span>}
+          {a.isPro && <span className="ap-pill ap-pill--a">Member</span>}
           {top && <span className="ap-pill ap-pill--a">Top Rated</span>}
         </div>
       </div>
@@ -1959,6 +1963,7 @@ function matchScore(a, area) {
   if (a.area === area) s += 400;
   if (a.skillVerified) s += 120;
   if (a.badge === "TOP_RATED") s += 120;
+  if (a.isPro) s += 150;
   s += Number(a.rating || 0) * 20 * Math.min(1, (a.jobsCompleted || 0) / 5);
   s += Math.min(a.jobsCompleted || 0, 50);
   return s;
@@ -2095,6 +2100,7 @@ function RequestFlow({ wiz, setWiz, meId, onBack, onSelectArtisan, onSendDirect 
                     <div className="rf-badges">
                       <span className="rf-b rf-b--g"><ShieldCheck size={13} /> Vetted</span>
                       {a.skillVerified && <span className="rf-b rf-b--b">Skill Verified</span>}
+                      {a.isPro && <span className="rf-b rf-b--a">Member</span>}
                       {a.badge === "TOP_RATED" && <span className="rf-b rf-b--a">Top Rated</span>}
                     </div>
                     <div className="rf-meta">
@@ -2201,7 +2207,7 @@ function statusMeta(status) {
 function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
-  if (s === "ACCEPTED") return artisanSide ? ["Accepted", "blue"] : ["Pay to confirm", "amber"];
+  if (s === "ACCEPTED") return r.quotedPrice ? (artisanSide ? ["Price agreed", "blue"] : ["Pay to confirm", "amber"]) : ["Agree the price", "blue"];
   if (s === "CONFIRMED" && r.payments && r.payments[0] && r.payments[0].status === "DISPUTED") return ["Under review", "red"];
   if (s === "CONFIRMED" && r.cancelRequestedAt) return ["Cancel requested", "amber"];
   if (s === "CONFIRMED") return r.artisanDoneAt ? (artisanSide ? ["Awaiting customer", "blue"] : ["Confirm job", "amber"]) : r.startedAt ? ["In progress", "green"] : ["Booked", "green"];
@@ -2268,7 +2274,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
                   <button className="a" onClick={() => onRespond(r.id, "ACCEPTED")}>Accept</button>
                 </div>
               )}
-              {!artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onOpen(r.id)}>Review price and pay</button></div>}
+              {!artisanSide && r.status === "ACCEPTED" && <div className="rq-acts"><button className="a" onClick={() => onOpen(r.id)}>{r.quotedPrice ? "Review price and pay" : "Agree the price"}</button></div>}
               {artisanSide && r.status === "CONFIRMED" && !r.startedAt && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "start")}>Start job</button></div>}
               {artisanSide && r.status === "CONFIRMED" && r.startedAt && !r.artisanDoneAt && <div className="rq-acts"><button className="a" onClick={() => onJob(r.id, "done")}>Mark completed</button></div>}
               <div className="rq-foot">
@@ -2302,7 +2308,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
 }
 
 /* ---------------- Request tracking ---------------- */
-function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport, onCancelAction }) {
+function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport, onCancelAction, quote }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const ap = r.artisanProfile;
@@ -2330,12 +2336,13 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   else if (working) head = artisanSide ? `You're working on ${first}'s job` : `${first} is working on your job`;
   else if (waitingConfirm) head = artisanSide ? `Waiting for ${first} to confirm` : `${first} marked the job done`;
   else head = r.rating ? "Job completed and reviewed" : "Job completed";
+  if (s === "ACCEPTED" && !r.quotedPrice) head = artisanSide ? "Send a quote to agree the price" : `${first} accepted. Agree the price to go ahead`;
   const sub = `${tradeLabel(ap.trade)}${r.area ? " · " + r.area : ""} · ${r.when}`;
   const startedTxt = r.startedAt ? `Started ${dayLabel(r.startedAt)}, ${clockTime(r.startedAt)}` : s === "COMPLETED" ? "Work finished" : "Work under way";
   const steps = [
     ["Request sent", `${dayLabel(r.createdAt)}, ${clockTime(r.createdAt)} · ${artisanSide ? "From " + r.student.name : "Sent to " + ap.user.name}`],
     ["Artisan accepted", s === "PENDING" ? `Waiting for ${artisanSide ? "you" : first} to reply` : s === "DECLINED" ? "The request was declined" : s === "CLOSED" ? "The request was closed" : s === "CANCELLED" ? "The request was cancelled" : "Request accepted"],
-    ["Booking confirmed", s === "PENDING" ? "After the artisan accepts" : ended ? "Not reached" : s === "ACCEPTED" ? (artisanSide ? "Waiting for the customer to confirm" : `Confirm to book ${first}. Your other requests for this job close`) : "The customer confirmed the booking"],
+    ["Booking confirmed", s === "PENDING" ? "After the artisan accepts" : ended ? "Not reached" : s === "ACCEPTED" ? (artisanSide ? "Waiting for the customer to confirm" : `Pay to book ${first}. Your other requests for this job close once payment goes through`) : "The customer confirmed the booking"],
     ["Job in progress", s === "ACCEPTED" || booked ? (artisanSide ? (booked ? "Tap Start job when you begin" : "After the customer confirms") : `Starts when ${first} begins the job`) : working || waitingConfirm || s === "COMPLETED" ? startedTxt : "Starts once the artisan begins"],    ["Job completed", s === "COMPLETED" ? "Marked done and confirmed" : waitingConfirm ? (artisanSide ? "Waiting for the customer to confirm" : `${first} marked it done. Confirm it to review`) : artisanSide ? "You mark it done, the customer confirms" : `${first} marks it done, you confirm`],
     [artisanSide ? "Customer review" : "Review artisan", r.rating ? `Rated ${r.rating} out of 5` : "Rate the work and help others hire with confidence"],
   ];
@@ -2368,6 +2375,7 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
   }[pay.status];
   return m ? <div className="tk-pay"><b>{m[0]}</b><span>{m[1]}</span></div> : null;
 })()}
+{quote && (s === "ACCEPTED" || r.quotedPrice) && <QuotePanel request={r} user={user} {...quote} />}
 <div className="tk-actions">
         {artisanSide && s === "PENDING" && (
           <div className="rq-acts" style={{ marginTop: 0 }}>
@@ -2375,9 +2383,9 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
             <button className="a" onClick={() => onRespond("ACCEPTED")}>Accept</button>
           </div>
         )}
-        {artisanSide && s === "ACCEPTED" && <div className="tk-note">Waiting for {first} to confirm the booking. You can message each other once you have both agreed.</div>}
-        {!artisanSide && s === "ACCEPTED" && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Pay {naira(r.quotedPrice)} to confirm {first}</button>}
-        {!artisanSide && s === "ACCEPTED" && confirming && (
+        {artisanSide && s === "ACCEPTED" && !!r.quotedPrice && <div className="tk-note">Price agreed. Waiting for {first} to pay and confirm the booking.</div>}
+        {!artisanSide && s === "ACCEPTED" && !!r.quotedPrice && !confirming && <button className="tk-btn" onClick={() => setConfirming(true)}>Pay {naira(r.quotedPrice)} to confirm {first}</button>}
+        {!artisanSide && s === "ACCEPTED" && !!r.quotedPrice && confirming && (
           <div className="inline-confirm">
             <div className="inline-confirm-text">You pay {naira(r.quotedPrice)} now. VettedHands holds it safely and releases it to {first} only after you confirm the job is done. Your other requests for this job close once payment goes through.</div>
             <div className="settle-actions">
@@ -2636,10 +2644,10 @@ const LEGAL_DATE = "18 October 2026";
 const LEGAL = {
   privacy: ["Privacy", [
     ["Who we are", "VettedHands connects customers in Ado-Ekiti with vetted artisans. VettedHands is the data controller for the information described here. Contact: " + SUPPORT_EMAIL + "."],
-    ["What we collect", "Your name, email address, password (stored scrambled, never readable), and your area. For artisans we also collect trade, bio, phone number, social handle, work photos, certificates and a photo of a government ID. When you use the app we store your requests, messages, voice notes, photos you attach, reviews, blog posts, notifications and, if you turn push alerts on, a push subscription for your device."],
+    ["What we collect", "Your name, email address, password (stored scrambled, never readable), and your area. Payments are handled by Paystack, so we never see or store your card or bank login details. We keep payment references and, for artisans, the bank name, account name and last four digits of the payout account. For artisans we also collect trade, bio, phone number, social handle, work photos, certificates and a photo of a government ID. When you use the app we store your requests, messages, voice notes, photos you attach, reviews, blog posts, notifications and, if you turn push alerts on, a push subscription for your device."],
     ["Why we use it", "To create your account, match you with artisans, let you chat, verify artisans, keep people safe, handle reports, and send alerts about your jobs. We do not sell your data and we do not show ads."],
     ["Who can see it", "An artisan you send a request to sees your first name, the job, your area and any photo you attach. Customers see an artisan's public profile. The VettedHands team can see accounts, requests, messages and ID photos where needed to review applications, reports and safety issues. An artisan's ID photo is seen only by our admins."],
-    ["Who helps us run it", "We use trusted technology providers to host the app, store data and files, and send emails and alerts. They handle your data only to provide these services to us. Some are outside Nigeria, so your data may be processed abroad with appropriate security."],
+    ["Who helps us run it", "We use trusted technology providers to host the app, store data and files, send emails and alerts, and process payments (Paystack). They handle your data only to provide these services to us. Some are outside Nigeria, so your data may be processed abroad with appropriate security."],
     ["How long we keep it", "While your account is active. If you ask us to delete your account we delete your profile, requests, messages and uploaded files within 30 days. We may keep a minimal record where the law requires it or to deal with a dispute or report."],
     ["Your rights", "Under the Nigeria Data Protection Act 2023 you can ask to see your data, correct it, delete it, object to how we use it, or take it elsewhere. Email " + SUPPORT_EMAIL + " and we will reply within 30 days. You can also complain to the Nigeria Data Protection Commission."],
     ["Children", "VettedHands is for people aged 18 and over. If you think a child has signed up, tell us and we will remove the account."],
@@ -2650,6 +2658,8 @@ const LEGAL = {
     ["What we do and don't do", "VettedHands is a place to find and contact artisans. We are not the employer or agent of any artisan, and we do not do the work. You and the artisan make your own agreement about the job, the price and the time."],
     ["What \"Vetted\" means", "Before an artisan is listed, our team checks their application, contact details and a photo of an ID, and looks at their portfolio. \"Skill Verified\" means we have also seen certificates, references or work that support the trade. \"Top Rated\" is calculated from completed jobs and ratings. These checks reduce risk, they are not a guarantee, insurance or a certificate of quality."],
     ["Payments and refunds", "When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus our commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
+    ["Quotes and price", "The artisan sends a written quote that says what is included, whether it is the full job or part of it, the quantity and whether materials are included. The customer can accept it, decline it or make a counter offer, and each side has a limited number of offers. Offers expire after 24 hours. Once one side accepts, that price and scope are what the customer pays and what VettedHands looks at if there is a dispute. Do not agree a different price outside the app."],
+    ["Membership", "Artisans can buy an optional Membership. While it is active it lowers the commission VettedHands keeps on jobs and lists the artisan higher in search results. Membership fees are not refundable, and renewing early adds the new period to the end of the current one. Being a Member is not a guarantee of quality: the Vetted, Skill Verified and Top Rated checks work the same for everyone."],
     ["Requests, booking and cancelling", "You can send a request to one or more artisans. When you confirm one artisan, your other requests for the same job close. Before a booking is confirmed either side can withdraw. After a booking is confirmed and paid, either side can cancel before the artisan starts the job and the customer is refunded in full. After the job has started, both sides must agree to cancel. Once the artisan marks the job done, use Report a problem and VettedHands decides how the held payment is released, refunded or split."],
     ["Reviews", "Only a customer whose job was completed can review it. Reviews must be honest and about the work. No fake, paid or swapped reviews. We may hide or remove reviews that break these rules or the blog rules."],
     ["Blog and messages", "Posts are read by our team before they appear. No phone numbers, payment details, abuse, discrimination, or false claims about people. Reports about a post hide it for review. Messages are tied to a job so reports can be investigated."],
@@ -2952,7 +2962,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, onBank, pushOn, onPushToggle }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, onBank, onMembership, pushOn, onPushToggle }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
@@ -2981,6 +2991,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
         <button className="ao-row" onClick={onEditProfile}><Pen size={22} /><span>Edit profile</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
 <button className="ao-row" onClick={onBank}><Award size={22} /><span>Payout account</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={onMembership}><Star size={22} /><span>{ap.isPro ? "Membership: Active" : "Membership"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onPushToggle}><Bell size={22} /><span>Push alerts: {pushOn ? "On" : "Off"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
@@ -3068,6 +3079,64 @@ function TrackRecordView({ user, requests, myReviews, onBack }) {
   );
 }
 function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
+
+function MembershipView({ token, flash, fail, onBack, onPaid }) {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(null);
+  useEffect(() => { api("/api/payments/membership", { token }).then(setInfo).catch(fail); }, []);
+  async function buy(planId) {
+    if (busy) return;
+    setBusy(planId);
+    try {
+      const d = await api("/api/payments/membership/initialize", { method: "POST", token, body: { plan: planId } });
+      await new Promise((resolve) => {
+        const redirect = () => { window.location.href = d.authorizationUrl; resolve(); };
+        if (!window.PaystackPop || !d.accessCode) return redirect();
+        let loaded = false;
+        const timer = setTimeout(() => { if (!loaded) redirect(); }, 12000);
+        new window.PaystackPop().resumeTransaction(d.accessCode, {
+          onLoad: () => { loaded = true; clearTimeout(timer); },
+          onSuccess: async () => {
+            try {
+              await api(`/api/payments/membership/verify/${encodeURIComponent(d.reference)}`, { token });
+              setInfo(await api("/api/payments/membership", { token }));
+              await onPaid();
+              flash("Welcome, Member");
+            } catch (e) { fail(e); }
+            resolve();
+          },
+          onCancel: () => { clearTimeout(timer); resolve(); },
+          onError: () => { clearTimeout(timer); redirect(); },
+        });
+      });
+    } catch (e) { fail(e); } finally { setBusy(null); }
+  }
+  const save = info && info.plans.length > 1 ? Math.round(100 - (info.plans[1].amount / (info.plans[0].amount * 12)) * 100) : 0;
+  return (
+    <div className="screen hp">
+      <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
+      <h1 className="trk-h">Membership</h1>
+      <p className="trk-sub">Get seen first, keep more of every job.</p>
+      {info && (
+        <div className={"tk-note"} style={{ marginBottom: 16 }}>
+          {info.active ? <><b>You are a Member</b><br />{info.expiresAt ? `Active until ${new Date(info.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : "Active"}</> : <b>You are not a Member yet</b>}
+        </div>
+      )}
+      <div className="trk-card">
+        <div className="trk-chk"><Check size={18} /><span>Shown first when customers search and browse</span></div>
+        <div className="trk-chk"><Check size={18} /><span>Member badge on your profile and cards</span></div>
+        <div className="trk-chk"><Check size={18} /><span>{info ? `Lower commission: ${info.rates.member}% instead of ${info.rates.free}% on every job` : "Lower commission on every job"}</span></div>
+      </div>
+      {info && info.plans.map((p) => (
+        <button key={p.id} className="mb-plan" disabled={!!busy} onClick={() => buy(p.id)}>
+          <span><b>{p.label}</b><small>{p.days} days{p.id === "YEAR" && save > 0 ? ` · save ${save}%` : ""}{info.active ? " · adds to your current period" : ""}</small></span>
+          <em>{busy === p.id ? "Opening…" : naira(p.amount)}</em>
+        </button>
+      ))}
+      <p className="apl-help">Membership fees are not refundable. Being a Member does not change the Vetted, Skill Verified or Top Rated checks.</p>
+    </div>
+  );
+}
 
 function BankPicker({ banks, value, onChange }) {
   const [open, setOpen] = useState(false);
@@ -3245,6 +3314,7 @@ const FAQ = [
   ["An artisan has not replied. What can I do?", "Give them a little time. If they stay quiet you can cancel the request and send it to someone else. Tap the request, then Cancel request."],
   ["Can I cancel after booking?", "Yes. Before the artisan starts the job you can cancel any time and your payment is refunded in full. After the job has started, both sides have to agree. If the job is marked done and something is wrong, use Report a problem and VettedHands will decide where the money goes."],
       ["Do I pay through the app?", "Yes. When an artisan accepts a request they set the price. To confirm a booking you pay that price through VettedHands using Paystack. We hold the payment and release it to the artisan, minus VettedHands's commission, when you confirm the job is done, or automatically 48 hours after the artisan marks it done if no problem has been reported. If you report a problem, the payment stays on hold while our team reviews it, and we may release it to the artisan, refund you, or split it. Refunds go back to the original payment method and can take several days. Do not pay artisans directly or outside the app: we cannot protect payments made outside VettedHands. Never share your PIN, card or bank login."],
+  ["How does the price work?", "After an artisan accepts, you chat about the job. They then send a quote saying what is included. You can accept it, decline it or make a counter offer. When one of you accepts, the price is locked and you pay it through the app. Never agree a different price outside VettedHands."],
   ["What do the badges mean?", "badges"],
   ["How are artisans checked?", "Before anyone is listed our team checks their application, phone number and a photo of an ID, and looks at their work. These checks reduce risk but they are not a guarantee. Always agree the price first."],
   ["Why can I not review yet?", "Reviews unlock after the artisan marks the job done and you confirm it. That keeps every review tied to real work."],
@@ -3365,7 +3435,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok", QUOTE_NEW: "job", QUOTE_COUNTER: "job", QUOTE_ACCEPTED: "ok", QUOTE_DECLINED: "flag", MEMBERSHIP_ACTIVE: "ok" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -3478,6 +3548,176 @@ function MessagesListView({ requests, user, onOpen, onTypingList }) {
 /* ---------------- Conversation ---------------- */
 Object.assign(ICON_PATHS, { download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></> });
 const Download = (p) => <Icon name="download" {...p} />;
+
+const QT_COMPLETION = { FULL: "Full job", PART: "Part of the job" };
+function leftIn(t) {
+  const m = Math.max(0, Math.round((new Date(t).getTime() - Date.now()) / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+}
+function QuoteCard({ q, label }) {
+  return (
+    <div className="qt-card">
+      <div className="qt-top"><span>{label}</span><b>{naira(q.amount)}</b></div>
+      <dl className="qt-rows">
+        {q.scope && <div><dt>Included</dt><dd>{q.scope}</dd></div>}
+        {q.completion && <div><dt>Job type</dt><dd>{QT_COMPLETION[q.completion]}</dd></div>}
+        {q.quantity && <div><dt>Quantity</dt><dd>{q.quantity}</dd></div>}
+        {q.materials != null && <div><dt>Materials</dt><dd>{q.materials ? "Included" : "Not included"}</dd></div>}
+        {q.duration && <div><dt>Time needed</dt><dd>{q.duration}</dd></div>}
+      </dl>
+      {q.note && <p className="qt-note">"{q.note}"</p>}
+    </div>
+  );
+}
+
+function QuotePanel({ request: r, user, token, flash, onChanged, onPay, compact }) {
+  const artisanSide = r.artisanProfile.user.id === user.id;
+  const other = artisanSide ? r.student : r.artisanProfile.user;
+  const first = other.name.split(" ")[0];
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(!compact);
+  const [sheet, setSheet] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [f, setF] = useState({ amount: "", scope: "", completion: "", quantity: "", materials: null, duration: "", note: "" });
+
+  async function load() { try { setData(await api(`/api/requests/${r.id}/quotes`, { token })); } catch (e) { /* quiet */ } }
+  useEffect(() => {
+    load();
+    const id = setInterval(() => { if (!document.hidden) load(); }, 6000);
+    return () => clearInterval(id);
+  }, [r.id, r.quotedPrice]);
+  if (!data) return null;
+
+  const myBy = artisanSide ? "ARTISAN" : "CUSTOMER";
+  const quotes = data.quotes;
+  const last = quotes[quotes.length - 1] || null;
+  const lastArtisan = [...quotes].reverse().find((q) => q.side === "ARTISAN") || null;
+  const openQ = last && last.status === "OPEN" ? last : null;
+  const agreedQ = quotes.find((q) => q.status === "ACCEPTED") || null;
+  const left = data.left[myBy];
+  const theirTurn = !r.quotedPrice && !!openQ && openQ.side !== myBy;
+
+  async function act(path, body, okMsg) {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      await api(`/api/requests/${r.id}/quotes${path}`, { method: "POST", token, body });
+      if (okMsg) flash(okMsg);
+      setSheet(null);
+      await load();
+      if (onChanged) onChanged();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+  function openSheet(kind) {
+    const b = lastArtisan || {};
+    setF({ amount: "", scope: b.scope || "", completion: b.completion || "", quantity: b.quantity || "", materials: b.materials == null ? null : b.materials, duration: b.duration || "", note: "" });
+    setErr(null); setSheet(kind);
+  }
+  function submitOffer() {
+    const amount = Number(f.amount);
+    if (!(amount >= 500)) return setErr("Enter the price in naira (at least ₦500).");
+    const body = { amount, note: f.note.trim() || undefined };
+    if (artisanSide) {
+      if (f.scope.trim().length < 20) return setErr("Describe what is included in a sentence or two (at least 20 characters).");
+      if (!f.completion) return setErr("Say whether this is the full job or part of it.");
+      if (!f.quantity.trim()) return setErr("Add the quantity, for example 1 job or 20 pieces.");
+      if (f.materials == null) return setErr("Say whether materials are included.");
+      Object.assign(body, { scope: f.scope.trim(), completion: f.completion, quantity: f.quantity.trim(), materials: f.materials, duration: f.duration.trim() || undefined });
+    }
+    act("", body, artisanSide ? "Quote sent" : "Offer sent");
+  }
+  const fee = data.fee;
+  const amt = Math.round(Number(f.amount || 0) * 100);
+  const cut = amt ? Math.min(amt, Math.max(Math.round((amt * fee.rate) / 100), fee.minKobo)) : 0;
+
+  if (compact && !open) {
+    const text = r.quotedPrice ? `Price agreed · ${naira(r.quotedPrice)}`
+      : openQ ? (theirTurn ? `Offer from ${first}: ${naira(openQ.amount)} · tap to respond` : `Your offer: ${naira(openQ.amount)} · waiting for ${first}`)
+      : "Agree the price · tap to open";
+    return <button className={"qt-bar" + (theirTurn ? " qt-bar--act" : "")} onClick={() => setOpen(true)}><span>{text}</span><ChevronRight size={16} /></button>;
+  }
+
+  return (
+    <>
+      <div className="qt">
+        {r.quotedPrice ? (
+          <>
+            <div className="qt-h"><span className="qt-ok"><Check size={14} strokeWidth={3} /></span>Price agreed</div>
+            {agreedQ ? <QuoteCard q={agreedQ} label="Agreed price" /> : <div className="qt-card"><div className="qt-top"><span>Agreed price</span><b>{naira(r.quotedPrice)}</b></div></div>}
+            {!artisanSide && r.status === "ACCEPTED" && onPay && <button className="qt-btn" onClick={onPay}>Pay {naira(r.quotedPrice)} to confirm</button>}
+          </>
+        ) : openQ ? (
+          <>
+            <div className="qt-h">{openQ.side === myBy ? `Waiting for ${first}` : `${first} sent ${openQ.side === "ARTISAN" ? "a quote" : "an offer"}`}</div>
+            <QuoteCard q={openQ} label={openQ.side === myBy ? "Your offer" : openQ.side === "ARTISAN" ? "Their quote" : "Their offer"} />
+            <div className="qt-exp">Expires in {leftIn(openQ.expiresAt)} · {left} {left === 1 ? "offer" : "offers"} left for you</div>
+            {openQ.side !== myBy ? (
+              <div className="qt-acts">
+                <button className="d" disabled={busy} onClick={() => act(`/${openQ.id}/decline`, {}, "Offer declined")}>Decline</button>
+                {left > 0 && <button className="o" disabled={busy} onClick={() => openSheet(artisanSide ? "quote" : "counter")}>Counter</button>}
+                <button className="a" disabled={busy} onClick={() => act(`/${openQ.id}/accept`, {}, "Price agreed")}>Accept {naira(openQ.amount)}</button>
+              </div>
+            ) : (
+              left > 0 && <button className="qt-link" onClick={() => openSheet(artisanSide ? "quote" : "counter")}>Change my offer</button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="qt-h">{last ? (last.status === "DECLINED" ? "The last offer was declined" : "The last offer expired") : "Agree the price"}</div>
+            {artisanSide ? (
+              left > 0 ? (
+                <>
+                  <p className="qt-sub">{last ? "Send a new quote." : "Ask what you need to know in the chat: full job or part, how many pieces, photos. Then send your quote."}</p>
+                  <button className="qt-btn" onClick={() => openSheet("quote")}>{last ? "Send a new quote" : "Send quote"}</button>
+                </>
+              ) : <p className="qt-sub">You have used all your offers. You can message {first} or withdraw from the job.</p>
+            ) : (
+              lastArtisan && left > 0
+                ? <button className="qt-btn" onClick={() => openSheet("counter")}>Make an offer</button>
+                : <p className="qt-sub">{lastArtisan ? "You have used all your offers." : `Chat with ${first} about the job. They will send you a price.`}</p>
+            )}
+          </>
+        )}
+        {err && !sheet && <div className="auth-err" style={{ marginTop: 10 }}>{err}</div>}
+        {compact && <button className="qt-link" onClick={() => setOpen(false)}>Hide</button>}
+      </div>
+      {sheet && ReactDOM.createPortal(
+        <div className="sg-back" onClick={() => !busy && setSheet(null)}>
+          <div className="sg-card qt-sheet" onClick={(e) => e.stopPropagation()}>
+            <h3>{artisanSide ? (lastArtisan ? "Send a new quote" : "Send a quote") : "Make an offer"}</h3>
+            {artisanSide
+              ? <p className="qt-sub">Be specific. This is the agreement the customer pays for, and it is kept if there is ever a dispute.</p>
+              : lastArtisan && <p className="qt-sub">Their quote: <b>{naira(lastArtisan.amount)}</b>. Say what you can pay.</p>}
+            <label className="qt-l">Price (₦)</label>
+            <input className="apl-in" type="number" inputMode="numeric" min="500" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="e.g. 110000" />
+            {artisanSide && (
+              <>
+                {amt > 0 && <div className="qt-prev">You receive about {naira(amt - cut)} after our {fee.rate}% commission</div>}
+                <label className="qt-l">What is included</label>
+                <textarea className="apl-in" rows={3} maxLength={600} value={f.scope} onChange={(e) => setF({ ...f, scope: e.target.value })} placeholder="e.g. Replace 3 sockets and rewire the kitchen circuit. Clean-up included." />
+                <label className="qt-l">Is this the full job?</label>
+                <div className="rf-chips">{[["FULL", "Full job"], ["PART", "Part of the job"]].map(([k, l]) => <button type="button" key={k} className={"rf-chip" + (f.completion === k ? " on" : "")} onClick={() => setF({ ...f, completion: k })}>{l}</button>)}</div>
+                <label className="qt-l">Quantity</label>
+                <input className="apl-in" maxLength={60} value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} placeholder="e.g. 1 job, or 20 pieces" />
+                <label className="qt-l">Materials</label>
+                <div className="rf-chips">{[[true, "Included"], [false, "Not included"]].map(([k, l]) => <button type="button" key={String(k)} className={"rf-chip" + (f.materials === k ? " on" : "")} onClick={() => setF({ ...f, materials: k })}>{l}</button>)}</div>
+                <label className="qt-l">Time needed <small>(optional)</small></label>
+                <input className="apl-in" maxLength={60} value={f.duration} onChange={(e) => setF({ ...f, duration: e.target.value })} placeholder="e.g. 2 days" />
+              </>
+            )}
+            <label className="qt-l">Note <small>(optional)</small></label>
+            <input className="apl-in" maxLength={300} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder={artisanSide ? "Anything else they should know" : "e.g. I can pay today at this price"} />
+            {err && <div className="auth-err" style={{ marginTop: 10 }}>{err}</div>}
+            <button className="primary-btn" style={{ margin: "14px 0 0" }} disabled={busy} onClick={submitOffer}>{busy ? "Sending…" : artisanSide ? "Send quote" : "Send offer"}</button>
+            <button className="sg-x" onClick={() => setSheet(null)}>Cancel</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
 
 function PhotoViewer({ photos, startId, onClose }) {
   const [i, setI] = useState(Math.max(0, photos.findIndex((p) => p.id === startId)));
@@ -3596,16 +3836,19 @@ function VoiceBubble({ src, secs, mine }) {
     </div>
   );
 }
-function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onTypingPing, onTypingCheck, onViewJob, onOpenReport, onSendVoice, onSendImage, onCancelAction }) {
+function ConversationView({ request, messages, requestImage, user, otherReadAt, onBack, onSend, onPoll, onTypingPing, onTypingCheck, onViewJob, onOpenReport, onSendVoice, onSendImage, onCancelAction, quote }) {
   const [text, setText] = useState("");
   const vr = useRecorder(60);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [zoom, setZoom] = useState(null);
+  const [jobZoom, setJobZoom] = useState(false);
+  const [imgBusy, setImgBusy] = useState(false);
   async function pickChatImage(e) {
     const f = e.target.files[0]; e.target.value = "";
     if (!f) return;
     setVoiceBusy(true);
-    try { await onSendImage(await fileToDataUrl(f, 1200, 0.75)); } finally { setVoiceBusy(false); }
+    setImgBusy(true);
+    try { await onSendImage(await fileToDataUrl(f, 1200, 0.75)); } finally { setVoiceBusy(false); setImgBusy(false); }
   }
   const [vErr, setVErr] = useState(null);
   async function startVoice() {
@@ -3650,7 +3893,9 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const online = request.artisanProfile.online;
   const sub = iAmArtisanSide ? "Customer" : `${tradeLabel(request.artisanProfile.trade)}${typeof online === "boolean" ? (online ? " · Online" : " · Offline") : ""}`;
   const [label] = pillFor(request, iAmArtisanSide);
-  const quick = iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["I'm at the gate", "Running a bit late", "Thank you!"];
+  const quick = request.status === "ACCEPTED" && !request.quotedPrice
+    ? (iAmArtisanSide ? ["Is it the full job or part of it?", "How many pieces?", "Can you send a photo?", "Where exactly is the job?"] : ["I can send a photo", "Can you start today?", "Is the price negotiable?"])
+    : (iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["I'm at the gate", "Running a bit late", "Thank you!"]);
   function send(t) { const v = t.trim(); if (v) { onSend(v); setText(""); } }
   let lastDay = null;
 
@@ -3666,9 +3911,11 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         {canAct && <button className="cv-flag" onClick={onOpenReport} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
       <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {label}</span><b>View job <ChevronRight size={15} /></b></button>
+      {quote && (request.status === "ACCEPTED" || request.quotedPrice) && <QuotePanel request={request} user={user} {...quote} compact onPay={onViewJob} />}
       {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
-      {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" alt="Photo of the problem" />}
+      {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" style={{ cursor: "pointer" }} alt="Photo of the problem" onClick={() => setJobZoom(true)} />}
+      {jobZoom && <PhotoViewer photos={[{ id: "job", imageUrl: requestImage, createdAt: request.createdAt, text: request.job }]} startId="job" onClose={() => setJobZoom(false)} />}
 
       {zoom && <PhotoViewer photos={messages.filter((x) => x.imageUrl)} startId={zoom} onClose={() => setZoom(null)} />}
       <div className="cv-msgs">
@@ -3693,6 +3940,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
           <div className="review-recap"><Star size={13} fill="#B5651D" stroke="none" /> Rated {request.rating}★ {request.reviewText && `— "${request.reviewText}"`}</div>
         )}
         {otherTyping && <div className="cv-row cv-row--them"><div className="cv-bubble cv-bubble--them cv-typing" aria-label={other.name + " is typing"}><i /><i /><i /></div></div>}
+        {imgBusy && <div className="cv-row cv-row--me"><div className="cv-bubble cv-bubble--me cv-bubble--img"><div className="cv-photo--wait">Sending photo…</div></div></div>}
         <div ref={bottomRef} />
       </div>
 
@@ -4783,6 +5031,41 @@ function Style() {
 .pv-stage img { max-width:100%; max-height:100%; object-fit:contain; }
 .pv-nav { position:absolute; top:50%; transform:translateY(-50%); z-index:2; width:44px; height:44px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .pv-prev { left:10px; }
+.cv-photo--wait { width:min(240px, 62vw); height:140px; display:flex; align-items:center; justify-content:center; background:#DDD5C0; border-radius:13px; color:#6B6357; font-size:13px; font-weight:600; }
+.qt { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin:12px 16px 0; }
+.tk .qt { margin:0 0 16px; }
+.qt-h { display:flex; align-items:center; gap:8px; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:16px; margin-bottom:10px; }
+.qt-ok { width:22px; height:22px; border-radius:50%; background:var(--primary); color:#fff; display:inline-flex; align-items:center; justify-content:center; }
+.qt-card { background:#F3F8F5; border:1px solid #D6E6DD; border-radius:14px; padding:14px; }
+.qt-top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.qt-top span { color:var(--ink-soft); font-size:13px; font-weight:600; }
+.qt-top b { font-family:'Bricolage Grotesque',sans-serif; font-size:24px; color:var(--primary); }
+.qt-rows { margin:10px 0 0; display:flex; flex-direction:column; gap:6px; }
+.qt-rows div { display:flex; gap:12px; font-size:13px; }
+.qt-rows dt { width:84px; flex-shrink:0; color:var(--ink-soft); }
+.qt-rows dd { margin:0; font-weight:600; min-width:0; }
+.qt-note { margin:10px 0 0; font-size:13px; font-style:italic; color:var(--ink-soft); }
+.qt-exp { font-size:12px; color:var(--ink-soft); margin-top:8px; }
+.qt-acts { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.qt-acts button { flex:1; min-width:96px; padding:13px 10px; border-radius:12px; font-family:inherit; font-size:13.5px; font-weight:700; cursor:pointer; }
+.qt-acts .a { background:var(--primary); color:#fff; border:none; }
+.qt-acts .o { background:var(--surface); color:var(--primary); border:1.5px solid var(--primary); }
+.qt-acts .d { background:var(--surface); color:var(--ink-soft); border:1.5px solid var(--line); }
+.qt-acts button:disabled { opacity:.5; }
+.qt-btn { width:100%; margin-top:12px; background:var(--primary); color:#fff; border:none; border-radius:12px; padding:14px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+.qt-link { display:block; background:none; border:none; color:var(--primary); font-family:inherit; font-weight:700; font-size:13px; margin-top:10px; cursor:pointer; padding:0; }
+.qt-sub { margin:0 0 4px; color:var(--ink-soft); font-size:13px; line-height:1.45; }
+.qt-sheet { max-height:90vh; overflow-y:auto; }
+.qt-l { display:block; font-weight:700; font-size:13px; margin:14px 0 6px; }
+.qt-l small { font-weight:500; color:var(--ink-soft); }
+.qt-prev { margin-top:8px; font-size:12.5px; color:var(--primary); font-weight:600; }
+.qt-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; background:#E3EFE9; color:var(--primary); border:none; padding:11px 16px; font-family:inherit; font-size:13px; font-weight:700; text-align:left; cursor:pointer; }
+.qt-bar--act { background:#FBEBC8; color:#7A4F0C; }
+.mb-plan { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; background:var(--surface); border:1.5px solid var(--primary); border-radius:16px; padding:16px; margin-bottom:12px; font-family:inherit; color:var(--ink); cursor:pointer; }
+.mb-plan b { display:block; font-size:15px; }
+.mb-plan small { color:var(--ink-soft); font-size:12.5px; }
+.mb-plan em { font-style:normal; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:20px; color:var(--primary); }
+.mb-plan:disabled { opacity:.5; }
 .pv-next { right:10px; }
 .pv-cap { position:absolute; left:0; right:0; bottom:0; padding:16px 16px calc(18px + env(safe-area-inset-bottom)); color:#fff; font-size:14px; text-align:center; background:linear-gradient(to top, rgba(0,0,0,.7), transparent); }
 .pv-note { position:absolute; left:50%; bottom:calc(70px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:rgba(255,255,255,.92); color:#111; padding:9px 16px; border-radius:20px; font-size:13px; font-weight:600; }

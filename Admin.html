@@ -613,9 +613,9 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
   async function patch(body, msg) { try { await api(`/api/admin/artisans/${a.id}`, { method: "PATCH", token, body }); flash(msg); onChanged(); } catch (e) { flash(e.message); } }
   function suspend() { const r = window.prompt("Reason for suspending (admins only)"); if (r === null) return; patch({ suspended: true, reason: r.trim() }, `${name} suspended and hidden from customers`); }
   function pro() {
-    if (a.isPro) return patch({ isPro: false }, "Pro listing removed");
-    const days = window.prompt("Grant Pro listing for how many days?", "30"); if (!days) return;
-    const d = new Date(); d.setDate(d.getDate() + Number(days)); patch({ isPro: true, proExpiresAt: d.toISOString() }, "Pro listing granted");
+    if (a.isPro) return patch({ isPro: false }, "Membership removed");
+    const days = window.prompt("Grant Membership for how many days?", "30"); if (!days) return;
+    const d = new Date(); d.setDate(d.getDate() + Number(days)); patch({ isPro: true, proExpiresAt: d.toISOString() }, "Membership granted");
   }
   async function delist() {
     if (!window.confirm(`Permanently delist ${name}? This cannot be undone. Suspending is usually better.`)) return;
@@ -640,7 +640,7 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
       <div className="vrow"><span>Vetted (identity)</span><b className="good">Verified</b></div>
       <div className="vrow"><span>Skill Verified</span><b className={a.skillVerified ? "good" : "soft"}>{a.skillVerified ? "Verified" : "Not verified"}</b></div>
       <div className="vrow"><span>Top Rated</span><b className={a.badge === "TOP_RATED" ? "good" : "soft"}>{topLine}</b></div>
-      <div className="vrow"><span>Pro listing</span><span><b className={a.isPro ? "good" : "soft"}>{a.isPro ? "On" : "Off"}</b> <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={pro}>{a.isPro ? "Remove" : "Grant"}</button></span></div>
+      <div className="vrow"><span>Membership</span><span><b className={a.isPro ? "good" : "soft"}>{a.isPro ? "On" : "Off"}</b> <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={pro}>{a.isPro ? "Remove" : "Grant"}</button></span></div>
       <div className="h4">Certificates</div>
       {certificates.map((c) => <div className="mini" key={c.id}><span className="t">{c.title}</span><button className="btn btn-sm" onClick={() => openImage(c.url)}>Open</button></div>)}
       {!certificates.length && <p className="soft">None uploaded.</p>}
