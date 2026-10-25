@@ -1018,6 +1018,7 @@ function Payments({ token, flash, go }) {
         <Card l="Disputed" v={s.disputed} tone={s.disputed ? "red" : ""} sub="Frozen until you decide" />
         <Card l="Needs action" v={s.needsAction} tone={s.needsAction ? "amber" : ""} sub="Disputes, failed payouts, late payments" />
         <Card l="Commission earned" v={naira(s.earnedKobo)} sub="From released payments" />
+        <Card l="Membership revenue" v={naira(s.membershipKobo)} sub={`${s.membershipCount || 0} paid memberships`} />
       </div>
       <Chips value={chip} onChange={setChip} items={[["action", "Needs action", s.needsAction], ["HELD", "Held", n("HELD")], ["RELEASED", "Released", n("RELEASED")], ["REFUNDED", "Refunded", n("REFUNDED")], ["all", "All", all.length]]} />
       <div className="split">
@@ -1043,6 +1044,13 @@ function Payments({ token, flash, go }) {
             <div className="vrow"><span>Customer</span><b>{cur.request.student.name}</b></div>
             <div className="vrow"><span>Artisan</span><b>{cur.request.artisanProfile.user.name}</b></div>
             <div className="vrow"><span>Payout account</span><b>{cur.request.artisanProfile.bankName ? `${cur.request.artisanProfile.bankName} ····${cur.request.artisanProfile.accountLast4}` : "Not added"}</b></div>
+            {!!(cur.quotes && cur.quotes.length) && <>
+              <div className="h4">Price talks</div>
+              {cur.quotes.map((q, i) => (
+                <div className="vrow" key={i}><span>{q.side === "ARTISAN" ? "Artisan" : "Customer"} · {fmtTime(q.createdAt)}</span><b>{naira(q.amount)}{q.completion ? ` · ${q.completion === "PART" ? "part" : "full"}` : ""}{q.quantity ? ` · ${q.quantity}` : ""}</b></div>
+              ))}
+              {cur.quotes.some((q) => q.scope) && <p className="soft" style={{ margin: "4px 0 0", fontSize: 12.5 }}>{cur.quotes.filter((q) => q.scope).slice(-1)[0].scope}</p>}
+            </>}
             <div className="h4">Record</div>
             <div className="vrow"><span>Reference</span><b style={{ fontSize: 11.5 }}>{cur.reference}</b></div>
             {cur.heldAt && <div className="vrow"><span>Paid</span><b>{fmtDateLong(cur.heldAt)} · {fmtTime(cur.heldAt)}</b></div>}
