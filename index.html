@@ -2534,7 +2534,7 @@ function CancelBar({ request: r, user, onAction, compact }) {
             {booked && (
               <label className="cx-check"><input type="checkbox" checked={noFunds} onChange={(e) => setNoFunds(e.target.checked)} /><span>The payment is held by VettedHands and refunded in full to the customer.</span></label>
             )}
-            {booked && <small className="cx-hint">If money has already changed hands, don't cancel here. Use "Report a problem" instead.</small>}
+            {booked && <small className="cx-hint">Once the job has started, the other person must agree. The payment is then refunded in full. If some work was already done, use "Report a problem" instead so VettedHands can decide a fair split.</small>}
             <button className="primary-btn" style={{ margin: "10px 0 0" }} disabled={busy || !reasonOk || (booked && !noFunds)}
               onClick={() => go(booked ? "cancel" : "withdraw", booked ? "POST" : "PATCH", { reason, note: note.trim() || undefined, noFunds: booked ? true : undefined }, booked ? (r.startedAt ? "Cancellation sent" : "Booking cancelled") : "Request cancelled")}>
               {busy ? "Sending…" : booked ? (r.startedAt ? "Send cancellation request" : "Cancel booking") : "Cancel request"}
