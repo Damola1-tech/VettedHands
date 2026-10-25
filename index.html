@@ -887,7 +887,7 @@ useEffect(() => {
   }, [isArtisan]);
 
   const onlineNow = artisans.filter((a) => a.online).sort((a, b) => Number(!!b.isPro) - Number(!!a.isPro));
-  const quoteCtx = { token, flash, fail, onChanged: loadRequests };
+  const quoteCtx = { token, flash, fail, onChanged: loadRequests, onPayPopup: payWithPopup };
   const activeRequest = requests.find((r) => r.id === activeRequestId);
   const notifications = notifs.map((n) => ({ ...n, time: n.createdAt, kind: NOTIF_KIND[n.type] || "job" }));
   const unreadNotifs = notifs.filter((n) => !n.readAt).length;
@@ -1141,7 +1141,7 @@ async function respondToRequest(requestId, status) {
           try {
             const v = await api(`/api/payments/verify/${encodeURIComponent(d.reference)}`, { token });
             await loadRequests();
-            if (v.status === "HELD") flash("Payment secured. Booking confirmed.");
+            if (v.status === "HELD") flash(d.kind === "addon" ? "Extra work payment secured." : "Payment secured. Booking confirmed.");
             else if (v.status === "REFUNDED") flash("That payment arrived too late and was refunded.");
             else flash("We're still confirming your payment. Check back in a minute.");
           } catch (e) { fail(e); }
@@ -1156,10 +1156,6 @@ async function respondToRequest(requestId, status) {
     try {
       const d = await api("/api/payments/initialize", { method: "POST", token, body: { requestId } });
 await payWithPopup(d);
-return d;
-      await loadRequests();
-      setMessages((prev) => [...prev]);
-      flash("Booking confirmed");
       return d;
     } catch (e) { fail(e); }
   }
@@ -2429,6 +2425,7 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
   return m ? <div className="tk-pay"><b>{m[0]}</b><span>{m[1]}</span></div> : null;
 })()}
 {quote && (s === "ACCEPTED" || r.quotedPrice) && <QuotePanel request={r} user={user} {...quote} />}
+{quote && s === "CONFIRMED" && <AddOnPanel request={r} user={user} {...quote} />}
 <div className="tk-actions">
         {artisanSide && s === "PENDING" && (
           <div className="rq-acts" style={{ marginTop: 0 }}>
@@ -3615,7 +3612,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok", QUOTE_NEW: "job", QUOTE_COUNTER: "job", QUOTE_ACCEPTED: "ok", QUOTE_DECLINED: "flag", MEMBERSHIP_ACTIVE: "ok", RECEIPT_READY: "ok" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok", QUOTE_NEW: "job", QUOTE_COUNTER: "job", QUOTE_ACCEPTED: "ok", QUOTE_DECLINED: "flag", MEMBERSHIP_ACTIVE: "ok", RECEIPT_READY: "ok", ADDON_NEW: "job", ADDON_PAID: "ok", ADDON_DECLINED: "job" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -3748,6 +3745,82 @@ function QuoteCard({ q, label }) {
         {q.duration && <div><dt>Time needed</dt><dd>{q.duration}</dd></div>}
       </dl>
       {q.note && <p className="qt-note">"{q.note}"</p>}
+    </div>
+  );
+}
+
+function AddOnPanel({ request: r, user, token, flash, fail, onChanged, onPayPopup }) {
+  const artisanSide = r.artisanProfile.user.id === user.id;
+  const [d, setD] = useState(null);
+  const [sheet, setSheet] = useState(false);
+  const [f, setF] = useState({ amount: "", description: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  async function load() { try { setD(await api(`/api/addons/request/${r.id}`, { token })); } catch (e) { /* quiet */ } }
+  useEffect(() => { load(); }, [r.id, r.updatedAt]);
+  if (!d || (!d.addOns.length && !d.canAsk)) return null;
+  const amt = Math.round(Number(f.amount) * 100) || 0;
+  const cut = Math.round((amt * d.fee.rate) / 100);
+  const label = { OPEN: "Waiting for the customer", PAID: "Paid and held", DECLINED: "Declined", EXPIRED: "Expired" };
+  async function send() {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      await api(`/api/addons/request/${r.id}`, { method: "POST", token, body: { amount: f.amount, description: f.description } });
+      setSheet(false); setF({ amount: "", description: "" });
+      flash("Sent to the customer");
+      await load(); onChanged && onChanged();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+  async function pay(a) {
+    if (busy) return;
+    setBusy(true);
+    try { const x = await api(`/api/addons/${a.id}/pay`, { method: "POST", token }); await onPayPopup(x); await load(); onChanged && onChanged(); }
+    catch (e) { fail(e); }
+    setBusy(false);
+  }
+  async function decline(a) {
+    if (busy) return;
+    if (!window.confirm(artisanSide ? "Take back this extra work request?" : "Decline this extra work payment?")) return;
+    setBusy(true);
+    try { await api(`/api/addons/${a.id}/decline`, { method: "POST", token }); flash(artisanSide ? "Request withdrawn" : "Declined"); await load(); onChanged && onChanged(); }
+    catch (e) { fail(e); }
+    setBusy(false);
+  }
+  return (
+    <div style={{ margin: "14px 0" }}>
+      <div className="qt-h" style={{ marginBottom: 8 }}>Extra work</div>
+      {d.addOns.map((a) => (
+        <div className="qt-card" key={a.id} style={{ marginBottom: 8 }}>
+          <div className="qt-top"><b>{naira(a.amount)}</b><span>{label[a.status] || a.status}</span></div>
+          <p className="qt-sub" style={{ marginTop: 6 }}>{a.description}</p>
+          {a.status === "OPEN" && <div className="qt-exp">Open until {new Date(a.expiresAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div>}
+          {a.status === "OPEN" && (
+            <div className="qt-acts">
+              {!artisanSide && <button className="qt-btn" style={{ marginTop: 0, width: "auto", flex: 1 }} disabled={busy} onClick={() => pay(a)}>{busy ? "Please wait…" : `Pay ${naira(a.amount)}`}</button>}
+              <button className="qt-link" disabled={busy} onClick={() => decline(a)}>{artisanSide ? "Take it back" : "Decline"}</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {d.canAsk && <button className="qt-btn" onClick={() => { setErr(null); setSheet(true); }}>Ask for extra work payment</button>}
+      {sheet && (
+        <div className="sg-back" onClick={() => !busy && setSheet(false)}>
+          <div className="sg-card qt-sheet" onClick={(e) => e.stopPropagation()}>
+            <h3>Extra work</h3>
+            <p className="qt-sub">Use this when the job needs more than was agreed. The customer pays inside the app, and it is kept as a record if there is ever a dispute.</p>
+            <label className="qt-l">Extra amount (₦)</label>
+            <input className="apl-in" type="number" inputMode="numeric" min="1000" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="e.g. 15000" />
+            {amt > 0 && <div className="qt-prev">You receive about {naira(amt - cut)} after our {d.fee.rate}% commission</div>}
+            <label className="qt-l">What is the extra work and why?</label>
+            <textarea className="apl-in" rows={3} maxLength={300} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="e.g. The old pipe behind the wall is rusted. Replace 2 metres of pipe." />
+            {err && <div className="qt-err" style={{ color: "#B3261E", fontSize: 13, marginTop: 8 }}>{err}</div>}
+            <button className="qt-btn" disabled={busy} onClick={send}>{busy ? "Sending…" : "Send to customer"}</button>
+            <button className="sg-x" onClick={() => setSheet(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

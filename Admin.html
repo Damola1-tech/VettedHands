@@ -1026,7 +1026,7 @@ function Payments({ token, flash, go }) {
           <thead><tr><th>Job</th><th>Customer</th><th>Artisan</th><th>Amount</th><th>Status</th><th>Updated</th></tr></thead>
           <tbody>{rows.map((p) => (
             <tr key={p.id} className={"row" + (sel === p.id ? " sel" : "")} onClick={() => setSel(p.id)}>
-              <td><b className="good">{shortId(p.requestId)}</b></td><td>{p.request.student.name}</td><td>{p.request.artisanProfile.user.name}</td>
+              <td><b className="good">{shortId(p.requestId)}</b>{p.addOnId && <span className="soft"> · extra work</span>}</td><td>{p.request.student.name}</td><td>{p.request.artisanProfile.user.name}</td>
               <td><b>{naira(p.amount)}</b></td><td><PayPill s={p.status} /></td><td>{ago(p.updatedAt)}</td>
             </tr>))}</tbody>
         </table>{!rows.length && <div className="empty">Nothing here.</div>}</div>
