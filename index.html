@@ -237,7 +237,7 @@ const trades = [
   { id: "CLEANER", label: "Cleaner", icon: Sparkle },
 ];
 const areas = ["All areas", "Main Gate", "Uba Gate", "Phase 2", "Fajuyi", "Iworoko", "Adebayo", "Satellite", "Osekita", "Aare Road"];
-const SUPPORT_EMAIL = "vettedhands@gmail.com"; // TODO: replace with your real support email
+const SUPPORT_EMAIL = "vettedhands@gmail.com";
 const reportReasonsCustomer = ["Didn't show up", "Poor quality of work", "Overcharged", "Unprofessional conduct", "Other"];
 const reportReasonsArtisan = ["Customer unavailable", "Wrong job description", "Customer issue", "Other"];
 
@@ -770,6 +770,7 @@ function MainApp({ auth, intent }) {
   const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
   const [openGroups, setOpenGroups] = useState([]);
   const [legalBack, setLegalBack] = useState("help");
+  const [receiptReq, setReceiptReq] = useState(null); // request id whose receipt to open (null = the list)
   const [messages, setMessages] = useState([]);
   const [application, setApplication] = useState(null);
   const [requestImage, setRequestImage] = useState(null);
@@ -914,6 +915,33 @@ useEffect(() => {
       navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription()).then((s) => setPushOn(!!s)).catch(() => {});
     }
   }, []);
+  const [pushAsk, setPushAsk] = useState(false);
+  // Alerts are ON by default. If the browser already allows notifications, subscribe quietly (new phone, cleared subscription).
+  // If it has not been asked yet, show one friendly prompt (browsers only show the permission popup after a tap).
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+    (async () => {
+      try {
+        if (localStorage.getItem("vh_push_off_" + user.id) === "1") return; // they turned it off themselves
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (Notification.permission === "granted") {
+          if (!sub) {
+            const { key } = await api("/api/notifications/push-key", { token });
+            sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
+          }
+          const mark = "vh_push_" + user.id;
+          if (localStorage.getItem(mark) !== sub.endpoint) {
+            await api("/api/notifications/push-subscribe", { method: "POST", token, body: { subscription: sub.toJSON() } });
+            localStorage.setItem(mark, sub.endpoint);
+          }
+          setPushOn(true);
+        } else if (Notification.permission === "default" && !sub && localStorage.getItem("vh_push_asked_" + user.id) !== "1") {
+          setTimeout(() => setPushAsk(true), 2500);
+        }
+      } catch (e) { /* silent */ }
+    })();
+  }, []);
   async function togglePush() {
     try {
       if (!("serviceWorker" in navigator) || !("PushManager" in window)) { flash("Push isn't supported here. On iPhone, add VettedHands to your Home Screen first."); return; }
@@ -921,6 +949,7 @@ useEffect(() => {
       if (pushOn) {
         const sub = await reg.pushManager.getSubscription();
         if (sub) { await api("/api/notifications/push-unsubscribe", { method: "POST", token, body: { endpoint: sub.endpoint } }); await sub.unsubscribe(); }
+        try { localStorage.setItem("vh_push_off_" + user.id, "1"); localStorage.removeItem("vh_push_" + user.id); } catch (e) { /* ignore */ }
         setPushOn(false); flash("Push alerts off"); return;
       }
       const perm = await Notification.requestPermission();
@@ -929,6 +958,7 @@ useEffect(() => {
       let sub = await reg.pushManager.getSubscription();
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
       await api("/api/notifications/push-subscribe", { method: "POST", token, body: { subscription: sub.toJSON() } });
+      try { localStorage.removeItem("vh_push_off_" + user.id); localStorage.setItem("vh_push_asked_" + user.id, "1"); localStorage.setItem("vh_push_" + user.id, sub.endpoint); } catch (e) { /* ignore */ }
       setPushOn(true); flash("Push alerts on");
     } catch (e) { fail(e); }
   }
@@ -952,6 +982,14 @@ useEffect(() => {
       const p = await api(`/api/artisans/${a.id}/photos`);
       setSelectedArtisan((prev) => (prev && prev.id === a.id ? { ...prev, photos: p.photos } : prev));
     } catch (e) { /* photos just won't show */ }
+  }
+  async function bookAgain(artisanProfileId) {
+    try {
+      const d = await api(`/api/artisans/${artisanProfileId}`, { token });
+      setProfileOrigin("home");
+      setSelectedArtisan(d.artisan);
+      setView("artisanProfile");
+    } catch (e) { fail(e); }
   }
   function goNav(tab) {
     setApplyOpen(false);
@@ -1292,6 +1330,8 @@ return d;
             onStart={() => jobAction(activeRequest.id, "start")}
             onDone={() => jobAction(activeRequest.id, "done")}
             onReport={() => setView("report")}
+            onReceipt={() => { setReceiptReq(activeRequest.id); setView("receipts"); }}
+            onBookAgain={() => bookAgain(activeRequest.artisanProfileId)}
             onCancelAction={(path, method, body, okMsg) => cancelAction(activeRequest.id, path, method, body, okMsg)} quote={quoteCtx} />
         )}
         {view === "review" && activeRequest && (
@@ -1333,6 +1373,7 @@ return d;
             onGoRequests={() => goNav("requests")}
             onGoReviews={() => setView("myReviews")}
             onBecomeArtisan={() => setApplyOpen(true)}
+            onReceipts={() => { setReceiptReq(null); setView("receipts"); }}
             onHelp={() => setView("help")}
             onPrivacy={() => { setLegalBack("userProfile"); setView("legal"); }}
             onLogout={logout} />
@@ -1343,13 +1384,15 @@ return d;
         )}
         {view === "userProfile" && isArtisan && user.artisanProfile && (
           <ArtisanOwnProfile user={user} requests={requests} myReviews={myReviews} onEmailPref={setEmailOptOut} pushOn={pushOn} onPushToggle={togglePush}
-            onEditProfile={() => setView("editProfile")} onBank={() => setView("bank")} onMembership={() => setView("membership")}
+            onEditProfile={() => setView("editProfile")} onBank={() => setView("bank")} onMembership={() => setView("membership")} onEarnings={() => setView("earnings")} onReceipts={() => { setReceiptReq(null); setView("receipts"); }}
             onAddPhoto={addArtisanPhoto} onRemovePhoto={removeArtisanPhoto}
             onTrackRecord={() => setView("trackRecord")} onHelp={() => setView("help")} onPrivacy={() => { setLegalBack("userProfile"); setView("legal"); }} onLogout={logout} />
         )}
         {view === "bank" && isArtisan && <BankView token={token} flash={flash} fail={fail} onBack={() => setView("userProfile")} />}
         {view === "membership" && isArtisan && <MembershipView token={token} flash={flash} fail={fail} onBack={() => setView("userProfile")} onPaid={async () => { const me = await api("/api/auth/me", { token }); setUser(me.user); }} />}
-{view === "legal" && <LegalView user={user} token={token} onDeleted={logout} onBack={() => setView(legalBack)} />}
+{view === "earnings" && isArtisan && <EarningsView token={token} fail={fail} onBack={() => setView("userProfile")} />}
+        {view === "receipts" && <ReceiptsView key={receiptReq || "all"} token={token} flash={flash} fail={fail} requestId={receiptReq} onBack={() => setView(receiptReq ? "track" : "userProfile")} />}
+        {view === "legal" && <LegalView user={user} token={token} onDeleted={logout} onBack={() => setView(legalBack)} />}
         {view === "myReviews" && (
           <MyReviewsView requests={requests} user={user} onBack={() => setView("userProfile")}
             onReview={(id) => { setActiveRequestId(id); setView("review"); }} onOpen={(id) => openTrack(id)} />
@@ -1401,7 +1444,17 @@ return d;
     </div>
   </div>
 )}
-{toast && <div className="toast">{toast}</div>}
+{pushAsk && (
+          <div className="sg-back" onClick={() => { try { localStorage.setItem("vh_push_asked_" + user.id, "1"); } catch (e) { /* ignore */ } setPushAsk(false); }}>
+            <div className="sg-card" onClick={(e) => e.stopPropagation()}>
+              <h3>Stay in the loop</h3>
+              <p>Get an alert the moment someone replies, sends a quote or pays. You can turn this off any time in your profile.</p>
+              <button className="primary-btn" style={{ margin: "12px 0 0" }} onClick={async () => { setPushAsk(false); await togglePush(); }}>Turn on alerts</button>
+              <button className="sg-x" onClick={() => { try { localStorage.setItem("vh_push_asked_" + user.id, "1"); } catch (e) { /* ignore */ } setPushAsk(false); }}>Not now</button>
+            </div>
+          </div>
+        )}
+        {toast && <div className="toast">{toast}</div>}
     </>
   );
 }
@@ -1492,8 +1545,8 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
             <div className="hm-ac-top">
               <span className="hm-ac-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
               <div className="hm-ac-id">
-                <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" /></div>
-                <div className="hm-ac-trade">{tradeLabel(a.trade)}</div>
+                <div className="hm-ac-name"><span className="hm-ac-nm">{a.user.name}</span><ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" /></div>
+                <div className="hm-ac-trade">{tradeLabel(a.trade)}{a.isPro && <span className="badge badge--pro hm-ac-mem">Member</span>}</div>
               </div>
               <span className="hm-on"><i />Available now</span>
             </div>
@@ -1554,8 +1607,8 @@ function ArtisanCard({ artisan: a, onOpen }) {
       <div className="hm-ac-top">
         <span className="hm-ac-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
         <div className="hm-ac-id">
-          <div className="hm-ac-name">{a.user.name}<ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" />{a.isPro && <span className="badge badge--pro">Member</span>}</div>
-          <div className="hm-ac-trade">{tradeLabel(a.trade)}{top ? " · Top Rated" : ""}</div>
+          <div className="hm-ac-name"><span className="hm-ac-nm">{a.user.name}</span><ShieldCheck size={15} fill="#0F4D3A" stroke="#fff" /></div>
+          <div className="hm-ac-trade">{tradeLabel(a.trade)}{top ? " · Top Rated" : ""}{a.isPro && <span className="badge badge--pro hm-ac-mem">Member</span>}</div>
         </div>
         {a.online ? <span className="hm-on"><i />Available now</span> : <span className="bw-off">Unavailable</span>}
       </div>
@@ -2308,7 +2361,7 @@ function RequestsListView({ requests, user, onOpen, onRespond, onRequestService,
 }
 
 /* ---------------- Request tracking ---------------- */
-function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport, onCancelAction, quote }) {
+function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, onStart, onDone, onReview, onReport, onReceipt, onBookAgain, onCancelAction, quote }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const ap = r.artisanProfile;
@@ -2398,6 +2451,8 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
         {artisanSide && working && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
         {!artisanSide && waitingConfirm && !disputed && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
         {!artisanSide && waitingConfirm && disputed && <div className="tk-note">This job is under review by VettedHands. We will decide what happens to the payment and update you here.</div>}
+        {s === "COMPLETED" && !artisanSide && onBookAgain && <button className="tk-btn" onClick={onBookAgain}>Book this artisan again</button>}
+        {s === "COMPLETED" && !!r.quotedPrice && onReceipt && <button className="tk-btn" style={{ background: "var(--surface)", color: "var(--primary)", border: "1.5px solid var(--primary)" }} onClick={onReceipt}>View receipt</button>}
       </div>
 
       <div className="tk-card">
@@ -2757,7 +2812,7 @@ function MyReviewsView({ requests, user, onBack, onReview, onOpen }) {
 }
 
 /* ---------------- Customer profile ---------------- */
-function CustomerProfileView({ user, requests, application, onGoRequests, onGoReviews, onBecomeArtisan, onHelp, onPrivacy, onLogout, onEmailPref, pushOn, onPushToggle }) {
+function CustomerProfileView({ user, requests, application, onGoRequests, onGoReviews, onBecomeArtisan, onHelp, onPrivacy, onLogout, onEmailPref, onReceipts, pushOn, onPushToggle }) {
   const active = requests.filter((r) => ["PENDING", "ACCEPTED", "CONFIRMED"].includes(r.status)).length;
   const completed = requests.filter((r) => r.status === "COMPLETED").length;
   const reviewed = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
@@ -2768,6 +2823,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onGoRe
     [Star, "Reviews given", `${reviewed} ${reviewed === 1 ? "review" : "reviews"} · ${waiting} waiting for you`, onGoReviews],
     [Bell, "Push alerts", pushOn ? "On. Tap to turn off" : "Off. Tap to turn on", onPushToggle],
     [Bell, "Email alerts", user.emailOptOut ? "Off. Tap to turn on" : "On. Tap to turn off", () => onEmailPref(!user.emailOptOut)],
+    [Receipt, "Receipts", "Your payment receipts, saved here", onReceipts],
     [HelpCircle, "Help and support", "Answers, badges and how to reach us", onHelp],
     [ShieldCheck, "Privacy and terms", "Your data, terms, delete your account", onPrivacy],
   ];
@@ -2879,6 +2935,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
           <div className="ah-pills">
             <span className="ah-pill">Vetted</span>
             {ap.skillVerified && <span className="ah-pill ah-pill--b">Skill Verified</span>}
+            {ap.isPro && <span className="ah-pill ah-pill--a">Member</span>}
             {ap.badge === "TOP_RATED" && <span className="ah-pill ah-pill--a">Top Rated</span>}
           </div>
         </div>
@@ -2962,7 +3019,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   );
 }
 
-function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, onBank, onMembership, pushOn, onPushToggle }) {
+function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhoto, onTrackRecord, onHelp, onPrivacy, onLogout, onEmailPref, onEditProfile, onBank, onMembership, onReceipts, onEarnings, pushOn, onPushToggle }) {
   const ap = user.artisanProfile;
   const rs = repeatStats(requests, user.id);
   const photos = ap.photos || [];
@@ -2992,6 +3049,8 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
         <button className="ao-row" onClick={onTrackRecord}><BarChart size={22} /><span>Track record</span><ChevronRight size={18} /></button>
 <button className="ao-row" onClick={onBank}><Award size={22} /><span>Payout account</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onMembership}><Star size={22} /><span>{ap.isPro ? "Membership: Active" : "Membership"}</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={onEarnings}><Star size={22} /><span>Earnings</span><ChevronRight size={18} /></button>
+        <button className="ao-row" onClick={onReceipts}><Receipt size={22} /><span>Receipts</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onPushToggle}><Bell size={22} /><span>Push alerts: {pushOn ? "On" : "Off"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={() => onEmailPref(!user.emailOptOut)}><Bell size={22} /><span>Email alerts: {user.emailOptOut ? "Off" : "On"}</span><ChevronRight size={18} /></button>
         <button className="ao-row" onClick={onHelp}><HelpCircle size={22} /><span>Help and support</span><ChevronRight size={18} /></button>
@@ -3079,6 +3138,126 @@ function TrackRecordView({ user, requests, myReviews, onBack }) {
   );
 }
 function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
+
+const rcDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
+function ReceiptsView({ token, flash, fail, onBack, requestId }) {
+  const [data, setData] = useState(null);
+  const [sel, setSel] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api("/api/receipts", { token })
+      .then((d) => { setData(d); const hit = requestId && d.receipts.find((x) => x.requestId === requestId); if (hit) setSel(hit.id); })
+      .catch((e) => { setData({ receipts: [], optOut: false }); fail(e); });
+  }, []);
+  const back = <button className="nf-back" onClick={() => (sel && !requestId ? setSel(null) : onBack())} aria-label="Back"><ArrowLeft size={22} /></button>;
+  if (!data) return <div className="screen hp">{back}<p className="trk-sub">Loading…</p></div>;
+  const cur = data.receipts.find((r) => r.id === sel);
+  async function toggleOpt() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const d = await api("/api/receipts/prefs", { method: "PATCH", token, body: { optOut: !data.optOut } });
+      setData({ ...data, optOut: d.optOut });
+      flash(d.optOut ? "Receipt alerts off. Receipts stay saved here." : "Receipt alerts on");
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  }
+  function share(r) {
+    const t = `VettedHands receipt ${r.number}: ${naira(r.side === "ARTISAN" ? r.artisanPayout : r.amount - r.refundAmount)} for "${r.job}"`;
+    if (navigator.share) navigator.share({ title: "VettedHands receipt", text: t }).catch(() => {});
+    else if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => flash("Receipt details copied")).catch(() => {});
+  }
+  if (cur) {
+    const art = cur.side === "ARTISAN";
+    const paid = cur.amount - cur.refundAmount;
+    return (
+      <div className="screen hp rcpt-screen">
+        {back}
+        <div className="rcpt">
+          <div className="rcpt-top"><div className="rcpt-brand"><ShieldCheck size={22} /> VettedHands</div><div className="rcpt-kind">{art ? "Payout receipt" : "Payment receipt"}</div></div>
+          <div className="rcpt-ok"><span><Check size={16} strokeWidth={3} /></span><div><b>Job completed</b><small>{rcDate(cur.completedAt)}</small></div></div>
+          <div className="rcpt-amt">{naira(art ? cur.artisanPayout : paid)}<small>{art ? "paid out to you" : "paid through VettedHands"}</small></div>
+          <dl className="rcpt-rows">
+            <div><dt>Receipt no.</dt><dd>{cur.number}</dd></div>
+            <div><dt>Issued</dt><dd>{rcDate(cur.issuedAt)}</dd></div>
+            <div><dt>Job</dt><dd>{cur.job}</dd></div>
+            {cur.scope && <div><dt>Included</dt><dd>{cur.scope}</dd></div>}
+            {cur.completion && <div><dt>Job type</dt><dd>{QT_COMPLETION[cur.completion]}{cur.quantity ? ` · ${cur.quantity}` : ""}</dd></div>}
+            <div><dt>{art ? "Customer" : "Artisan"}</dt><dd>{art ? cur.customerName : `${cur.artisanName} · ${tradeLabel(cur.trade)}`}</dd></div>
+            {cur.paidAt && <div><dt>Paid on</dt><dd>{rcDate(cur.paidAt)}</dd></div>}
+          </dl>
+          <div className="rcpt-sum">
+            <div><span>{art ? "Job price" : "Agreed price"}</span><b>{naira(cur.amount)}</b></div>
+            {cur.refundAmount > 0 && <div><span>Refunded to customer</span><b>-{naira(cur.refundAmount)}</b></div>}
+            {art && <div><span>VettedHands commission ({cur.commissionRate}%)</span><b>-{naira(cur.commission)}</b></div>}
+            <div className="rcpt-tot"><span>{art ? "You receive" : "Total paid"}</span><b>{naira(art ? cur.artisanPayout : paid)}</b></div>
+          </div>
+          <p className="rcpt-foot">{art && cur.bank ? `Sent to ${cur.bank}. ` : ""}Payment reference {cur.reference}. {art ? "" : "Your payment was held securely by VettedHands until the job was confirmed. "}Questions? {SUPPORT_EMAIL}</p>
+        </div>
+        <div className="rcpt-acts">
+          <button className="primary-btn" onClick={() => window.print()}>Save or print</button>
+          <button className="rcpt-share" onClick={() => share(cur)}>Share details</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="screen hp">
+      {back}
+      <h1 className="trk-h">Receipts</h1>
+      <p className="trk-sub">A receipt is created automatically after each job paid through VettedHands.</p>
+      {requestId && <div className="tk-note" style={{ marginBottom: 14 }}>The receipt for this job is not ready yet. It appears about a minute after the payment is released. Check back shortly.</div>}
+      <div className="cp-menu">
+        {data.receipts.map((r) => (
+          <button key={r.id} className="cp-row" onClick={() => setSel(r.id)}>
+            <Receipt size={22} />
+            <div><b>{r.job.length > 38 ? r.job.slice(0, 36) + "…" : r.job}</b><span>{rcDate(r.issuedAt)} · {naira(r.side === "ARTISAN" ? r.artisanPayout : r.amount - r.refundAmount)}</span></div>
+            <ChevronRight size={18} />
+          </button>
+        ))}
+        {!data.receipts.length && !requestId && <div className="tk-note">No receipts yet. They appear here after a paid job is completed.</div>}
+      </div>
+      <div className="cp-menu" style={{ marginTop: 14 }}>
+        <button className="cp-row" onClick={toggleOpt} disabled={busy}>
+          <Bell size={22} />
+          <div><b>Receipt alerts: {data.optOut ? "Off" : "On"}</b><span>{data.optOut ? "Tap to get an alert and email for each new receipt" : "Tap to stop receipt alerts. Receipts stay saved here."}</span></div>
+          <ChevronRight size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EarningsView({ token, fail, onBack }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { api("/api/payments/earnings", { token }).then(setD).catch((e) => { setD({ totals: {}, months: [], payments: [] }); fail(e); }); }, []);
+  const back = <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>;
+  if (!d) return <div className="screen hp">{back}<p className="trk-sub">Loading…</p></div>;
+  const t = d.totals || {};
+  const mName = (k) => new Date(k + "-01T12:00:00").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const label = { RELEASED: "Paid out", HELD: "On its way", DISPUTED: "Under review" };
+  return (
+    <div className="screen hp">
+      {back}
+      <h1 className="trk-h">Earnings</h1>
+      <p className="trk-sub">What you have earned through VettedHands, after commission.</p>
+      <div className="rcpt-sum" style={{ margin: "0 0 14px" }}>
+        <div><span>Paid out to you</span><b>{naira(t.paidKobo)}</b></div>
+        <div><span>On its way or under review</span><b>{naira(t.pendingKobo)}</b></div>
+        <div><span>Commission paid</span><b>{naira(t.commissionKobo)}</b></div>
+        <div className="rcpt-tot"><span>Jobs paid</span><b>{t.jobs || 0}</b></div>
+      </div>
+      {!!d.months.length && <>
+        <h3 className="trk-sub" style={{ fontWeight: 700, color: "var(--ink)", margin: "6px 0" }}>By month</h3>
+        <div className="cp-menu">{d.months.map((m) => <div key={m.month} className="cp-row" style={{ cursor: "default" }}><div><b>{mName(m.month)}</b><span>{m.jobs} job{m.jobs === 1 ? "" : "s"}</span></div><b>{naira(m.kobo)}</b></div>)}</div>
+      </>}
+      <h3 className="trk-sub" style={{ fontWeight: 700, color: "var(--ink)", margin: "14px 0 6px" }}>Recent jobs</h3>
+      <div className="cp-menu">
+        {d.payments.map((p) => <div key={p.id} className="cp-row" style={{ cursor: "default" }}><div><b>{p.job.length > 38 ? p.job.slice(0, 36) + "…" : p.job}</b><span>{label[p.status] || p.status} · {rcDate(p.at)}</span></div><b>{naira(p.payout)}</b></div>)}
+        {!d.payments.length && <div className="tk-note">No paid jobs yet. Your earnings appear here once a customer pays.</div>}
+      </div>
+    </div>
+  );
+}
 
 function MembershipView({ token, flash, fail, onBack, onPaid }) {
   const [info, setInfo] = useState(null);
@@ -3293,7 +3472,7 @@ function VettedWelcome({ user, onOpen }) {
         <span className="wl-ic"><ShieldCheck size={30} /></span>
         <h1>You're vetted, {first}.</h1>
         <p>Your application was approved. Customers near {ap.area} can now find you for {tradeLabel(ap.trade).toLowerCase()} jobs.</p>
-        <div className="ap-pills"><span className="ap-pill">Vetted</span>{ap.skillVerified && <span className="ap-pill ap-pill--b">Skill Verified</span>}</div>
+        <div className="ap-pills"><span className="ap-pill">Vetted</span>{ap.skillVerified && <span className="ap-pill ap-pill--b">Skill Verified</span>}{ap.isPro && <span className="ap-pill ap-pill--a">Member</span>}</div>
       </div>
       <div className="wl-body">
         <h2 className="wl-h">What's new in your app</h2>
@@ -3334,7 +3513,7 @@ const FAQ = [
 function HelpView({ onBack, onReport, onLegal }) {
   const [open, setOpen] = useState(0);
   const [q, setQ] = useState("");
-  const items = FAQ.filter(([qq, aa]) => !q.trim() || (qq + " " + (aa === "badges" ? "vetted skill verified top rated badge" : aa)).toLowerCase().includes(q.trim().toLowerCase()));
+  const items = FAQ.filter(([qq, aa]) => !q.trim() || (qq + " " + (aa === "badges" ? "vetted skill verified top rated member membership badge" : aa)).toLowerCase().includes(q.trim().toLowerCase()));
   return (
     <div className="screen hp">
       <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>
@@ -3352,6 +3531,7 @@ function HelpView({ onBack, onReport, onLegal }) {
                   <div><b>Vetted.</b> Identity and phone checked, and the application approved by our team. Required to appear to customers at all.</div>
                   <div><b>Skill Verified.</b> Trade and skill confirmed from certificates, references or portfolio.</div>
                   <div><b>Top Rated.</b> Earned from the record: {TOP_RULES.minJobs}+ completed jobs and a {TOP_RULES.minRating}+ average rating. Calculated by the system, never granted by hand.</div>
+                  <div><b>Member.</b> The artisan has an active paid Membership. Members are listed first in search and keep a lower commission. It is separate from the three badges above, so it is not an extra quality check.</div>
                 </>) : a}
               </div>
             )}
@@ -3435,7 +3615,7 @@ function buildNotifications(requests, me) {
   return out.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 40);
 }
 const notifUnread = (n) => !n.readAt;
-const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok", QUOTE_NEW: "job", QUOTE_COUNTER: "job", QUOTE_ACCEPTED: "ok", QUOTE_DECLINED: "flag", MEMBERSHIP_ACTIVE: "ok" };
+const NOTIF_KIND = { REQUEST_NEW: "job", REQUEST_ACCEPTED: "ok", REQUEST_DECLINED: "flag", REQUEST_CLOSED: "flag", REQUEST_WITHDRAWN: "flag", POST_ABOUT_YOU: "msg", CANCEL_REQUESTED: "job", CANCEL_REPLY: "flag", BOOKING_CONFIRMED: "ok", JOB_STARTED: "job", JOB_DONE: "review", JOB_COMPLETED: "ok", REVIEW_RECEIVED: "review", POST_APPROVED: "ok", POST_REJECTED: "flag", POST_HIDDEN: "flag", POST_REPLY: "msg", APP_APPROVED: "ok", APP_REJECTED: "flag", APP_INFO: "job", REPORT_UPDATE: "ok", REPORT_ABOUT_YOU: "flag", PAYMENT_HELD: "ok", PAYOUT_SENT: "ok", PAYOUT_BLOCKED: "flag", BANK_CHANGED: "flag", BOOKING_CANCELLED: "flag", PAYMENT_REFUNDED: "ok", PAYMENT_UPDATE: "ok", QUOTE_NEW: "job", QUOTE_COUNTER: "job", QUOTE_ACCEPTED: "ok", QUOTE_DECLINED: "flag", MEMBERSHIP_ACTIVE: "ok", RECEIPT_READY: "ok" };
 
 const NOTIF_STYLE = {
   msg: { icon: MessageCircle, bg: "#DDE9F4", fg: "#1F5A8A" },
@@ -3548,6 +3728,8 @@ function MessagesListView({ requests, user, onOpen, onTypingList }) {
 /* ---------------- Conversation ---------------- */
 Object.assign(ICON_PATHS, { download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></> });
 const Download = (p) => <Icon name="download" {...p} />;
+Object.assign(ICON_PATHS, { receipt: <><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2-3 2z" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="8" y1="16" x2="12" y2="16" /></> });
+const Receipt = (p) => <Icon name="receipt" {...p} />;
 
 const QT_COMPLETION = { FULL: "Full job", PART: "Part of the job" };
 function leftIn(t) {
@@ -3584,6 +3766,7 @@ function QuotePanel({ request: r, user, token, flash, onChanged, onPay, compact 
   async function load() { try { setData(await api(`/api/requests/${r.id}/quotes`, { token })); } catch (e) { /* quiet */ } }
   useEffect(() => {
     load();
+    if (r.quotedPrice) return undefined; // price agreed: stop checking
     const id = setInterval(() => { if (!document.hidden) load(); }, 6000);
     return () => clearInterval(id);
   }, [r.id, r.quotedPrice]);
@@ -4572,6 +4755,9 @@ function Style() {
       .hm-ac-id { flex:1; min-width:0; }
       .hm-ac-name { display:flex; align-items:center; gap:6px; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:15.5px; line-height:1.15; color:var(--ink); }
       .hm-ac-trade { color:var(--ink-soft); font-size:12.5px; margin-top:3px; }
+      .hm-ac-nm { min-width:0; overflow-wrap:anywhere; }
+      .hm-ac-name svg { flex-shrink:0; }
+      .hm-ac-mem { margin-left:6px; vertical-align:middle; }
       .hm-on { display:inline-flex; align-items:center; gap:7px; background:#E3EFE9; color:var(--primary); border-radius:999px; padding:7px 12px; font-size:11.5px; font-weight:700; white-space:nowrap; flex-shrink:0; }
       .hm-on i { width:8px; height:8px; border-radius:50%; background:var(--success); }
       .hm-ac-meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; margin-top:14px; font-size:12.5px; color:var(--ink-soft); }
@@ -5031,6 +5217,34 @@ function Style() {
 .pv-stage img { max-width:100%; max-height:100%; object-fit:contain; }
 .pv-nav { position:absolute; top:50%; transform:translateY(-50%); z-index:2; width:44px; height:44px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .pv-prev { left:10px; }
+      .rcpt { background:var(--surface); border:1px solid var(--line); border-radius:18px; overflow:hidden; margin:6px 0 16px; box-shadow:0 10px 24px -18px rgba(30,27,22,.35); }
+      .rcpt-top { background:linear-gradient(135deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; padding:18px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+      .rcpt-brand { display:flex; align-items:center; gap:8px; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:18px; }
+      .rcpt-kind { font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; opacity:.8; }
+      .rcpt-ok { display:flex; align-items:center; gap:12px; padding:16px 18px 0; }
+      .rcpt-ok span { width:30px; height:30px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .rcpt-ok b { display:block; font-size:14.5px; }
+      .rcpt-ok small { color:var(--ink-soft); font-size:12.5px; }
+      .rcpt-amt { padding:10px 18px 4px; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:34px; color:var(--primary); }
+      .rcpt-amt small { display:block; font-family:'Figtree',system-ui,sans-serif; font-weight:600; font-size:12.5px; color:var(--ink-soft); }
+      .rcpt-rows { margin:10px 18px 0; padding-top:14px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:10px; }
+      .rcpt-rows div { display:flex; gap:12px; font-size:13px; }
+      .rcpt-rows dt { width:92px; flex-shrink:0; color:var(--ink-soft); }
+      .rcpt-rows dd { margin:0; font-weight:600; min-width:0; overflow-wrap:anywhere; }
+      .rcpt-sum { margin:16px 18px 0; padding:14px; background:#F3F8F5; border-radius:14px; display:flex; flex-direction:column; gap:8px; }
+      .rcpt-sum > div { display:flex; justify-content:space-between; gap:12px; font-size:13px; }
+      .rcpt-sum span { color:var(--ink-soft); }
+      .rcpt-sum .rcpt-tot { padding-top:8px; border-top:1px solid #D6E6DD; font-size:15px; }
+      .rcpt-sum .rcpt-tot span, .rcpt-sum .rcpt-tot b { color:var(--primary); font-weight:800; }
+      .rcpt-foot { margin:14px 18px 18px; font-size:11.5px; line-height:1.5; color:var(--ink-soft); }
+      .rcpt-acts { display:flex; flex-direction:column; gap:8px; }
+      .rcpt-share { background:var(--surface); color:var(--primary); border:1.5px solid var(--primary); border-radius:12px; padding:13px; margin:0 16px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+      @media print {
+        body * { visibility:hidden; }
+        .rcpt, .rcpt * { visibility:visible; }
+        .rcpt { position:absolute; left:0; top:0; width:100%; box-shadow:none; border:none; }
+        .rcpt-top { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      }
 .cv-photo--wait { width:min(240px, 62vw); height:140px; display:flex; align-items:center; justify-content:center; background:#DDD5C0; border-radius:13px; color:#6B6357; font-size:13px; font-weight:600; }
 .qt { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin:12px 16px 0; }
 .tk .qt { margin:0 0 16px; }
