@@ -1207,9 +1207,9 @@ await payWithPopup(d);
       flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
     } catch (e) { fail(e); }
   }
-  async function applyAsArtisan(trade, bio, photos, phone, socialHandle, idDocument) {
+  async function applyAsArtisan(trade, bio, photos, phone, socialHandle, idDocument, extra) {
     try {
-      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined, idDocument } });
+      const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined, idDocument, ...(extra || {}) } });
       setApplication(d.application);
       flash("Application submitted for review");
       setApplyOpen(false);
@@ -3374,6 +3374,25 @@ function BankView({ token, flash, fail, onBack }) {
   );
 }
 
+const AGREEMENT_VERSION = "2026-10";
+// Plain-language draft. Have a lawyer review this before launch.
+const AGREEMENT = [
+  ["Who we are", "VettedHands connects customers with artisans. We are an intermediary. You work for yourself as an independent artisan. You are not our employee, and nothing here creates a partnership or employment."],
+  ["Your details are true", "Everything in your application is true and yours: your name, ID, phone number, photos of work and business registration. Fake or borrowed details lead to removal and may be reported."],
+  ["Business registration", "VettedHands prefers artisans registered with the CAC. If you are registered, you must give your correct registered name and number. If you are not yet registered, you will register through our partner Dannit, and we approve you only after they confirm."],
+  ["Do the job properly", "Turn up on time, do the work you quoted, use the agreed materials and finish what you agreed. Tell the customer in the chat early if something changes."],
+  ["Prices and payment", "Agree the price in the app. The customer pays through VettedHands, and we hold the money until the job is done. If the job needs more, use Extra work in the app. Do not take or ask for payment for jobs found here outside VettedHands."],
+  ["Our commission and payouts", "VettedHands keeps a commission on each paid job. It is currently 10%, or 5% for Members, with a minimum amount, and we can change it with notice. Payouts go to the bank account in your profile. A first payout and a new bank account may be held for up to 24 hours for safety. If a customer confirms the job, or 48 hours pass without a problem reported, we release the payment."],
+  ["Problems and refunds", "If a customer reports a problem, the payment is frozen while VettedHands reviews it. We may release it, refund the customer, or split it. Our decision after reviewing both sides is final inside the app."],
+  ["Behaviour and safety", "Treat customers and other artisans with respect. No harassment, discrimination, threats, scams or unsafe work. Do not share customers' details with anyone else."],
+  ["Reviews", "Reviews come from real jobs. Do not ask customers to change or delete an honest review, or write fake ones."],
+  ["Your profile and ranking", "You decide when you appear as available. Members are listed higher in search. We may remove or suspend a profile for broken rules, repeated complaints or unsafe behaviour."],
+  ["Taxes and tools", "You are responsible for your own tools, materials, insurance and taxes."],
+  ["Liability", "You are responsible for your work and for any damage you cause. VettedHands checks applications but does not guarantee any artisan or customer, and is not liable for your work."],
+  ["Your data", "We use your information to run VettedHands, as described in our Privacy policy. We do not sell it."],
+  ["Changes and ending", "We can update this agreement and will tell you in the app. You can stop using VettedHands any time. Money already held for a job is still settled as above. This agreement is governed by the laws of Nigeria."],
+];
+
 function ApplyView({ user, onBack, onApply }) {
   const [trade, setTrade] = useState(null);
   const [years, setYears] = useState("");
@@ -3384,7 +3403,19 @@ function ApplyView({ user, onBack, onApply }) {
   const [idDoc, setIdDoc] = useState(null);
   const [upBusy, setUpBusy] = useState(false);
   const [sending, setSending] = useState(false);
-  const missing = !trade ? "Choose your trade" : phone.trim().length < 7 ? "Add your phone number" : about.trim().length < 10 ? "Describe your service (10+ characters)" : photos.length < MIN_PORTFOLIO ? `Add at least ${MIN_PORTFOLIO} work photos` : !idDoc ? "Upload your ID" : null;
+  const [cacMode, setCacMode] = useState(null); // "REGISTERED" or "VIA_DANNIT"
+  const [cacName, setCacName] = useState("");
+  const [cacNo, setCacNo] = useState("");
+  const [dannitDone, setDannitDone] = useState(false);
+  const [cacCert, setCacCert] = useState(null);
+  const [agreed, setAgreed] = useState(false);
+  const missing = !trade ? "Choose your trade" : phone.trim().length < 7 ? "Add your phone number" : about.trim().length < 10 ? "Describe your service (10+ characters)" : photos.length < MIN_PORTFOLIO ? `Add at least ${MIN_PORTFOLIO} work photos` : !idDoc ? "Upload your ID"
+    : !cacMode ? "Tell us if your business is registered with CAC"
+    : cacMode === "REGISTERED" && (cacName.trim().length < 2 || cacNo.trim().length < 5) ? "Add your registered business name and RC or BN number"
+    : cacMode === "REGISTERED" && !cacCert ? "Upload a photo of your CAC certificate"
+    : cacMode === "VIA_DANNIT" && !dannitDone ? "Contact Dannit to start your registration, then tick the box"
+    : !agreed ? "Read and accept the artisan agreement" : null;
+  const dannitMsg = `Hello Dannit, I'm ${user.name}, applying to join VettedHands as ${trade ? tradeLabel(trade) : "an artisan"}. I need help registering my business with CAC.`;
   async function addPhotos(e) {
     const files = Array.from(e.target.files || []).slice(0, 6 - photos.length);
     e.target.value = "";
@@ -3392,6 +3423,13 @@ function ApplyView({ user, onBack, onApply }) {
     setUpBusy(true);
     try { const urls = await Promise.all(files.map((f) => fileToDataUrl(f))); setPhotos((p) => [...p, ...urls].slice(0, 6)); }
     finally { setUpBusy(false); }
+  }
+  async function pickCert(e) {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    setUpBusy(true);
+    try { setCacCert(await fileToDataUrl(f, 1400, 0.8)); } finally { setUpBusy(false); }
   }
   async function pickId(e) {
     const f = e.target.files[0];
@@ -3405,7 +3443,14 @@ function ApplyView({ user, onBack, onApply }) {
     setSending(true);
     const y = parseInt(years, 10);
     const bio = (y > 0 ? `${y} ${y === 1 ? "year" : "years"}' experience. ` : "") + about.trim();
-    try { await onApply(trade, bio, photos, phone.trim(), social.trim(), idDoc); } finally { setSending(false); }
+    const extra = {
+      cacStatus: cacMode,
+      cacName: cacMode === "REGISTERED" ? cacName.trim() : undefined,
+      cacNumber: cacMode === "REGISTERED" ? cacNo.trim() : undefined,
+      cacCertificate: cacMode === "REGISTERED" ? cacCert : undefined,
+      agreementVersion: AGREEMENT_VERSION,
+    };
+    try { await onApply(trade, bio, photos, phone.trim(), social.trim(), idDoc, extra); } finally { setSending(false); }
   }
   return (
     <div className="screen rf">
@@ -3442,6 +3487,52 @@ function ApplyView({ user, onBack, onApply }) {
           : <label className="rf-add"><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickId} /><span>{upBusy ? "…" : "+"}</span>ID</label>}
         <p>National ID, driver's license or voter's card. Clear photo, all four corners visible.</p>
       </div>
+      <div className="rf-label">Business registration</div>
+      <p className="apl-help" style={{ marginTop: 0 }}>VettedHands lists registered businesses first. Registration with the CAC (Corporate Affairs Commission) protects you and your customers.</p>
+      <div className="rf-chips">
+        <button type="button" className={"rf-chip" + (cacMode === "REGISTERED" ? " on" : "")} onClick={() => setCacMode("REGISTERED")}>I am registered with CAC</button>
+        <button type="button" className={"rf-chip" + (cacMode === "VIA_DANNIT" ? " on" : "")} onClick={() => setCacMode("VIA_DANNIT")}>Not registered yet</button>
+      </div>
+      {cacMode === "REGISTERED" && (
+        <>
+          <div className="rf-label">Registered business name</div>
+          <input className="apl-in" value={cacName} onChange={(e) => setCacName(e.target.value)} placeholder="e.g. Tunde Electrical Services" />
+          <div className="rf-label">RC or BN number</div>
+          <input className="apl-in" value={cacNo} onChange={(e) => setCacNo(e.target.value)} placeholder="e.g. BN 1234567" />
+          <div className="rf-label">CAC certificate</div>
+          <div className="rf-photo">
+            {cacCert ? <div className="rf-thumb"><img src={cacCert} alt="Your CAC certificate" /><button type="button" onClick={() => setCacCert(null)} aria-label="Remove certificate"><X size={12} /></button></div>
+              : <label className="rf-add"><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickCert} /><span>{upBusy ? "…" : "+"}</span>Cert</label>}
+            <p>A clear photo of your CAC certificate.</p>
+          </div>
+          <p className="apl-help">Our team checks this number on the CAC register before approval. Only our review team sees your certificate.</p>
+        </>
+      )}
+      {cacMode === "VIA_DANNIT" && (
+        <div className="apl-info" style={{ marginTop: 10 }}>
+          <b>Register through our partner, Dannit</b>
+          Dannit helps you register your business with the CAC. Contact them first, then come back and finish this application. Tell them you are from VettedHands.
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0 6px" }}>
+            <a className="rf-chip on" style={{ textDecoration: "none" }} href="https://dannit-enterprises.vercel.app/" target="_blank" rel="noopener noreferrer">Open Dannit</a>
+            <a className="rf-chip" style={{ textDecoration: "none" }} href={`https://wa.me/2347068655350?text=${encodeURIComponent(dannitMsg)}`} target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>
+          </div>
+          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 10, fontSize: 13, color: "var(--ink)" }}>
+            <input type="checkbox" checked={dannitDone} onChange={(e) => setDannitDone(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>I have contacted Dannit and started my CAC registration.</span>
+          </label>
+          <small style={{ display: "block", marginTop: 8, color: "var(--ink-soft)" }}>We approve your application only after Dannit confirms your registration.</small>
+        </div>
+      )}
+
+      <div className="rf-label">Artisan agreement <small>(version {AGREEMENT_VERSION})</small></div>
+      <div className="agr-box">
+        {AGREEMENT.map(([t, b], i) => <div key={i}><b>{i + 1}. {t}</b><p>{b}</p></div>)}
+      </div>
+      <label style={{ display: "flex", gap: 10, alignItems: "flex-start", margin: "12px 0 0", fontSize: 13.5 }}>
+        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3 }} />
+        <span>I have read and agree to the VettedHands Artisan Agreement.</span>
+      </label>
+
       <div className="rf-label">Social media username <small>(optional)</small></div>
       <input className="apl-in" value={social} onChange={(e) => setSocial(e.target.value)} placeholder="e.g. @tunde_electrics" />
       <p className="apl-help">Documents are seen only by the VettedHands review team.</p>
@@ -5578,6 +5669,10 @@ function Style() {
       .trk-job-r { text-align:right; flex-shrink:0; }
       .trk-job-r b { color:#8A5A12; }
       .trk-job-r small { display:block; }
+      .agr-box { max-height:240px; overflow-y:auto; background:var(--surface); border:1.5px solid var(--line); border-radius:14px; padding:14px; font-size:12.5px; line-height:1.55; }
+      .agr-box b { display:block; margin:10px 0 2px; font-size:13px; }
+      .agr-box div:first-child b { margin-top:0; }
+      .agr-box p { margin:0; color:var(--ink-soft); }
       .apl-info { background:#E3EFE9; color:var(--primary); border-radius:14px; padding:16px; font-size:13px; line-height:1.5; margin-bottom:6px; }
       .apl-info b { display:block; margin-bottom:4px; }
       .apl-in { width:100%; border:1.5px solid var(--line); border-radius:14px; padding:14px; font-family:inherit; font-size:14px; background:var(--surface); color:var(--ink); }

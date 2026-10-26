@@ -485,6 +485,7 @@ function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
   const res = useFetch(token, `/api/admin/applications/${id}`);
   const [identityOk, setIdentityOk] = useState(false);
   const [skillOk, setSkillOk] = useState(false);
+  const [cacOk, setCacOk] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (res.data) setNote(res.data.application.adminNote || ""); }, [res.data && res.data.application.id]);
@@ -497,7 +498,7 @@ function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
     if (status === "REJECTED" && !note.trim()) return flash("Add a reason in the note so the applicant knows why");
     setBusy(true);
     try {
-      await api(`/api/admin/applications/${id}`, { method: "PATCH", token, body: { status, note: note.trim(), skillVerified: skillOk } });
+      await api(`/api/admin/applications/${id}`, { method: "PATCH", token, body: { status, note: note.trim(), skillVerified: skillOk, cacConfirmed: cacOk } });
       flash(status === "APPROVED" ? `${a.user.name} approved and now live` : "Application rejected");
       refreshStats(); go("applications");
     } catch (e) { flash(e.message); setBusy(false); }
@@ -540,6 +541,20 @@ function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
               {a.idDocumentUrl ? <button className="btn btn-sm" onClick={() => openImage(a.idDocumentUrl)}>Open</button> : <span className="pill p-red">Missing</span>}</div>
           </div>
           <div className="card">
+            <h3>Business registration and agreement</h3>
+            {a.cacStatus ? (<>
+              <div className="kv">
+                <div><label>CAC status</label><b>{a.cacStatus === "REGISTERED" ? "Registered" : "Registering through Dannit"}</b></div>
+                {a.cacStatus === "REGISTERED" && <div><label>Business name</label><b>{a.cacName || "—"}</b></div>}
+                {a.cacStatus === "REGISTERED" && <div><label>RC / BN number</label><b>{a.cacNumber || "—"}</b></div>}
+                <div><label>Agreement</label><b>{a.agreedAt ? `v${a.agreementVersion} · ${fmtDate(a.agreedAt)}` : "Not accepted"}</b></div>
+              </div>
+              {a.cacStatus === "REGISTERED" && <div className="doc" style={{ marginTop: 12 }}><div className="doc-i" /><div className="doc-t"><b>CAC certificate</b><small>{a.cacCertUrl ? "Uploaded" : "Not provided"}</small></div>
+                {a.cacCertUrl ? <button className="btn btn-sm" onClick={() => openImage(a.cacCertUrl)}>Open</button> : <span className="pill p-red">Missing</span>}</div>}
+              {a.cacStatus === "VIA_DANNIT" && <div className="panel-warn" style={{ marginTop: 12 }}>This applicant is registering through Dannit (07068655350). Approve only after Dannit confirms.</div>}
+            </>) : <p className="soft">Applied before registration and agreement were required.</p>}
+          </div>
+          <div className="card">
             <h3>Portfolio</h3>
             {a.photos.length ? <div className="ptiles">{a.photos.map((p) => <img key={p.id} src={p.url} onClick={() => openImage(p.url)} />)}</div> : <p className="soft">No work photos uploaded.</p>}
           </div>
@@ -550,9 +565,10 @@ function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
             {pending ? (<>
               <label className="chk"><input type="checkbox" checked={identityOk} onChange={(e) => setIdentityOk(e.target.checked)} />Identity verified</label>
               <label className="chk"><input type="checkbox" checked={skillOk} onChange={(e) => setSkillOk(e.target.checked)} />Skill verified</label>
+              {a.cacStatus && <label className="chk"><input type="checkbox" checked={cacOk} onChange={(e) => setCacOk(e.target.checked)} />CAC registration confirmed</label>}
               <label className="lbl" style={{ marginTop: 12 }}>Internal note / reason</label>
               <textarea className="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Required when you reject or ask for more information" />
-              <button className="btn btn-primary wide" disabled={busy || !identityOk || !a.idDocumentUrl} onClick={() => decide("APPROVED")}>Approve · make Vetted</button>
+              <button className="btn btn-primary wide" disabled={busy || !identityOk || !a.idDocumentUrl || (!!a.cacStatus && !cacOk)} onClick={() => decide("APPROVED")}>Approve · make Vetted</button>
               <button className="btn btn-info wide" disabled={busy} onClick={askInfo}>Request more information</button>
               <button className="btn btn-danger wide" disabled={busy} onClick={() => decide("REJECTED")}>Reject application</button>
               <p className="soft" style={{ fontSize: 12.5 }}>Approval needs the ID on file and "Identity verified" ticked. It makes the profile visible to customers.</p>
@@ -639,6 +655,7 @@ function ArtisanPanel({ token, res, rules, flash, onChanged, openImage }) {
       <div className="h4">Verification</div>
       <div className="vrow"><span>Vetted (identity)</span><b className="good">Verified</b></div>
       <div className="vrow"><span>Skill Verified</span><b className={a.skillVerified ? "good" : "soft"}>{a.skillVerified ? "Verified" : "Not verified"}</b></div>
+      <div className="vrow"><span>CAC registered</span><b className={a.cacVerified ? "good" : "soft"}>{a.cacVerified ? `Confirmed${a.cacNumber ? " · " + a.cacNumber : ""}` : "Not confirmed"}</b></div>
       <div className="vrow"><span>Top Rated</span><b className={a.badge === "TOP_RATED" ? "good" : "soft"}>{topLine}</b></div>
       <div className="vrow"><span>Membership</span><span><b className={a.isPro ? "good" : "soft"}>{a.isPro ? "On" : "Off"}</b> <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={pro}>{a.isPro ? "Remove" : "Grant"}</button></span></div>
       <div className="h4">Certificates</div>
