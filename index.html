@@ -916,6 +916,12 @@ useEffect(() => {
     }
   }, []);
   const [pushAsk, setPushAsk] = useState(false);
+  const [payFx, setPayFx] = useState(null); // payment progress / success overlay
+  useEffect(() => {
+    if (!payFx || !payFx.done) return undefined;
+    const t = setTimeout(() => setPayFx(null), 6000);
+    return () => clearTimeout(t);
+  }, [payFx]);
   // Alerts are ON by default. If the browser already allows notifications, subscribe quietly (new phone, cleared subscription).
   // If it has not been asked yet, show one friendly prompt (browsers only show the permission popup after a tap).
   useEffect(() => {
@@ -1050,6 +1056,8 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
     setConvoFrom(from);
     setActiveRequestId(requestId);
     setView("conversation");
+    setMessages([]);
+    setRequestImage(null);
     setOtherReadAt(null);
     setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
     try { const d = await api(`/api/requests/${requestId}/messages`, { token }); setMessages(d.messages); setOtherReadAt(d.otherReadAt || null); } catch (e) { fail(e); }
@@ -1067,7 +1075,8 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
     if (document.hidden) return;
     try {
       const msgRes = await api(`/api/requests/${requestId}/messages`, { token });
-      setMessages(msgRes.messages);
+      // keep a message that is still being sent, unless the server already returned it
+      setMessages((prev) => [...msgRes.messages, ...prev.filter((m) => m.pending && !msgRes.messages.some((x) => x.senderId === m.senderId && x.text === m.text && Math.abs(new Date(x.createdAt) - new Date(m.createdAt)) < 20000))]);
       setOtherReadAt(msgRes.otherReadAt || null);
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
     } catch (e) { /* silent */ }
@@ -1085,11 +1094,16 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
     return d.typing || [];
   }
   async function sendMessage(requestId, text) {
+    // Show the message at once, then swap in the saved one. Feels instant even on a slow connection.
+    const rq = requests.find((x) => x.id === requestId);
+    const tempId = "tmp-" + Date.now();
+    const temp = { id: tempId, senderId: user.id, senderType: rq && rq.studentId === user.id ? "CUSTOMER" : "ARTISAN", text, createdAt: new Date().toISOString(), pending: true };
+    setMessages((prev) => [...prev, temp]);
     try {
       const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
-      setMessages((prev) => [...prev, d.message]);
+      setMessages((prev) => [...prev.filter((m) => m.id !== tempId && m.id !== d.message.id), d.message]);
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: d.message } : r)));
-    } catch (e) { fail(e); }
+    } catch (e) { setMessages((prev) => prev.filter((m) => m.id !== tempId)); fail(e); }
   }
   async function sendVoiceMessage(requestId, audio, audioSecs) {
     try {
@@ -1137,14 +1151,13 @@ async function respondToRequest(requestId, status) {
       popup.resumeTransaction(d.accessCode, {
         onLoad: () => { loaded = true; clearTimeout(timer); },
         onSuccess: async () => {
-          flash("Confirming your payment…");
+          setPayFx({ busy: true });
           try {
             const v = await api(`/api/payments/verify/${encodeURIComponent(d.reference)}`, { token });
             await loadRequests();
-            if (v.status === "HELD") flash(d.kind === "addon" ? "Extra work payment secured." : "Payment secured. Booking confirmed.");
-            else if (v.status === "REFUNDED") flash("That payment arrived too late and was refunded.");
-            else flash("We're still confirming your payment. Check back in a minute.");
-          } catch (e) { fail(e); }
+            if (v.status === "HELD") setPayFx({ done: true, title: d.kind === "addon" ? "Extra work paid" : "Payment secured", sub: d.kind === "addon" ? "Held safely by VettedHands and released with the rest of the job." : "Your money is held safely by VettedHands until the job is done. Your booking is confirmed." });
+            else { setPayFx(null); flash(v.status === "REFUNDED" ? "That payment arrived too late and was refunded." : "We're still confirming your payment. Check back in a minute."); }
+          } catch (e) { setPayFx(null); fail(e); }
           resolve();
         },
         onCancel: () => { clearTimeout(timer); flash("Payment cancelled. You can try again."); resolve(); },
@@ -1440,6 +1453,18 @@ await payWithPopup(d);
     </div>
   </div>
 )}
+{payFx && (
+          <div className="payfx" onClick={() => payFx.done && setPayFx(null)}>
+            <div className="payfx-card" onClick={(e) => e.stopPropagation()}>
+              {payFx.busy ? <div className="payfx-spin" /> : (
+                <svg className="payfx-check" viewBox="0 0 52 52" aria-hidden="true"><circle className="payfx-c" cx="26" cy="26" r="24" fill="none" /><path className="payfx-t" fill="none" d="M14 27l8 8 16-17" /></svg>
+              )}
+              <h3>{payFx.busy ? "Securing your payment…" : payFx.title}</h3>
+              <p>{payFx.busy ? "Please wait. Don't close the app." : payFx.sub}</p>
+              {payFx.done && <button className="primary-btn" style={{ margin: "14px 0 0" }} onClick={() => setPayFx(null)}>Done</button>}
+            </div>
+          </div>
+        )}
 {pushAsk && (
           <div className="sg-back" onClick={() => { try { localStorage.setItem("vh_push_asked_" + user.id, "1"); } catch (e) { /* ignore */ } setPushAsk(false); }}>
             <div className="sg-card" onClick={(e) => e.stopPropagation()}>
@@ -3137,17 +3162,48 @@ function TrackRecordView({ user, requests, myReviews, onBack }) {
 function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
 
 const rcDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
+let RECEIPTS_CACHE = null; // last list, so the screen opens instantly and refreshes behind
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const have = Array.from(document.scripts).find((s) => s.src === src);
+    if (have && window.html2canvas) return resolve();
+    const s = document.createElement("script");
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 function ReceiptsView({ token, flash, fail, onBack, requestId }) {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(RECEIPTS_CACHE);
   const [sel, setSel] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  async function saveImage(r) {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+      const el = document.querySelector(".rcpt");
+      const canvas = await window.html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      const file = new File([blob], `VettedHands-${r.number}.png`, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: "VettedHands receipt" });
+      else {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob); a.download = file.name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        flash("Receipt saved as an image");
+      }
+    } catch (e) { if (!(e && e.name === "AbortError")) flash("Couldn't save the image. Use Save as PDF or print instead."); }
+    setSaving(false);
+  }
   useEffect(() => {
     api("/api/receipts", { token })
-      .then((d) => { setData(d); const hit = requestId && d.receipts.find((x) => x.requestId === requestId); if (hit) setSel(hit.id); })
+      .then((d) => { RECEIPTS_CACHE = d; setData(d); const hit = requestId && d.receipts.find((x) => x.requestId === requestId); if (hit) setSel(hit.id); })
       .catch((e) => { setData({ receipts: [], optOut: false }); fail(e); });
   }, []);
   const back = <button className="nf-back" onClick={() => (sel && !requestId ? setSel(null) : onBack())} aria-label="Back"><ArrowLeft size={22} /></button>;
-  if (!data) return <div className="screen hp">{back}<p className="trk-sub">Loading…</p></div>;
+  if (!data) return <div className="screen hp">{back}<h1 className="trk-h">Receipts</h1><div className="sk sk-row" /><div className="sk sk-row" /><div className="sk sk-row" /></div>;
   const cur = data.receipts.find((r) => r.id === sel);
   async function toggleOpt() {
     if (busy) return;
@@ -3169,7 +3225,8 @@ function ReceiptsView({ token, flash, fail, onBack, requestId }) {
     return (
       <div className="screen hp rcpt-screen">
         {back}
-        <div className="rcpt">
+        <div className="rcpt-wrap"><div className="rcpt-slot" /><div className="rcpt-paper"><div className="rcpt">
+          <span className="rcpt-stamp">PAID</span>
           <div className="rcpt-top"><div className="rcpt-brand"><ShieldCheck size={22} /> VettedHands</div><div className="rcpt-kind">{art ? "Payout receipt" : "Payment receipt"}</div></div>
           <div className="rcpt-ok"><span><Check size={16} strokeWidth={3} /></span><div><b>Job completed</b><small>{rcDate(cur.completedAt)}</small></div></div>
           <div className="rcpt-amt">{naira(art ? cur.artisanPayout : paid)}<small>{art ? "paid out to you" : "paid through VettedHands"}</small></div>
@@ -3189,9 +3246,10 @@ function ReceiptsView({ token, flash, fail, onBack, requestId }) {
             <div className="rcpt-tot"><span>{art ? "You receive" : "Total paid"}</span><b>{naira(art ? cur.artisanPayout : paid)}</b></div>
           </div>
           <p className="rcpt-foot">{art && cur.bank ? `Sent to ${cur.bank}. ` : ""}Payment reference {cur.reference}. {art ? "" : "Your payment was held securely by VettedHands until the job was confirmed. "}Questions? {SUPPORT_EMAIL}</p>
-        </div>
+        </div></div></div>
         <div className="rcpt-acts">
-          <button className="primary-btn" onClick={() => window.print()}>Save or print</button>
+          <button className="primary-btn" disabled={saving} onClick={() => saveImage(cur)}>{saving ? "Preparing…" : "Save as image"}</button>
+          <button className="rcpt-share" onClick={() => window.print()}>Save as PDF or print</button>
           <button className="rcpt-share" onClick={() => share(cur)}>Share details</button>
         </div>
       </div>
@@ -3228,7 +3286,7 @@ function EarningsView({ token, fail, onBack }) {
   const [d, setD] = useState(null);
   useEffect(() => { api("/api/payments/earnings", { token }).then(setD).catch((e) => { setD({ totals: {}, months: [], payments: [] }); fail(e); }); }, []);
   const back = <button className="nf-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button>;
-  if (!d) return <div className="screen hp">{back}<p className="trk-sub">Loading…</p></div>;
+  if (!d) return <div className="screen hp">{back}<h1 className="trk-h">Earnings</h1><div className="sk sk-card" /><div className="sk sk-row" /><div className="sk sk-row" /></div>;
   const t = d.totals || {};
   const mName = (k) => new Date(k + "-01T12:00:00").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const label = { RELEASED: "Paid out", HELD: "On its way", DISPUTED: "Under review" };
@@ -5401,6 +5459,34 @@ function Style() {
       .rcpt-sum .rcpt-tot { padding-top:8px; border-top:1px solid #D6E6DD; font-size:15px; }
       .rcpt-sum .rcpt-tot span, .rcpt-sum .rcpt-tot b { color:var(--primary); font-weight:800; }
       .rcpt-foot { margin:14px 18px 18px; font-size:11.5px; line-height:1.5; color:var(--ink-soft); }
+      .rcpt { position:relative; }
+      .rcpt-wrap { overflow:hidden; padding:0 0 6px; margin:6px 0 16px; }
+      .rcpt-slot { height:16px; border-radius:10px; margin:0 4px; background:linear-gradient(#3a3a3a,#161616); position:relative; z-index:2; box-shadow:0 8px 14px -8px rgba(0,0,0,.55); }
+      .rcpt-paper { margin:-2px 14px 0; animation:rcptOut 1.3s cubic-bezier(.22,.8,.3,1) both; }
+      .rcpt-paper .rcpt { margin:0; border-radius:0 0 18px 18px; border-top:none; }
+      .rcpt-stamp { position:absolute; right:16px; top:104px; border:3px solid var(--primary); color:var(--primary); font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:22px; letter-spacing:.08em; padding:4px 12px; border-radius:8px; transform:rotate(-12deg); opacity:0; animation:rcptStamp .45s 1.25s cubic-bezier(.2,1.4,.4,1) both; pointer-events:none; }
+      @keyframes rcptOut { from { transform:translateY(-100%); } to { transform:translateY(0); } }
+      @keyframes rcptStamp { from { opacity:0; transform:rotate(-12deg) scale(2.2); } to { opacity:.9; transform:rotate(-12deg) scale(1); } }
+      .sk { background:linear-gradient(90deg,#EFE9DB 25%,#F8F4EA 50%,#EFE9DB 75%); background-size:200% 100%; animation:skShine 1.2s linear infinite; border-radius:14px; }
+      .sk-row { height:64px; margin:10px 0; }
+      .sk-card { height:130px; margin:10px 0 14px; }
+      @keyframes skShine { to { background-position:-200% 0; } }
+      .payfx { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(15,77,58,.55); backdrop-filter:blur(6px); animation:fxIn .25s ease both; }
+      .payfx-card { width:min(86vw,340px); background:var(--surface); border-radius:22px; padding:28px 22px 22px; text-align:center; animation:fxPop .5s cubic-bezier(.2,1.2,.3,1) both; }
+      .payfx-card h3 { margin:6px 0 4px; font-family:'Bricolage Grotesque',sans-serif; font-size:20px; }
+      .payfx-card p { margin:0; color:var(--ink-soft); font-size:13.5px; line-height:1.5; }
+      .payfx-spin { width:58px; height:58px; margin:0 auto 12px; border-radius:50%; border:4px solid #D6E6DD; border-top-color:var(--primary); animation:fxSpin .8s linear infinite; }
+      .payfx-check { width:76px; height:76px; display:block; margin:0 auto 8px; }
+      .payfx-c { stroke:var(--primary); stroke-width:3; stroke-dasharray:151; stroke-dashoffset:151; animation:fxDraw .6s ease forwards; }
+      .payfx-t { stroke:var(--primary); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:40; stroke-dashoffset:40; animation:fxDraw .4s .5s ease forwards; }
+      @keyframes fxIn { from { opacity:0; } to { opacity:1; } }
+      @keyframes fxPop { from { opacity:0; transform:scale(.88) translateY(12px); } to { opacity:1; transform:none; } }
+      @keyframes fxSpin { to { transform:rotate(360deg); } }
+      @keyframes fxDraw { to { stroke-dashoffset:0; } }
+      @media (prefers-reduced-motion: reduce) {
+        .rcpt-paper, .rcpt-stamp, .payfx, .payfx-card, .payfx-c, .payfx-t, .sk { animation:none !important; }
+        .rcpt-stamp { opacity:.9; } .payfx-c, .payfx-t { stroke-dashoffset:0; }
+      }
       .rcpt-acts { display:flex; flex-direction:column; gap:8px; }
       .rcpt-share { background:var(--surface); color:var(--primary); border:1.5px solid var(--primary); border-radius:12px; padding:13px; margin:0 16px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
       @media print {
@@ -5408,6 +5494,9 @@ function Style() {
         .rcpt, .rcpt * { visibility:visible; }
         .rcpt { position:absolute; left:0; top:0; width:100%; box-shadow:none; border:none; }
         .rcpt-top { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        .rcpt-slot { display:none; }
+        .rcpt-paper { animation:none !important; margin:0; }
+        .rcpt-stamp { animation:none !important; opacity:.9; }
       }
 .cv-photo--wait { width:min(240px, 62vw); height:140px; display:flex; align-items:center; justify-content:center; background:#DDD5C0; border-radius:13px; color:#6B6357; font-size:13px; font-weight:600; }
 .qt { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; margin:12px 16px 0; }
