@@ -324,13 +324,13 @@ function App() {
   useEffect(() => {
     if (!token) { setChecking(false); return; }
     api("/api/auth/me", { token })
-      .then((d) => { if (d.user.role !== "ADMIN") throw new Error("Not an admin account"); setUser(d.user); })
+      .then((d) => { if (!["ADMIN", "AGENT"].includes(d.user.role)) throw new Error("Not a staff account"); setUser(d.user); })
       .catch(() => { localStorage.removeItem("vh_admin_token"); setToken(null); })
       .finally(() => setChecking(false));
   }, [token]);
   async function login(email, password) {
     const d = await api("/api/auth/login", { method: "POST", body: { email, password } });
-    if (d.user.role !== "ADMIN") throw new Error("This account isn't an admin");
+    if (!["ADMIN", "AGENT"].includes(d.user.role)) throw new Error("This account isn't an admin or agent account");
     localStorage.setItem("vh_admin_token", d.token); setToken(d.token); setUser(d.user);
   }
   function logout() { localStorage.removeItem("vh_admin_token"); setToken(null); setUser(null); }
@@ -340,13 +340,14 @@ function App() {
 }
 
 function Shell({ token, user, onLogout }) {
+  const isAgent = user.role === "AGENT";
   const first = (window.location.hash || "").replace(/^#\//, "");
-  const [page, setPage] = useState(PAGES.includes(first) ? first : "dashboard");
+  const [page, setPage] = useState(isAgent ? (first === "notifications" ? "notifications" : "applications") : PAGES.includes(first) ? first : "dashboard");
   const [param, setParam] = useState(null);
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState(null);
   const [img, setImg] = useState(null);
-  const stats = useFetch(token, "/api/admin/stats");
+  const stats = useFetch(token, isAgent ? "/api/admin/agent-stats" : "/api/admin/stats");
   const svc = useFetch(token, "/api/artisans/services");
   if (svc.data) svc.data.services.forEach((s) => { TRADES[s.key] = s.label; });
   const nf = useFetch(token, "/api/notifications");
@@ -359,7 +360,9 @@ function Shell({ token, user, onLogout }) {
   const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats, nfRes: nf, reloadServices: svc.reload };
 
   let body;
-  if (page === "dashboard") body = <Dashboard {...c} />;
+  if (isAgent && page === "notifications") body = <AdminNotifications {...c} />;
+  else if (isAgent) body = param ? <ApplicationDetail key={param} id={param} {...c} /> : <Applications {...c} />;
+  else if (page === "dashboard") body = <Dashboard {...c} />;
   else if (page === "notifications") body = <AdminNotifications {...c} />;
   else if (page === "applications") body = param ? <ApplicationDetail key={param} id={param} {...c} /> : <Applications {...c} />;
   else if (page === "artisans") body = <Artisans key={param || "x"} {...c} />;
@@ -380,14 +383,14 @@ function Shell({ token, user, onLogout }) {
       <div className={"scrim" + (menu ? " open" : "")} onClick={() => setMenu(false)} />
       <aside className={"side" + (menu ? " open" : "")}>
         <div className="logo"><span className="logo-mark"><Shield /></span><div>VettedHands<small>Admin</small></div></div>
-        {NAV.map(([k, l]) => (
+        {(isAgent ? NAV.filter((n) => n[0] === "applications" || n[0] === "notifications") : NAV).map(([k, l]) => (
           <button key={k} className={"nav" + (page === k ? " on" : "")} onClick={() => go(k)}>
             {l}{badge[k] > 0 && <span className="nav-n">{badge[k]}</span>}
           </button>
         ))}
         <div className="side-foot">
           <Avatar name={user.name} size={36} />
-          <div className="side-who">{user.name}<span>Admin</span></div>
+          <div className="side-who">{user.name}<span>{isAgent ? "Field agent" : "Admin"}</span></div>
           <button className="side-out" onClick={onLogout}>Log out</button>
         </div>
       </aside>
@@ -1136,6 +1139,31 @@ function Verification({ token, flash, go, refreshStats }) {
 }
 
 /* ============ settings ============ */
+function AgentsCard({ token, flash }) {
+  const res = useFetch(token, "/api/admin/agents");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function set(em, enable) {
+    if (busy) return; setBusy(true);
+    try { await api("/api/admin/agents", { method: "POST", token, body: { email: em, enable } }); setEmail(""); res.reload(); flash(enable ? "Agent added" : "Agent removed"); }
+    catch (e) { flash(e.message || "Something went wrong"); } finally { setBusy(false); }
+  }
+  const list = res.data ? res.data.agents : [];
+  return (
+    <div className="card"><h3>Field agents</h3>
+      <p className="soft">Agents sign in on this page and can only review artisan applications. They never see payments. The person must first sign up on VettedHands as a customer.</p>
+      {list.map((a) => (
+        <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+          <span>{a.name} <span className="soft">{a.email}</span></span>
+          <button className="btn btn-danger" disabled={busy} onClick={() => { if (window.confirm(`Remove ${a.name} as an agent?`)) set(a.email, false); }}>Remove</button>
+        </div>
+      ))}
+      <input className="search" style={{ width: "100%", marginTop: 10 }} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Agent's email" />
+      <button className="btn btn-primary" style={{ marginTop: 10 }} disabled={busy || !email.trim()} onClick={() => set(email, true)}>Make agent</button>
+    </div>
+  );
+}
+
 function Settings({ token, flash, statsRes, reloadServices }) {
   const res = useFetch(token, "/api/admin/settings");
   const d = res.data;
@@ -1218,6 +1246,7 @@ function Settings({ token, flash, statsRes, reloadServices }) {
           <p className="soft" style={{ marginTop: 12 }}>Service area: Ado-Ekiti and environs.</p>
           <div className="vrow" style={{ marginTop: 8 }}><span>Payments</span><b className="soft">Escrow via Paystack</b></div><div className="vrow"><span>Voice notes</span><b className="soft">Live</b></div></div>
 
+        <AgentsCard token={token} flash={flash} />
         <div className="card" style={{ borderColor: "#E9C7BD" }}><h3 style={{ color: "var(--red)" }}>Clear test data</h3>
           <p className="soft">Deletes every customer and artisan account, with their requests, messages, reports, reviews, posts and notifications. Admin accounts stay. Uploaded photos stay on Cloudinary. This cannot be undone.</p>
           <div className="vrow"><span>Accounts to delete</span><b>{d.counts.users}</b></div>
