@@ -1237,6 +1237,36 @@ await payWithPopup(d);
       flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
     } catch (e) { fail(e); }
   }
+  // One place that decides where a notification should take you.
+  function routeNotification(n) {
+    const t = n.type;
+    if (t === "CHAT_MESSAGE" && n.requestId) { openConversation(n.requestId); return; }
+    if (t === "REPORT_ABOUT_YOU" && n.requestId) { setActiveRequestId(n.requestId); setView("reportReply"); return; }
+    if (t === "APP_INFO" || t === "APP_REJECTED") { if (!isArtisan) { setApplyOpen(true); setView("userProfile"); } else setView("home"); return; }
+    if (t === "APP_APPROVED") { setView("home"); return; }
+    if (t === "RECEIPT_READY") { setReceiptReq(n.requestId || null); setView("receipts"); return; }
+    if (t === "PAYOUT_SENT") { setView(isArtisan ? "earnings" : "home"); return; }
+    if (t === "PAYOUT_BLOCKED" || t === "BANK_CHANGED") { setView(isArtisan ? "bank" : "home"); return; }
+    if (t === "REVIEW_RECEIVED" && !n.requestId) { setView("myReviews"); return; }
+    if (n.requestId) { openTrack(n.requestId, "notifications"); return; }
+    if (n.postId) { setView("blog"); return; }
+    setView("home");
+  }
+  const routeRef = useRef(null);
+  routeRef.current = routeNotification;
+  useEffect(() => {
+    // A tap on a push alert: the open app gets a message, a closed app gets ?nt=...&rid=... in its address.
+    const onMsg = (e) => { if (e.data && e.data.type === "vh-open") routeRef.current({ type: e.data.nt, requestId: e.data.rid || null }); };
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", onMsg);
+    const q = new URLSearchParams(window.location.search);
+    const nt = q.get("nt");
+    if (nt) {
+      const rid = q.get("rid");
+      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(() => routeRef.current({ type: nt, requestId: rid || null }), 1200);
+    }
+    return () => { if ("serviceWorker" in navigator) navigator.serviceWorker.removeEventListener("message", onMsg); };
+  }, []);
   async function respondInfo(text, image) {
     try {
       const d = await api("/api/applications/me/respond", { method: "POST", token, body: { text, image: image || undefined } });
@@ -1387,7 +1417,7 @@ await payWithPopup(d);
           <NotificationsView items={notifications} readIds={[]}
             onBack={() => setView("home")}
             onMarkAll={() => markRead(notifications.map((n) => n.id))}
-            onOpen={(n) => { markRead([n.id]); if (n.type === "REPORT_ABOUT_YOU" && n.requestId) { setActiveRequestId(n.requestId); setView("reportReply"); } else if (n.requestId) openTrack(n.requestId, "notifications"); else if (n.postId) setView("blog"); else setView("home"); }} />
+            onOpen={(n) => { markRead([n.id]); routeNotification(n); }} />
         )}
         {view === "conversation" && activeRequest && (
           <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user} otherReadAt={otherReadAt}
@@ -2315,6 +2345,31 @@ function pillFor(r, artisanSide) {
   if (s === "DECLINED") return ["Declined", "red"];
   if (s === "CANCELLED") return ["Cancelled", "red"];
   return ["Closed", "grey"];
+}
+// A plain-words "what happens now" line for the chat, so nobody has to guess where to go next.
+function nextStepFor(r, artisanSide) {
+  const s = r.status;
+  const pay = r.payments && r.payments[0];
+  if (s === "PENDING") return artisanSide ? { text: "New request. Accept it if you can do the job, or decline.", cta: "Open request" } : { text: "Request sent. Waiting for the artisan to reply." };
+  if (s === "ACCEPTED" && !r.quotedPrice) return artisanSide
+    ? { text: "Agree the details in the chat, then send your quote from View job.", cta: "Send quote" }
+    : { text: "Chat about the job. When the artisan sends a quote, open View job to accept it or counter.", cta: "View quote" };
+  if (s === "ACCEPTED") return artisanSide
+    ? { text: "Price agreed. Waiting for the customer to pay. You can start once they have." }
+    : { text: "Price agreed. Pay now to confirm your booking. Your money is held safely until the job is done.", cta: "Pay now" };
+  if (s === "CONFIRMED" && pay && pay.status === "DISPUTED") return { text: "VettedHands is reviewing this job. You will be told the result here." };
+  if (s === "CONFIRMED" && r.cancelRequestedAt) return { text: "A cancellation request is waiting for a reply.", cta: "View job" };
+  if (s === "CONFIRMED" && r.artisanDoneAt) return artisanSide
+    ? { text: "Marked done. Waiting for the customer to confirm. Payment is released after they confirm." }
+    : { text: "The artisan says the job is done. Confirm it to release payment and leave a review.", cta: "Confirm job" };
+  if (s === "CONFIRMED" && r.startedAt) return artisanSide
+    ? { text: "Job in progress. Tap Job done in View job when you finish. You can also ask for extra work payment there.", cta: "Open job" }
+    : { text: "The job is in progress. If more work is needed, the artisan can ask you for extra payment here." };
+  if (s === "CONFIRMED") return artisanSide
+    ? { text: "Booked and paid. Start the job from View job when you begin work.", cta: "Start job" }
+    : { text: "Booked. Your payment is held safely. The artisan will start soon." };
+  if (s === "COMPLETED") return { text: artisanSide ? "Job complete. Your payout and receipt are in Earnings." : "Job complete. Your receipt is ready under View job.", cta: "View job" };
+  return null;
 }
 function reqBucket(r, meId) {
   if (r.status === "COMPLETED") return "completed";
@@ -4371,6 +4426,12 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         {canAct && <button className="cv-flag" onClick={onOpenReport} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
       <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {label}</span><b>View job <ChevronRight size={15} /></b></button>
+      {(() => { const ns = nextStepFor(request, iAmArtisanSide); return ns ? (
+        <div className="cv-next">
+          <span>{ns.text}</span>
+          {ns.cta && <button type="button" onClick={onViewJob}>{ns.cta} <ChevronRight size={14} /></button>}
+        </div>
+      ) : null; })()}
       {quote && (request.status === "ACCEPTED" || request.quotedPrice) && <QuotePanel request={request} user={user} {...quote} compact onPay={onViewJob} />}
       {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
@@ -4888,6 +4949,9 @@ function Style() {
       .id-preview { display:flex; align-items:center; gap:10px; }
       .id-preview-img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
       .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
+      .cv-next { display:flex; align-items:center; gap:10px; margin:8px 14px 0; padding:10px 12px; background:#FFF7E0; border:1px solid #F0DFA8; border-radius:14px; font-size:13.5px; line-height:1.4; color:#5C4A12; }
+      .cv-next span { flex:1; }
+      .cv-next button { flex:none; display:inline-flex; align-items:center; gap:2px; background:var(--primary); color:#fff; border:none; border-radius:999px; padding:8px 12px; font:inherit; font-weight:700; font-size:13px; cursor:pointer; }
       .convo-job-thumb { display:flex; align-items:center; gap:12px; width:calc(100% - 28px); margin:8px 14px; padding:6px 12px 6px 6px; background:var(--surface); border:1px solid var(--line); border-radius:14px; cursor:pointer; font:inherit; color:inherit; text-align:left; }
       .convo-job-thumb img { width:48px; height:48px; object-fit:cover; border-radius:10px; flex:none; }
       .convo-job-thumb span { font-weight:700; font-size:14px; display:flex; flex-direction:column; }
