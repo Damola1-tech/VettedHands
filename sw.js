@@ -2,6 +2,8 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (e) => {
+  // Tell any open VettedHands window to refresh now, so the screen changes at the same moment as the alert.
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: "vh-refresh" }))));
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "VettedHands", body: e.data ? e.data.text() : "" }; }
   e.waitUntil(self.registration.showNotification(d.title || "VettedHands", {

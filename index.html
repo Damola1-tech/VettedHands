@@ -861,8 +861,19 @@ useEffect(() => {
   // Background refresh of requests every 8s so the nav badge count and requests/messages
   // lists stay roughly current even when the user isn't actively viewing a conversation.
   useEffect(() => {
-    const id = setInterval(() => { if (!document.hidden) { loadRequests(); loadNotifs(); } }, 15000);
-    return () => clearInterval(id);
+    const id = setInterval(() => { if (!document.hidden) { loadRequests(); loadNotifs(); } }, 12000);
+    // Refresh the moment a push arrives or the app comes back to the front, so the screen matches the alert.
+    const now = () => { if (!document.hidden) { loadRequests(); loadNotifs(); } };
+    const onMsg = (e) => { if (e.data && e.data.type === "vh-refresh") now(); };
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", onMsg);
+    document.addEventListener("visibilitychange", now);
+    window.addEventListener("focus", now);
+    return () => {
+      clearInterval(id);
+      if ("serviceWorker" in navigator) navigator.serviceWorker.removeEventListener("message", onMsg);
+      document.removeEventListener("visibilitychange", now);
+      window.removeEventListener("focus", now);
+    };
   }, []);
 
   // Applicants: check the application every 20s. When it is approved, reload the account so the artisan app appears without logging out.
@@ -1226,6 +1237,15 @@ await payWithPopup(d);
       flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
     } catch (e) { fail(e); }
   }
+  async function respondInfo(text, image) {
+    try {
+      const d = await api("/api/applications/me/respond", { method: "POST", token, body: { text, image: image || undefined } });
+      setApplication(d.application);
+      flash("Reply sent. Thank you.");
+      return true;
+    } catch (e) { fail(e); return false; }
+  }
+  window.vhRespondInfo = respondInfo;
   async function applyAsArtisan(trade, bio, photos, phone, socialHandle, idDocument, extra) {
     try {
       const d = await api("/api/applications", { method: "POST", token, body: { trade, bio, photos: photos || [], phone, socialHandle: socialHandle || undefined, idDocument, ...(extra || {}) } });
@@ -2883,6 +2903,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onGoRe
           <h2>Application under review</h2>
           <p>We're checking your details. You'll become an artisan once an admin approves it.</p>
           {application.infoRequestNote && <p>VettedHands needs more info: "{application.infoRequestNote}"</p>}
+          {application.infoRequestNote && <InfoReplyBox application={application} />}
         </div>
       )}
       {application && application.status === "REJECTED" && (
@@ -3456,6 +3477,34 @@ const AGREEMENT = [
   ["Your data", "We use your information to run VettedHands, as described in our Privacy policy. We do not sell it."],
   ["Changes and ending", "We can update this agreement and will tell you in the app. You can stop using VettedHands any time. Money already held for a job is still settled as above. This agreement is governed by the laws of Nigeria."],
 ];
+
+// The applicant answers the admin's "more info" request. MainApp provides window.vhRespondInfo.
+function InfoReplyBox({ application }) {
+  const [text, setText] = useState("");
+  const [img, setImg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const replied = sent || (application.infoRepliedAt && (!application.infoRequestedAt || new Date(application.infoRepliedAt) > new Date(application.infoRequestedAt)));
+  if (replied) return <div className="info-request-note" style={{ marginTop: 10 }}>Your reply was sent. We'll review it shortly.</div>;
+  async function submit() {
+    if (busy || text.trim().length < 3) return;
+    setBusy(true);
+    try { if (await window.vhRespondInfo(text.trim(), img)) setSent(true); } finally { setBusy(false); }
+  }
+  return (
+    <div style={{ marginTop: 12, textAlign: "left" }}>
+      <textarea value={text} maxLength={600} onChange={(e) => setText(e.target.value)} placeholder="Type your reply here" rows={3}
+        style={{ width: "100%", boxSizing: "border-box", borderRadius: 12, border: "1px solid var(--line)", padding: 10, fontFamily: "inherit", fontSize: 14, background: "var(--surface)" }} />
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+        <label className="ghost-btn" style={{ cursor: "pointer" }}>
+          {img ? "Photo added ✓" : "Attach a photo (optional)"}
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) setImg(await fileToDataUrl(f, 1600, 0.8)); }} />
+        </label>
+        <button className="settle-btn" disabled={busy || text.trim().length < 3} onClick={submit}>{busy ? "Sending…" : "Send reply"}</button>
+      </div>
+    </div>
+  );
+}
 
 function ApplyView({ user, onBack, onApply }) {
   const [trade, setTrade] = useState(null);
@@ -4325,7 +4374,12 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       {quote && (request.status === "ACCEPTED" || request.quotedPrice) && <QuotePanel request={request} user={user} {...quote} compact onPay={onViewJob} />}
       {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
       {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
-      {requestImage && requestImage !== "loading" && <img src={requestImage} className="convo-job-image" style={{ cursor: "pointer" }} alt="Photo of the problem" onClick={() => setJobZoom(true)} />}
+      {requestImage && requestImage !== "loading" && (
+        <button type="button" className="convo-job-thumb" onClick={() => setJobZoom(true)}>
+          <img src={requestImage} alt="Photo of the problem" />
+          <span>Photo of the job<small>Tap to enlarge</small></span>
+        </button>
+      )}
       {jobZoom && <PhotoViewer photos={[{ id: "job", imageUrl: requestImage, createdAt: request.createdAt, text: request.job }]} startId="job" onClose={() => setJobZoom(false)} />}
 
       {zoom && <PhotoViewer photos={messages.filter((x) => x.imageUrl)} startId={zoom} onClose={() => setZoom(null)} />}
@@ -4620,10 +4674,12 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
               <div className="pending-title">Application under review</div>
               <div className="pending-sub">We're checking your details. You'll become an artisan once approved by an admin.</div>
               {application.infoRequestNote && (
-                <div className="info-request-note">
-                  <AlertTriangle size={13} /> VettedHands needs more info: "{application.infoRequestNote}".
-                  <a className="support-link" href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Application info request")}&body=${encodeURIComponent("Hi, responding to your request for more info on my artisan application: ")}`}>Reach out to support</a>
-                </div>
+                <>
+                  <div className="info-request-note">
+                    <AlertTriangle size={13} /> VettedHands needs more info: "{application.infoRequestNote}".
+                  </div>
+                  <InfoReplyBox application={application} />
+                </>
               )}
             </div>
           )}
@@ -4832,6 +4888,10 @@ function Style() {
       .id-preview { display:flex; align-items:center; gap:10px; }
       .id-preview-img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
       .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
+      .convo-job-thumb { display:flex; align-items:center; gap:12px; width:calc(100% - 28px); margin:8px 14px; padding:6px 12px 6px 6px; background:var(--surface); border:1px solid var(--line); border-radius:14px; cursor:pointer; font:inherit; color:inherit; text-align:left; }
+      .convo-job-thumb img { width:48px; height:48px; object-fit:cover; border-radius:10px; flex:none; }
+      .convo-job-thumb span { font-weight:700; font-size:14px; display:flex; flex-direction:column; }
+      .convo-job-thumb small { font-weight:500; font-size:12px; color:var(--ink-soft); }
       .convo-job-image { width:100%; max-height:160px; object-fit:cover; border-bottom:1px solid var(--line); }
       .convo-job-loading { padding:10px 16px; font-size:12px; color:var(--ink-soft); background:var(--accent-bg); text-align:center; }
       .info-request-note { margin-top:10px; font-size:12px; color:var(--accent); background:var(--accent-bg); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; line-height:1.5; }
@@ -5496,12 +5556,15 @@ function Style() {
       .rcpt-acts { display:flex; flex-direction:column; gap:8px; }
       .rcpt-share { background:var(--surface); color:var(--primary); border:1.5px solid var(--primary); border-radius:12px; padding:13px; margin:0 16px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
       @media print {
+        @page { margin:12mm; }
+        html, body { background:#fff !important; }
         body * { visibility:hidden; }
-        .rcpt, .rcpt * { visibility:visible; }
-        .rcpt { position:absolute; left:0; top:0; width:100%; box-shadow:none; border:none; }
-        .rcpt-top { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        .rcpt-wrap, .rcpt-wrap * { visibility:visible; }
+        .rcpt-wrap { position:fixed; left:0; top:0; width:100%; margin:0; padding:0; overflow:visible; }
         .rcpt-slot { display:none; }
-        .rcpt-paper { animation:none !important; margin:0; }
+        .rcpt-paper { animation:none !important; transform:none !important; margin:0 auto !important; max-width:560px; }
+        .rcpt-paper .rcpt, .rcpt { position:relative; width:100%; box-shadow:none; border:1px solid #D6E6DD; }
+        .rcpt-top { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
         .rcpt-stamp { animation:none !important; opacity:.9; }
       }
 .cv-photo--wait { width:min(240px, 62vw); height:140px; display:flex; align-items:center; justify-content:center; background:#DDD5C0; border-radius:13px; color:#6B6357; font-size:13px; font-weight:600; }

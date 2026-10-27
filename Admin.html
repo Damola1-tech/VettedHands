@@ -430,7 +430,7 @@ function Dashboard({ statsRes, go }) {
 }
 
 /* ============ notifications ============ */
-const ADMIN_GO = { ADMIN_NEW_APP: "applications", ADMIN_NEW_REPORT: "reports", ADMIN_NEW_POST: "blog", ADMIN_POST_REPORTED: "blog" };
+const ADMIN_GO = { ADMIN_NEW_APP: "applications", ADMIN_APP_REPLY: "applications", ADMIN_NEW_REPORT: "reports", ADMIN_NEW_POST: "blog", ADMIN_POST_REPORTED: "blog" };
 function AdminNotifications({ token, nfRes, go }) {
   const w = wait(nfRes); if (w) return w;
   const items = nfRes.data.notifications;
@@ -454,7 +454,7 @@ function AdminNotifications({ token, nfRes, go }) {
 
 /* ============ applications ============ */
 const BUCKET = { review: ["Under review", "p-amber"], info: ["More info needed", "p-blue"], approved: ["Approved", "p-green"], rejected: ["Rejected", "p-red"] };
-const bucketOf = (a) => a.status === "PENDING" ? (a.infoRequestNote ? "info" : "review") : a.status === "APPROVED" ? "approved" : "rejected";
+const bucketOf = (a) => a.status === "PENDING" ? (a.infoRequestNote && !(a.infoRepliedAt && new Date(a.infoRepliedAt) > new Date(a.infoRequestedAt)) ? "info" : "review") : a.status === "APPROVED" ? "approved" : "rejected";
 
 function Applications({ token, go }) {
   const res = useFetch(token, "/api/admin/applications?status=all");
@@ -580,11 +580,21 @@ function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
               {(a.rejectionReason || a.adminNote) && <p className="soft">Note: {a.rejectionReason || a.adminNote}</p>}
             </>)}
           </div>
+          {a.infoReply && (
+            <div className="card">
+              <h3>Applicant's reply</h3>
+              <p className="soft" style={{ fontSize: 12.5 }}>To your request: "{a.infoRequestNote}"</p>
+              <p style={{ marginTop: 8 }}>{a.infoReply}</p>
+              {a.infoReplyUrl && <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => openImage(a.infoReplyUrl)}>Open attached photo</button>}
+              <p className="soft" style={{ fontSize: 12, marginTop: 8 }}>{a.infoRepliedAt ? fmtDateLong(a.infoRepliedAt) + " · " + fmtTime(a.infoRepliedAt) : ""}</p>
+            </div>
+          )}
           <div className="card">
             <h3>Review history</h3>
             <ul className="hist">
               <li>Application submitted<small>{fmtDateLong(a.createdAt)} · {fmtTime(a.createdAt)}</small></li>
               {a.infoRequestedAt && <li>More information requested<small>{fmtDateLong(a.infoRequestedAt)} · "{a.infoRequestNote}"</small></li>}
+              {a.infoRepliedAt && <li>Applicant replied<small>{fmtDateLong(a.infoRepliedAt)} · {fmtTime(a.infoRepliedAt)}</small></li>}
               {a.reviewedAt && <li>{a.status === "APPROVED" ? "Approved" : "Rejected"}<small>{fmtDateLong(a.reviewedAt)}</small></li>}
             </ul>
           </div>
