@@ -20,12 +20,12 @@
 <script>
 // Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
 (function(){var r=document.documentElement,vv=window.visualViewport;if(!vv)return;
-function set(){var kb=(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}
+function set(){var ae=document.activeElement,typing=!!ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable);var kb=typing&&(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}
   // Some installed iPhone apps get a window a little shorter than the screen. Mark that case so the nav can adapt.
   var st=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
   var short=!kb&&st&&window.innerWidth<=480&&window.innerHeight>=window.innerWidth&&window.innerHeight<screen.height-8;
   r.classList.toggle("short",short);}
-set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);})();
+set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);document.addEventListener("focusin",function(){setTimeout(set,60);});document.addEventListener("focusout",function(){setTimeout(set,120);});})();
 </script>
 <style>
   html,body{margin:0;background:#0A3A2B;min-height:100%}
@@ -1110,14 +1110,14 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
     const d = await api(`/api/typing?ids=${ids.slice(0, 30).join(",")}`, { token });
     return d.typing || [];
   }
-  async function sendMessage(requestId, text) {
+  async function sendMessage(requestId, text, replyTo) {
     // Show the message at once, then swap in the saved one. Feels instant even on a slow connection.
     const rq = requests.find((x) => x.id === requestId);
     const tempId = "tmp-" + Date.now();
-    const temp = { id: tempId, senderId: user.id, senderType: rq && rq.studentId === user.id ? "CUSTOMER" : "ARTISAN", text, createdAt: new Date().toISOString(), pending: true };
+    const temp = { id: tempId, senderId: user.id, senderType: rq && rq.studentId === user.id ? "CUSTOMER" : "ARTISAN", text, createdAt: new Date().toISOString(), pending: true, ...(replyTo ? { replyToId: replyTo.id, replyText: replyTo.audio ? "Voice note" : replyTo.imageUrl && (!replyTo.text || replyTo.text === "Photo") ? "Photo" : String(replyTo.text || "").slice(0, 140), replySenderId: replyTo.senderId } : {}) };
     setMessages((prev) => [...prev, temp]);
     try {
-      const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text } });
+      const d = await api(`/api/requests/${requestId}/messages`, { method: "POST", token, body: { text, replyToId: replyTo && !String(replyTo.id).startsWith("tmp-") ? replyTo.id : undefined } });
       setMessages((prev) => [...prev.filter((m) => m.id !== tempId && m.id !== d.message.id), d.message]);
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, lastMessage: d.message } : r)));
     } catch (e) { setMessages((prev) => prev.filter((m) => m.id !== tempId)); fail(e); }
@@ -1422,7 +1422,7 @@ await payWithPopup(d);
         {view === "conversation" && activeRequest && (
           <ConversationView request={activeRequest} messages={messages} requestImage={requestImage} user={user} otherReadAt={otherReadAt}
             onBack={() => setView(convoFrom === "track" ? "track" : convoFrom === "notifications" ? "notifications" : navTab === "messages" ? "messagesList" : navTab === "requests" ? "requestsList" : "home")}
-            onSend={(text) => sendMessage(activeRequest.id, text)}
+            onSend={(text, replyTo) => sendMessage(activeRequest.id, text, replyTo)}
             onConfirm={() => confirmRequest(activeRequest.id)}
             onComplete={(rating, review) => completeRequest(activeRequest.id, rating, review)}
             onReport={(reason, note) => reportRequest(activeRequest.id, reason, note)}
@@ -2346,29 +2346,29 @@ function pillFor(r, artisanSide) {
   if (s === "CANCELLED") return ["Cancelled", "red"];
   return ["Closed", "grey"];
 }
-// A plain-words "what happens now" line for the chat, so nobody has to guess where to go next.
+// A plain-words "what happens now" line for the chat. `short` fits on the collapsed job bar, `text` is the full sentence.
 function nextStepFor(r, artisanSide) {
-  const s = r.status;
+  const st = r.status;
   const pay = r.payments && r.payments[0];
-  if (s === "PENDING") return artisanSide ? { text: "New request. Accept it if you can do the job, or decline.", cta: "Open request" } : { text: "Request sent. Waiting for the artisan to reply." };
-  if (s === "ACCEPTED" && !r.quotedPrice) return artisanSide
-    ? { text: "Agree the details in the chat, then send your quote from View job.", cta: "Send quote" }
-    : { text: "Chat about the job. When the artisan sends a quote, open View job to accept it or counter.", cta: "View quote" };
-  if (s === "ACCEPTED") return artisanSide
-    ? { text: "Price agreed. Waiting for the customer to pay. You can start once they have." }
-    : { text: "Price agreed. Pay now to confirm your booking. Your money is held safely until the job is done.", cta: "Pay now" };
-  if (s === "CONFIRMED" && pay && pay.status === "DISPUTED") return { text: "VettedHands is reviewing this job. You will be told the result here." };
-  if (s === "CONFIRMED" && r.cancelRequestedAt) return { text: "A cancellation request is waiting for a reply.", cta: "View job" };
-  if (s === "CONFIRMED" && r.artisanDoneAt) return artisanSide
-    ? { text: "Marked done. Waiting for the customer to confirm. Payment is released after they confirm." }
-    : { text: "The artisan says the job is done. Confirm it to release payment and leave a review.", cta: "Confirm job" };
-  if (s === "CONFIRMED" && r.startedAt) return artisanSide
-    ? { text: "Job in progress. Tap Job done in View job when you finish. You can also ask for extra work payment there.", cta: "Open job" }
-    : { text: "The job is in progress. If more work is needed, the artisan can ask you for extra payment here." };
-  if (s === "CONFIRMED") return artisanSide
-    ? { text: "Booked and paid. Start the job from View job when you begin work.", cta: "Start job" }
-    : { text: "Booked. Your payment is held safely. The artisan will start soon." };
-  if (s === "COMPLETED") return { text: artisanSide ? "Job complete. Your payout and receipt are in Earnings." : "Job complete. Your receipt is ready under View job.", cta: "View job" };
+  if (st === "PENDING") return artisanSide ? { short: "Accept or decline", text: "New request. Accept it if you can do the job, or decline.", cta: "Open" } : { short: "Waiting for the artisan", text: "Request sent. Waiting for the artisan to reply." };
+  if (st === "ACCEPTED" && !r.quotedPrice) return artisanSide
+    ? { short: "Send your quote", text: "Agree the details in the chat, then send your quote from View job.", cta: "Quote" }
+    : { short: "Review the quote when it comes", text: "Chat about the job. When the artisan sends a quote, open View job to accept it or counter.", cta: "Quote" };
+  if (st === "ACCEPTED") return artisanSide
+    ? { short: "Waiting for payment", text: "Price agreed. Waiting for the customer to pay. You can start once they have." }
+    : { short: "Pay to confirm", text: "Price agreed. Pay now to confirm your booking. Your money is held safely until the job is done.", cta: "Pay now" };
+  if (st === "CONFIRMED" && pay && pay.status === "DISPUTED") return { short: "VettedHands is reviewing", text: "VettedHands is reviewing this job. You will be told the result here." };
+  if (st === "CONFIRMED" && r.cancelRequestedAt) return { short: "Reply to cancellation", text: "A cancellation request is waiting for a reply.", cta: "Open" };
+  if (st === "CONFIRMED" && r.artisanDoneAt) return artisanSide
+    ? { short: "Waiting for the customer", text: "Marked done. Waiting for the customer to confirm. Payment is released after they confirm." }
+    : { short: "Confirm the job", text: "The artisan says the job is done. Confirm it to release payment and leave a review.", cta: "Confirm" };
+  if (st === "CONFIRMED" && r.startedAt) return artisanSide
+    ? { short: "Tap Job done when finished", text: "Job in progress. Tap Job done in View job when you finish. You can also ask for extra work payment there.", cta: "Open" }
+    : { short: "Work in progress", text: "The job is in progress. If more work is needed, the artisan can ask you for extra payment here." };
+  if (st === "CONFIRMED") return artisanSide
+    ? { short: "Start the job", text: "Booked and paid. Start the job from View job when you begin work.", cta: "Start" }
+    : { short: "Artisan will start soon", text: "Booked. Your payment is held safely. The artisan will start soon." };
+  if (st === "COMPLETED") return { short: artisanSide ? "Payout in Earnings" : "Receipt ready", text: artisanSide ? "Job complete. Your payout and receipt are in Earnings." : "Job complete. Your receipt is ready under View job.", cta: "Open" };
   return null;
 }
 function reqBucket(r, meId) {
@@ -3245,15 +3245,105 @@ function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
 
 const rcDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
 let RECEIPTS_CACHE = null; // last list, so the screen opens instantly and refreshes behind
-function loadScriptOnce(src) {
-  return new Promise((resolve, reject) => {
-    const have = Array.from(document.scripts).find((s) => s.src === src);
-    if (have && window.html2canvas) return resolve();
-    const s = document.createElement("script");
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
+
+// Draws the receipt straight onto a canvas (no screenshot library), so the saved picture is sharp and always right.
+async function receiptToBlob(r) {
+  try { await document.fonts.ready; } catch (e) { /* fine */ }
+  const art = r.side === "ARTISAN";
+  const paid = r.amount - r.refundAmount;
+  const W = 540, P = 28, S = 2;
+  const GREEN = "#0F4D3A", INK = "#1E1B16", SOFT = "#6B6357", LINE = "#E4DCC8";
+  const FB = "'Bricolage Grotesque','Figtree',system-ui,sans-serif", FT = "'Figtree',system-ui,sans-serif";
+  const rows = [["Receipt no.", r.number], ["Issued", rcDate(r.issuedAt)], ["Job", r.job]];
+  if (r.scope) rows.push(["Included", r.scope]);
+  if (r.completion) rows.push(["Job type", (QT_COMPLETION[r.completion] || "") + (r.quantity ? " · " + r.quantity : "")]);
+  rows.push([art ? "Customer" : "Artisan", art ? r.customerName : `${r.artisanName} · ${tradeLabel(r.trade)}`]);
+  if (r.paidAt) rows.push(["Paid on", rcDate(r.paidAt)]);
+  const sum = [[art ? "Job price" : "Agreed price", naira(r.amount)]];
+  if (r.refundAmount > 0) sum.push(["Refunded to customer", "-" + naira(r.refundAmount)]);
+  if (art) sum.push([`VettedHands commission (${r.commissionRate}%)`, "-" + naira(r.commission)]);
+  const foot = `${art && r.bank ? `Sent to ${r.bank}. ` : ""}Payment reference ${r.reference}. ${art ? "" : "Your payment was held securely by VettedHands until the job was confirmed. "}Questions? ${SUPPORT_EMAIL}`;
+
+  function wrap(ctx, text, maxW) {
+    const out = []; let line = "";
+    for (const word of String(text).split(/\s+/)) {
+      const t = line ? line + " " + word : word;
+      if (ctx.measureText(t).width > maxW && line) { out.push(line); line = word; } else line = t;
+    }
+    if (line) out.push(line);
+    return out.length ? out : [""];
+  }
+  function paint(ctx, H) {
+    let y = 0;
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    // header
+    const g = ctx.createLinearGradient(0, 0, W, 64); g.addColorStop(0, "#0F4D3A"); g.addColorStop(1, "#0A3A2B");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 64);
+    ctx.fillStyle = "#F4EFE0"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.font = `800 20px ${FB}`; ctx.fillText("VettedHands", P + 30, 32);
+    ctx.strokeStyle = "#F4EFE0"; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(P + 11, 20); ctx.lineTo(P + 21, 24); ctx.lineTo(P + 21, 33); ctx.quadraticCurveTo(P + 21, 41, P + 11, 45); ctx.quadraticCurveTo(P + 1, 41, P + 1, 33); ctx.lineTo(P + 1, 24); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(P + 6, 32); ctx.lineTo(P + 10, 36); ctx.lineTo(P + 16, 28); ctx.stroke();
+    ctx.textAlign = "right"; ctx.globalAlpha = .85; ctx.font = `700 11.5px ${FT}`; ctx.fillText((art ? "PAYOUT RECEIPT" : "PAYMENT RECEIPT"), W - P, 32); ctx.globalAlpha = 1;
+    y = 64 + 24;
+    // completed row
+    ctx.textAlign = "left";
+    ctx.fillStyle = GREEN; ctx.beginPath(); ctx.arc(P + 15, y + 15, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(P + 8, y + 15); ctx.lineTo(P + 13, y + 20); ctx.lineTo(P + 22, y + 10); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `700 15px ${FT}`; ctx.fillText("Job completed", P + 42, y + 9);
+    ctx.fillStyle = SOFT; ctx.font = `500 12.5px ${FT}`; ctx.fillText(rcDate(r.completedAt), P + 42, y + 26);
+    y += 52;
+    // big amount
+    ctx.fillStyle = GREEN; ctx.font = `800 38px ${FB}`; ctx.textBaseline = "alphabetic"; ctx.fillText(naira(art ? r.artisanPayout : paid), P, y + 30);
+    ctx.fillStyle = SOFT; ctx.font = `600 12.5px ${FT}`; ctx.fillText(art ? "paid out to you" : "paid through VettedHands", P, y + 50);
+    y += 68;
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = LINE; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke(); ctx.setLineDash([]);
+    y += 20;
+    // rows
+    for (const [k, v] of rows) {
+      ctx.font = `700 13px ${FT}`;
+      const lines = wrap(ctx, v, W - P * 2 - 104);
+      ctx.fillStyle = SOFT; ctx.font = `500 13px ${FT}`; ctx.fillText(k, P, y + 12);
+      ctx.fillStyle = INK; ctx.font = `700 13px ${FT}`;
+      lines.forEach((ln, i) => ctx.fillText(ln, P + 104, y + 12 + i * 18));
+      y += Math.max(1, lines.length) * 18 + 8;
+    }
+    y += 8;
+    // summary box
+    const boxH = 28 + sum.length * 24 + 38;
+    ctx.fillStyle = "#F3F8F5"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(P, y, W - P * 2, boxH, 14) : ctx.rect(P, y, W - P * 2, boxH); ctx.fill();
+    let by = y + 18;
+    sum.forEach(([k, v]) => {
+      ctx.fillStyle = SOFT; ctx.font = `500 13px ${FT}`; ctx.textAlign = "left"; ctx.fillText(k, P + 14, by + 12);
+      ctx.fillStyle = INK; ctx.font = `700 13px ${FT}`; ctx.textAlign = "right"; ctx.fillText(v, W - P - 14, by + 12); by += 24;
+    });
+    ctx.strokeStyle = "#D6E6DD"; ctx.beginPath(); ctx.moveTo(P + 14, by + 2); ctx.lineTo(W - P - 14, by + 2); ctx.stroke();
+    ctx.fillStyle = GREEN; ctx.font = `800 15px ${FT}`; ctx.textAlign = "left"; ctx.fillText(art ? "You receive" : "Total paid", P + 14, by + 24);
+    ctx.textAlign = "right"; ctx.fillText(naira(art ? r.artisanPayout : paid), W - P - 14, by + 24);
+    y += boxH + 18;
+    // footer text
+    ctx.textAlign = "left"; ctx.fillStyle = SOFT; ctx.font = `500 11.5px ${FT}`;
+    const fl = wrap(ctx, foot, W - P * 2);
+    fl.forEach((ln, i) => ctx.fillText(ln, P, y + 12 + i * 16));
+    y += fl.length * 16 + 22;
+    // PAID stamp
+    ctx.save(); ctx.translate(W - P - 62, 64 + 62); ctx.rotate(-0.21); ctx.globalAlpha = .85;
+    ctx.strokeStyle = GREEN; ctx.fillStyle = GREEN; ctx.lineWidth = 3;
+    ctx.font = `800 22px ${FB}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-46, -19, 92, 38, 8) : ctx.rect(-46, -19, 92, 38); ctx.stroke();
+    ctx.fillText("PAID", 0, 1); ctx.restore();
+    return y;
+  }
+  // First pass on a tall scratch canvas to learn the height, second pass at the exact size.
+  const scratch = document.createElement("canvas"); scratch.width = W; scratch.height = 2400;
+  const H = Math.ceil(paint(scratch.getContext("2d"), 2400));
+  const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
+  const ctx = cv.getContext("2d"); ctx.scale(S, S);
+  paint(ctx, H);
+  return await new Promise((res) => cv.toBlob(res, "image/png"));
 }
+
 function ReceiptsView({ token, flash, fail, onBack, requestId }) {
   const [data, setData] = useState(RECEIPTS_CACHE);
   const [sel, setSel] = useState(null);
@@ -3263,10 +3353,7 @@ function ReceiptsView({ token, flash, fail, onBack, requestId }) {
     if (saving) return;
     setSaving(true);
     try {
-      await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
-      const el = document.querySelector(".rcpt");
-      const canvas = await window.html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      const blob = await receiptToBlob(r);
       const file = new File([blob], `VettedHands-${r.number}.png`, { type: "image/png" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: "VettedHands receipt" });
       else {
@@ -4358,6 +4445,10 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const [zoom, setZoom] = useState(null);
   const [jobZoom, setJobZoom] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
+  const [replyTo, setReplyTo] = useState(null); // the message being answered (swipe right on a message)
+  const [jobOpen, setJobOpen] = useState(false); // the job bar at the top, collapsed by default to keep the chat big
+  const sw = useRef(null);
+  const inputRef = useRef(null);
   async function pickChatImage(e) {
     const f = e.target.files[0]; e.target.value = "";
     if (!f) return;
@@ -4411,7 +4502,31 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const quick = request.status === "ACCEPTED" && !request.quotedPrice
     ? (iAmArtisanSide ? ["Is it the full job or part of it?", "How many pieces?", "Can you send a photo?", "Where exactly is the job?"] : ["I can send a photo", "Can you start today?", "Is the price negotiable?"])
     : (iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["I'm at the gate", "Running a bit late", "Thank you!"]);
-  function send(t) { const v = t.trim(); if (v) { onSend(v); setText(""); } }
+  function send(t) { const v = t.trim(); if (v) { onSend(v, replyTo); setText(""); setReplyTo(null); } }
+  // Swipe a message to the right to reply to it, like WhatsApp.
+  function swipeProps(m) {
+    if (!canAct || locked) return {};
+    return {
+      onDoubleClick: () => { setReplyTo(m); inputRef.current && inputRef.current.focus(); },
+      onTouchStart: (e) => { const t = e.touches[0]; sw.current = { x: t.clientX, y: t.clientY, dx: 0, lock: null }; },
+      onTouchMove: (e) => {
+        const g = sw.current; if (!g) return;
+        const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+        if (g.lock === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) g.lock = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.3 ? "x" : "y";
+        if (g.lock !== "x") return;
+        g.dx = Math.min(dx, 72);
+        const el = e.currentTarget; el.style.transition = "none"; el.style.transform = `translateX(${g.dx}px)`; el.style.setProperty("--swp", String(Math.min(1, g.dx / 56)));
+      },
+      onTouchEnd: (e) => {
+        const g = sw.current; sw.current = null;
+        const el = e.currentTarget; el.style.transition = "transform .18s"; el.style.transform = ""; el.style.setProperty("--swp", "0");
+        if (g && g.lock === "x" && g.dx >= 56) { try { navigator.vibrate && navigator.vibrate(12); } catch (_) {} setReplyTo(m); inputRef.current && inputRef.current.focus(); }
+      },
+    };
+  }
+  const replyWho = (m) => (m.replySenderId === user.id ? "You" : other.name.split(" ")[0]);
+  const msgPreview = (m) => (m.audio ? "Voice note" : m.imageUrl && (!m.text || m.text === "Photo") ? "Photo" : String(m.text || "").slice(0, 140));
+  function jumpTo(id) { const el = document.getElementById("m-" + id); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("cv-flash"); setTimeout(() => el.classList.remove("cv-flash"), 1200); } }
   let lastDay = null;
 
   return (
@@ -4425,22 +4540,34 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         </div>
         {canAct && <button className="cv-flag" onClick={onOpenReport} aria-label="Report a problem"><Flag size={21} /></button>}
       </div>
-      <button type="button" className="cv-strip cv-strip--row" onClick={onViewJob}><span>{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)} · {label}</span><b>View job <ChevronRight size={15} /></b></button>
-      {(() => { const ns = nextStepFor(request, iAmArtisanSide); return ns ? (
-        <div className="cv-next">
-          <span>{ns.text}</span>
-          {ns.cta && <button type="button" onClick={onViewJob}>{ns.cta} <ChevronRight size={14} /></button>}
+      {(() => { const ns = nextStepFor(request, iAmArtisanSide); return (
+        <div className={"cv-job" + (jobOpen ? " open" : "")}>
+          <div className="cv-job-row">
+            <button type="button" className="cv-job-bar" onClick={() => setJobOpen((o) => !o)} aria-expanded={jobOpen}>
+              <i className="cv-job-dot" />
+              <span className="cv-job-txt"><b>{label}</b>{ns && <em> · {ns.short}</em>}</span>
+              <ChevronDown size={16} className="cv-job-chev" />
+            </button>
+            {ns && ns.cta && <button type="button" className="cv-job-cta" onClick={onViewJob}>{ns.cta}</button>}
+          </div>
+          {jobOpen && (
+            <div className="cv-job-body">
+              <div className="cv-job-code">{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)}</div>
+              {ns && <p>{ns.text}</p>}
+              <button type="button" className="cv-job-view" onClick={onViewJob}>View job <ChevronRight size={15} /></button>
+              {quote && (request.status === "ACCEPTED" || request.quotedPrice) && <QuotePanel request={request} user={user} {...quote} compact onPay={onViewJob} />}
+              {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
+              {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
+              {requestImage && requestImage !== "loading" && (
+                <button type="button" className="convo-job-thumb" onClick={() => setJobZoom(true)}>
+                  <img src={requestImage} alt="Photo of the problem" />
+                  <span>Photo of the job<small>Tap to enlarge</small></span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      ) : null; })()}
-      {quote && (request.status === "ACCEPTED" || request.quotedPrice) && <QuotePanel request={request} user={user} {...quote} compact onPay={onViewJob} />}
-      {canAct && <CancelBar request={request} user={user} onAction={onCancelAction} compact />}
-      {requestImage === "loading" && <div className="convo-job-loading">Loading photo…</div>}
-      {requestImage && requestImage !== "loading" && (
-        <button type="button" className="convo-job-thumb" onClick={() => setJobZoom(true)}>
-          <img src={requestImage} alt="Photo of the problem" />
-          <span>Photo of the job<small>Tap to enlarge</small></span>
-        </button>
-      )}
+      ); })()}
       {jobZoom && <PhotoViewer photos={[{ id: "job", imageUrl: requestImage, createdAt: request.createdAt, text: request.job }]} startId="job" onClose={() => setJobZoom(false)} />}
 
       {zoom && <PhotoViewer photos={messages.filter((x) => x.imageUrl)} startId={zoom} onClose={() => setZoom(null)} />}
@@ -4454,8 +4581,8 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
             <React.Fragment key={m.id}>
               {showDay && <div className="cv-day"><span>{dayLabel(m.createdAt)}</span></div>}
               {sys ? <div className="cv-sys">{m.text}</div> : (
-                <div className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
-                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them") + (m.imageUrl ? " cv-bubble--img" : "")}>{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : <>{m.imageUrl && <div className="cv-photo"><img src={m.imageUrl} alt="Shared photo" loading="lazy" onClick={() => setZoom(m.id)} />{!(m.text && m.text !== "Photo") && <span className="cv-photo-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</span>}</div>}{m.text && !(m.imageUrl && m.text === "Photo") ? <div className="cv-cap">{m.text}</div> : null}</>}</div>
+                <div id={"m-" + m.id} {...swipeProps(m)} className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
+                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them") + (m.imageUrl ? " cv-bubble--img" : "")}>{m.replyToId && <button type="button" className="cv-quote" onClick={() => jumpTo(m.replyToId)}><b>{replyWho(m)}</b><span>{m.replyText}</span></button>}{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : <>{m.imageUrl && <div className="cv-photo"><img src={m.imageUrl} alt="Shared photo" loading="lazy" onClick={() => setZoom(m.id)} />{!(m.text && m.text !== "Photo") && <span className="cv-photo-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</span>}</div>}{m.text && !(m.imageUrl && m.text === "Photo") ? <div className="cv-cap">{m.text}</div> : null}</>}</div>
                   {!(m.imageUrl && !(m.text && m.text !== "Photo")) && <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>}
                 </div>
               )}
@@ -4480,8 +4607,14 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       )}
       {vErr && <div className="cv-verr">{vErr}</div>}
       {locked && <div className="cv-lock">Accept this request to start chatting with {other.name.split(" ")[0]}.</div>}
+      {replyTo && !vr.recording && !locked && (
+        <div className="cv-reply">
+          <div><b>Replying to {replyTo.senderId === user.id ? "yourself" : other.name.split(" ")[0]}</b><span>{msgPreview(replyTo)}</span></div>
+          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"><X size={16} /></button>
+        </div>
+      )}
       <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <input placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
+        <input ref={inputRef} placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
         <label className="cv-mic" aria-label="Send a photo" style={voiceBusy ? { opacity: .5, pointerEvents: "none" } : { cursor: "pointer" }}><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickChatImage} /><Camera size={20} /></label>
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
@@ -4949,6 +5082,31 @@ function Style() {
       .id-preview { display:flex; align-items:center; gap:10px; }
       .id-preview-img { width:64px; height:64px; border-radius:10px; object-fit:cover; background:var(--accent-bg); }
       .id-remove-btn { background:none; border:1px solid #E7C9BE; color:var(--danger); border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:4px; }
+      .cv-job { margin:8px 12px 0; background:#E3EFE9; border:1px solid #D2E3DA; border-radius:14px; overflow:hidden; }
+      .cv-job-row { display:flex; align-items:center; gap:8px; padding-right:8px; }
+      .cv-job-bar { flex:1; min-width:0; display:flex; align-items:center; gap:8px; padding:10px 4px 10px 12px; background:none; border:none; font:inherit; color:var(--primary); text-align:left; cursor:pointer; }
+      .cv-job-dot { width:8px; height:8px; border-radius:50%; background:#B5651D; flex:none; }
+      .cv-job-txt { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+      .cv-job-txt b { font-weight:800; } .cv-job-txt em { font-style:normal; color:var(--ink-soft); font-weight:600; }
+      .cv-job-chev { flex:none; transition:transform .2s; } .cv-job.open .cv-job-chev { transform:rotate(180deg); }
+      .cv-job-cta { flex:none; background:var(--primary); color:#fff; border:none; border-radius:999px; padding:7px 12px; font:inherit; font-weight:700; font-size:12.5px; cursor:pointer; }
+      .cv-job-body { padding:4px 12px 12px; border-top:1px solid #D2E3DA; background:#F5FAF7; display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; }
+      .cv-job-code { font-size:12px; font-weight:700; color:var(--ink-soft); padding-top:6px; }
+      .cv-job-body p { margin:0; font-size:13.5px; line-height:1.45; }
+      .cv-job-view { align-self:flex-start; display:inline-flex; align-items:center; gap:2px; background:none; border:none; color:var(--primary); font:inherit; font-weight:800; font-size:13.5px; padding:0; cursor:pointer; }
+      .cv-job-body .convo-job-thumb { width:100%; margin:0; }
+      .cv-row { position:relative; }
+      .cv-row::before { content:"↩"; position:absolute; left:-28px; top:50%; transform:translateY(-50%); width:26px; height:26px; border-radius:50%; background:rgba(15,77,58,.14); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:15px; opacity:var(--swp,0); pointer-events:none; }
+      .cv-msgs { overflow-x:hidden; }
+      .cv-quote { display:block; width:100%; text-align:left; background:rgba(15,77,58,.1); border:none; border-left:3px solid var(--primary); border-radius:8px; padding:5px 9px; margin:0 0 6px; font:inherit; cursor:pointer; color:inherit; }
+      .cv-bubble--me .cv-quote { background:rgba(255,255,255,.16); border-left-color:#F4EFE0; }
+      .cv-quote b { display:block; font-size:12px; font-weight:800; opacity:.9; }
+      .cv-quote span { display:block; font-size:12.5px; opacity:.85; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+      .cv-flash .cv-bubble { box-shadow:0 0 0 3px rgba(181,101,29,.45); transition:box-shadow .3s; }
+      .cv-reply { display:flex; align-items:center; gap:10px; margin:0 14px; padding:8px 10px; background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--primary); border-radius:12px; }
+      .cv-reply > div { flex:1; min-width:0; display:flex; flex-direction:column; }
+      .cv-reply b { font-size:12px; color:var(--primary); } .cv-reply span { font-size:13px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .cv-reply button { background:none; border:none; color:var(--ink-soft); cursor:pointer; padding:4px; }
       .cv-next { display:flex; align-items:center; gap:10px; margin:8px 14px 0; padding:10px 12px; background:#FFF7E0; border:1px solid #F0DFA8; border-radius:14px; font-size:13.5px; line-height:1.4; color:#5C4A12; }
       .cv-next span { flex:1; }
       .cv-next button { flex:none; display:inline-flex; align-items:center; gap:2px; background:var(--primary); color:#fff; border:none; border-radius:999px; padding:8px 12px; font:inherit; font-weight:700; font-size:13px; cursor:pointer; }
