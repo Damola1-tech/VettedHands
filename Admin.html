@@ -255,6 +255,23 @@ function useFetch(token, path) {
       .catch((e) => { if (live) setSt({ path, data: null, loading: false, error: e.message }); });
     return () => { live = false; };
   }, [path, token, tick]);
+  // live refresh: quietly re-fetch every 12s, when the tab comes back, and when a push arrives
+  useEffect(() => {
+    if (!path) return;
+    let live = true;
+    const quiet = () => {
+      if (document.hidden) return;
+      api(path, { token }).then((data) => {
+        if (!live) return;
+        setSt((s) => (s.path === path && JSON.stringify(s.data) === JSON.stringify(data) ? s : { path, data, loading: false, error: null }));
+      }).catch(() => {});
+    };
+    const id = setInterval(quiet, 12000);
+    const onMsg = (e) => { if (e.data && e.data.type === "vh-refresh") quiet(); };
+    document.addEventListener("visibilitychange", quiet);
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => { live = false; clearInterval(id); document.removeEventListener("visibilitychange", quiet); if (navigator.serviceWorker) navigator.serviceWorker.removeEventListener("message", onMsg); };
+  }, [path, token]);
   return { data: st.data, loading: st.loading, error: st.error, reload: () => setTick((t) => t + 1) };
 }
 function wait(res) {
@@ -351,7 +368,7 @@ function Shell({ token, user, onLogout }) {
   const svc = useFetch(token, "/api/artisans/services");
   if (svc.data) svc.data.services.forEach((s) => { TRADES[s.key] = s.label; });
   const nf = useFetch(token, "/api/notifications");
-  useEffect(() => { const id = setInterval(() => { if (!document.hidden) { nf.reload(); stats.reload(); } }, 30000); return () => clearInterval(id); }, []);
+  useEffect(() => { const id = setInterval(() => { if (!document.hidden) { nf.reload(); stats.reload(); } }, 15000); return () => clearInterval(id); }, []);
   const s = stats.data ? stats.data.stats : null;
   const badge = { notifications: nf.data ? nf.data.unread : 0, applications: s ? s.pendingApplications : 0, reports: s ? s.openReports : 0, blog: s ? (s.pendingPosts || 0) : 0 };
 
