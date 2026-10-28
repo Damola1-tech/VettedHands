@@ -3666,7 +3666,6 @@ function ApplyView({ user, onBack, onApply }) {
     : !cacMode ? "Tell us if your business is registered with CAC"
     : cacMode === "REGISTERED" && (cacName.trim().length < 2 || cacNo.trim().length < 5) ? "Add your registered business name and RC or BN number"
     : cacMode === "REGISTERED" && !cacCert ? "Upload a photo of your CAC certificate"
-    : cacMode === "VIA_DANNIT" && !dannitDone ? "Contact Dannit to start your registration, then tick the box"
     : !agreed ? "Read and accept the artisan agreement" : null;
   const dannitMsg = `Hello Dannit, I'm ${user.name}, applying to join VettedHands as ${trade ? tradeLabel(trade) : "an artisan"}. I need help registering my business with CAC.`;
   async function addPhotos(e) {
@@ -3741,7 +3740,7 @@ function ApplyView({ user, onBack, onApply }) {
         <p>National ID, driver's license or voter's card. Clear photo, all four corners visible.</p>
       </div>
       <div className="rf-label">Business registration</div>
-      <p className="apl-help" style={{ marginTop: 0 }}>VettedHands lists registered businesses first. Registration with the CAC (Corporate Affairs Commission) protects you and your customers.</p>
+      <p className="apl-help" style={{ marginTop: 0 }}>To come onboard, your business needs to be registered with the CAC (Corporate Affairs Commission). It protects you and your customers.</p>
       <div className="rf-chips">
         <button type="button" className={"rf-chip" + (cacMode === "REGISTERED" ? " on" : "")} onClick={() => setCacMode("REGISTERED")}>I am registered with CAC</button>
         <button type="button" className={"rf-chip" + (cacMode === "VIA_DANNIT" ? " on" : "")} onClick={() => setCacMode("VIA_DANNIT")}>Not registered yet</button>
@@ -3763,17 +3762,17 @@ function ApplyView({ user, onBack, onApply }) {
       )}
       {cacMode === "VIA_DANNIT" && (
         <div className="apl-info" style={{ marginTop: 10 }}>
-          <b>Register through our partner, Dannit</b>
-          Dannit helps you register your business with the CAC. Contact them first, then come back and finish this application. Tell them you are from VettedHands.
+          <b>Want to get registered faster? Meet Dannit</b>
+          Dannit is a VettedHands partner who helps artisans register with the CAC quickly. This is optional, you can register any way you like. Tell them you are from VettedHands.
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0 6px" }}>
             <a className="rf-chip on" style={{ textDecoration: "none" }} href="https://dannit-enterprises.vercel.app/" target="_blank" rel="noopener noreferrer">Open Dannit</a>
             <a className="rf-chip" style={{ textDecoration: "none" }} href={`https://wa.me/2347068655350?text=${encodeURIComponent(dannitMsg)}`} target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>
           </div>
           <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 10, fontSize: 13, color: "var(--ink)" }}>
             <input type="checkbox" checked={dannitDone} onChange={(e) => setDannitDone(e.target.checked)} style={{ marginTop: 3 }} />
-            <span>I have contacted Dannit and started my CAC registration.</span>
+            <span>I have contacted Dannit and started my CAC registration. <small>(optional)</small></span>
           </label>
-          <small style={{ display: "block", marginTop: 8, color: "var(--ink-soft)" }}>We approve your application only after Dannit confirms your registration.</small>
+          <small style={{ display: "block", marginTop: 8, color: "var(--ink-soft)" }}>We approve your application once your CAC registration is confirmed.</small>
         </div>
       )}
 
