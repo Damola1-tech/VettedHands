@@ -23,7 +23,7 @@
 <style>
 :root{--bg:#F5F0E4;--surface:#fff;--ink:#14201B;--soft:#6B6B5E;--line:#E4DCC8;--green:#0F4D3A;--mint:#E3EFE9;--amber:#B97A12;--amberbg:#FBEBC8;--red:#A8402D;--redbg:#F8E3DD;--blue:#1F5A8A;--bluebg:#DDE9F4}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:'Figtree',sans-serif;font-size:14px;line-height:1.45}
+body{margin:0;background:var(--bg);background-image:radial-gradient(520px 420px at 6% 8%,rgba(15,77,58,.38),transparent 70%),radial-gradient(460px 380px at 4% 78%,rgba(185,122,18,.26),transparent 70%);background-attachment:fixed;color:var(--ink);font-family:'Figtree',sans-serif;font-size:14px;line-height:1.45}
 h1,h2,h3,.logo{font-family:'Bricolage Grotesque',sans-serif}
 h1{font-size:32px;font-weight:800;letter-spacing:-.02em;margin:0}
 h2{font-size:26px;margin:0}
@@ -32,13 +32,13 @@ button,input,select,textarea{font-family:inherit;font-size:14px}
 .boot{padding:60px;text-align:center;color:var(--soft)}
 .soft{color:var(--soft)} .good{color:var(--green);font-weight:600} .bad{color:var(--red);font-weight:600} .center{text-align:center}
 .shell{display:flex;min-height:100vh}
-.side{position:fixed;inset:0 auto 0 0;width:244px;background:var(--green);color:#fff;display:flex;flex-direction:column;padding:22px 12px;z-index:40;overflow-y:auto}
+.side{position:fixed;inset:0 auto 0 0;width:244px;background:linear-gradient(180deg,rgba(15,77,58,.80),rgba(10,58,43,.88));-webkit-backdrop-filter:blur(22px) saturate(1.7);backdrop-filter:blur(22px) saturate(1.7);border-right:1px solid rgba(255,255,255,.22);box-shadow:8px 0 30px -18px rgba(10,40,30,.5);color:#fff;display:flex;flex-direction:column;padding:22px 12px;z-index:40;overflow-y:auto}
 .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;padding:0 8px 22px}
 .logo small{display:block;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:500;opacity:.7}
 .logo-mark{width:34px;height:34px;border-radius:10px;background:#fff;color:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .nav{display:flex;align-items:center;justify-content:space-between;width:100%;padding:11px 12px;border:none;background:none;color:rgba(255,255,255,.82);font-weight:500;font-size:14.5px;border-radius:10px;cursor:pointer;text-align:left;margin-bottom:2px}
 .nav:hover{background:rgba(255,255,255,.08)}
-.nav.on{background:rgba(255,255,255,.15);color:#fff;font-weight:700}
+.nav.on{background:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.25);color:#fff;font-weight:700}
 .nav-n{background:#D69A1F;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
 .side-foot{margin-top:auto;border-top:1px solid rgba(255,255,255,.15);padding:14px 8px 0;display:flex;align-items:center;gap:10px}
 .side-foot .avatar{background:#fff!important;color:var(--green)!important}
@@ -177,7 +177,7 @@ tr.sel td{background:#EEF6F1}
 @media (max-width:900px){
  .side{transform:translateX(-100%);transition:transform .2s;padding-top:calc(22px + env(safe-area-inset-top));padding-bottom:calc(14px + env(safe-area-inset-bottom))}.side.open{transform:none}
  .scrim.open{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:35}
- .mtop{display:flex;position:fixed;top:0;left:0;right:0;height:calc(56px + env(safe-area-inset-top));box-sizing:border-box;background:var(--green);color:#fff;align-items:center;gap:12px;padding:env(safe-area-inset-top) 14px 0;z-index:30;font-weight:700}
+ .mtop{display:flex;position:fixed;top:0;left:0;right:0;height:calc(56px + env(safe-area-inset-top));box-sizing:border-box;background:rgba(15,77,58,.82);-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);color:#fff;align-items:center;gap:12px;padding:env(safe-area-inset-top) 14px 0;z-index:30;font-weight:700}
  .mtop button{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:8px;padding:6px 12px;font-size:16px}
  .main{margin-left:0;padding:calc(76px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))}
  h1{font-size:26px}.search{min-width:0;width:100%}

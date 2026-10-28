@@ -146,6 +146,12 @@
     white-space: nowrap;
   }
   #waitlist-form button:hover { background: var(--primary-light); }
+  .role-pick { display:flex; gap:8px; width:100%; justify-content:center; }
+  .role-pick label { cursor:pointer; }
+  .role-pick input { position:absolute; opacity:0; pointer-events:none; }
+  .role-pick span { display:inline-block; padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:var(--surface); font-size:14px; font-weight:600; color:var(--ink-soft); }
+  .role-pick input:checked + span { background:var(--primary); border-color:var(--primary); color:#fff; }
+  #trade-pick { width:100%; padding:13px 14px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit; background:var(--surface); color:var(--ink); }
   .form-note { font-size: 12.5px; color: var(--ink-soft); margin-top: 12px; }
   #form-success {
     display: none;
@@ -282,9 +288,20 @@
     <div class="hero">
       <div class="hero-eyebrow">Coming soon</div>
       <h1>People you can trust<br />for the job.</h1>
-      <p>Vetted electricians, plumbers, tailors, and phone repairers, checked before they're listed, not just forwarded to you on WhatsApp. Join the waitlist to be first in when we launch.</p>
+      <p>Vetted electricians, plumbers, tailors, phone repairers and more, checked before they're listed. Agree the price in the app and pay safely: we hold your money until the job is done. Join the waitlist to be first in when we launch.</p>
 
       <form id="waitlist-form" action="https://formspree.io/f/mrpgwrvy" method="POST">
+        <div class="role-pick">
+          <label><input type="radio" name="role" value="customer" checked /><span>I need an artisan</span></label>
+          <label><input type="radio" name="role" value="artisan" /><span>I'm an artisan</span></label>
+        </div>
+        <select name="trade" id="trade-pick" hidden>
+          <option value="">Your trade (optional)</option>
+          <option>Electrician</option><option>Plumber</option><option>Tailor</option>
+          <option>Phone / laptop repair</option><option>Painter</option><option>Carpenter</option>
+          <option>Cleaner</option><option>Barber</option><option>Mechanic</option><option>Other</option>
+        </select>
+        <input type="hidden" name="source" id="src-field" value="" />
         <input type="email" name="email" placeholder="you@email.com" required />
         <button type="submit">Join the waitlist</button>
       </form>
@@ -293,8 +310,8 @@
 
       <div class="trust-strip">
         <span>✓ Vetted before listing</span>
-        <span>✓ Real completed job history</span>
-        <span>✓ See who's online right now</span>
+        <span>✓ Money held until the job is done</span>
+        <span>✓ Receipts for every job</span>
       </div>
     </div>
   </div>
@@ -307,17 +324,22 @@
         <div class="step">
           <div class="step-num">01</div>
           <h3>We vet, you don't guess</h3>
-          <p>Every artisan is personally checked before they can appear on VettedHands, no open sign-ups.</p>
+          <p>Every artisan is checked before they can appear on VettedHands, including their ID and business registration. No open sign-ups.</p>
         </div>
         <div class="step">
           <div class="step-num">02</div>
-          <h3>See who's actually available</h3>
-          <p>Online/offline status shows you who's reachable right now, not who might reply eventually.</p>
+          <h3>Agree the price, in writing</h3>
+          <p>Chat, get a quote, counter it if you like, and lock the price in the app before any work starts.</p>
         </div>
         <div class="step">
           <div class="step-num">03</div>
-          <h3>Book with a real track record</h3>
-          <p>Ratings and completed jobs come from bookings that actually happened, not a bio someone wrote themselves.</p>
+          <h3>Pay safely</h3>
+          <p>Your payment is held by VettedHands and only released to the artisan after you confirm the job is done.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <h3>A receipt, a real track record</h3>
+          <p>Every paid job gets a receipt. Ratings come only from jobs that actually happened.</p>
         </div>
       </div>
     </div>
@@ -335,12 +357,14 @@
             <li><span class="dot"></span>Plumber</li>
             <li><span class="dot"></span>Tailor</li>
             <li><span class="dot"></span>Phone &amp; laptop repair</li>
+            <li><span class="dot"></span>Painter</li>
+            <li><span class="dot"></span>Carpenter</li>
+            <li><span class="dot"></span>Cleaner</li>
           </ul>
         </div>
         <div class="trades-card tomorrow">
           <h4>Coming next</h4>
           <ul>
-            <li><span class="dot"></span>Cleaner</li>
             <li><span class="dot"></span>Barber</li>
             <li><span class="dot"></span>Photographer</li>
             <li><span class="dot"></span>Mechanic</li>
@@ -353,11 +377,25 @@
     </div>
   </section>
 
+  <section>
+    <div class="wrap">
+      <div class="section-kicker">For artisans</div>
+      <h2 class="section-title">Get found. Get paid. Get trusted.</h2>
+      <div class="steps">
+        <div class="step"><h3>Customers come to you</h3><p>Show your work, your rating and your availability to people who are ready to book.</p></div>
+        <div class="step"><h3>You're paid, guaranteed</h3><p>The customer's money is secured before you start, and sent to your bank when the job is confirmed.</p></div>
+        <div class="step"><h3>Registered businesses first</h3><p>We verify artisans with their CAC registration. Not registered yet? We'll guide you to get it done.</p></div>
+      </div>
+    </div>
+  </section>
+
   <div class="wrap">
     <div class="final-cta">
       <h2>Be first to know when we launch.</h2>
       <p>Join now, it takes five seconds.</p>
       <form class="waitlist-form-2" action="https://formspree.io/f/mrpgwrvy" method="POST" id="waitlist-form-2">
+        <input type="hidden" name="role" id="role-2" value="customer" />
+        <input type="hidden" name="source" id="src-2" value="" />
         <div style="display:flex; gap:10px; max-width:440px; margin:0 auto; flex-wrap:wrap; justify-content:center;">
           <input type="email" name="email" placeholder="you@email.com" required style="flex:1; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
           <button type="submit" style="padding:14px 22px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-weight:600; font-size:15px; cursor:pointer; font-family:inherit;">Join the waitlist</button>
@@ -400,6 +438,20 @@
         }
       });
     }
+    // QR codes open this page as ?r=artisan or ?r=customer (and ?s=poster-name to see which poster worked).
+    (function () {
+      const q = new URLSearchParams(location.search);
+      const r = q.get("r") === "artisan" ? "artisan" : "customer";
+      const radios = document.querySelectorAll('#waitlist-form input[name="role"]');
+      const trade = document.getElementById("trade-pick");
+      const role2 = document.getElementById("role-2");
+      function apply(v) { trade.hidden = v !== "artisan"; if (role2) role2.value = v; }
+      radios.forEach((x) => { x.checked = x.value === r; x.addEventListener("change", () => apply(x.value)); });
+      apply(r);
+      const src = (q.get("s") || "").slice(0, 40);
+      document.getElementById("src-field").value = src;
+      document.getElementById("src-2").value = src;
+    })();
     wireForm(document.getElementById("waitlist-form"));
     wireForm(document.getElementById("waitlist-form-2"));
   </script>

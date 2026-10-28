@@ -2360,8 +2360,8 @@ function nextStepFor(r, artisanSide) {
   if (st === "CONFIRMED" && pay && pay.status === "DISPUTED") return { short: "VettedHands is reviewing", text: "VettedHands is reviewing this job. You will be told the result here." };
   if (st === "CONFIRMED" && r.cancelRequestedAt) return { short: "Reply to cancellation", text: "A cancellation request is waiting for a reply.", cta: "Open" };
   if (st === "CONFIRMED" && r.artisanDoneAt) return artisanSide
-    ? { short: "Waiting for the customer", text: "Marked done. Waiting for the customer to confirm. Payment is released after they confirm." }
-    : { short: "Confirm the job", text: "The artisan says the job is done. Confirm it to release payment and leave a review.", cta: "Confirm" };
+    ? { short: "Waiting for the customer", text: "Marked done. Waiting for the customer to confirm. Once they confirm and review, payment is released and this chat closes." }
+    : { short: "Confirm the job", text: "The artisan says the job is done. Confirm it to release payment and leave a review. The chat closes once you confirm, so ask anything you need first.", cta: "Confirm" };
   if (st === "CONFIRMED" && r.startedAt) return artisanSide
     ? { short: "Tap Job done when finished", text: "Job in progress. Tap Job done in View job when you finish. You can also ask for extra work payment there.", cta: "Open" }
     : { short: "Work in progress", text: "The job is in progress. If more work is needed, the artisan can ask you for extra payment here." };
@@ -4550,6 +4550,14 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
             </button>
             {ns && ns.cta && <button type="button" className="cv-job-cta" onClick={onViewJob}>{ns.cta}</button>}
           </div>
+          {!jobOpen && (request.hasImage || (canAct && !(request.status === "PENDING" && iAmArtisanSide) && !(request.status === "CONFIRMED" && (request.artisanDoneAt || (request.payments && request.payments[0] && request.payments[0].status === "DISPUTED"))))) && (
+            <div className="cv-job-sub">
+              {request.hasImage && <button type="button" onClick={() => (requestImage && requestImage !== "loading" ? setJobZoom(true) : setJobOpen(true))}><Camera size={13} /> Job photo</button>}
+              {canAct && !(request.status === "PENDING" && iAmArtisanSide) && !(request.status === "CONFIRMED" && (request.artisanDoneAt || (request.payments && request.payments[0] && request.payments[0].status === "DISPUTED"))) && (
+                <button type="button" className="cv-job-sub--warn" onClick={() => setJobOpen(true)}>{request.status === "CONFIRMED" ? "Cancel booking" : iAmArtisanSide ? "Withdraw" : "Cancel request"}</button>
+              )}
+            </div>
+          )}
           {jobOpen && (
             <div className="cv-job-body">
               <div className="cv-job-code">{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)}</div>
@@ -4634,6 +4642,7 @@ function CompletionForm({ onCancel, onSubmit }) {
         <button key={n} className="star-btn" onClick={() => setRating(n)}><Star size={22} fill={n <= rating ? "#B5651D" : "none"} stroke={n <= rating ? "#B5651D" : "#C9BFAB"} /></button>
       ))}</div>
       <textarea rows={2} value={reviewText} onChange={(e) => setReviewText(e.target.value)} placeholder="How did it go? (optional)" className="review-textarea" />
+      <p className="soft" style={{ fontSize: 12.5, margin: "6px 0 0", color: "var(--ink-soft)" }}>When you submit, payment is released to the artisan and this chat closes. Ask anything you still need first.</p>
       <div className="settle-actions">
         <button className="ghost-btn" onClick={onCancel}>Cancel</button>
         <button className="settle-btn" onClick={() => onSubmit(rating, reviewText.trim())}>Submit</button>
@@ -5091,6 +5100,9 @@ function Style() {
       .cv-job-chev { flex:none; transition:transform .2s; } .cv-job.open .cv-job-chev { transform:rotate(180deg); }
       .cv-job-cta { flex:none; background:var(--primary); color:#fff; border:none; border-radius:999px; padding:7px 12px; font:inherit; font-weight:700; font-size:12.5px; cursor:pointer; }
       .cv-job-body { padding:4px 12px 12px; border-top:1px solid #D2E3DA; background:#F5FAF7; display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; }
+      .cv-job-sub { display:flex; gap:14px; padding:0 12px 9px 28px; margin-top:-4px; }
+      .cv-job-sub button { background:none; border:none; padding:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--primary); display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
+      .cv-job-sub .cv-job-sub--warn { color:#A8402D; }
       .cv-job-code { font-size:12px; font-weight:700; color:var(--ink-soft); padding-top:6px; }
       .cv-job-body p { margin:0; font-size:13.5px; line-height:1.45; }
       .cv-job-view { align-self:flex-start; display:inline-flex; align-items:center; gap:2px; background:none; border:none; color:var(--primary); font:inherit; font-weight:800; font-size:13.5px; padding:0; cursor:pointer; }
@@ -6097,11 +6109,11 @@ function Style() {
         .phone { position:relative; }
         .content::after { content:""; display:block; flex:0 0 calc(96px + var(--sab, env(safe-area-inset-bottom))); }
         .content:has(+ .bottomnav--hide)::after { display:none; }
-        .phone .bottomnav { position:absolute; left:16px; right:16px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:rgba(255,255,255,.78); -webkit-backdrop-filter:blur(22px) saturate(1.8); backdrop-filter:blur(22px) saturate(1.8); border:1px solid rgba(255,255,255,.9); border-radius:999px; box-shadow:0 18px 36px -14px rgba(20,32,27,.45), 0 4px 10px -4px rgba(20,32,27,.12), inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(20,32,27,.06); }
+        .phone .bottomnav { position:absolute; left:16px; right:16px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:linear-gradient(135deg,rgba(255,255,255,.62),rgba(255,255,255,.38)); -webkit-backdrop-filter:blur(26px) saturate(2); backdrop-filter:blur(26px) saturate(2); border:1px solid rgba(255,255,255,.75); border-radius:999px; box-shadow:0 18px 36px -14px rgba(20,32,27,.45), 0 4px 10px -4px rgba(20,32,27,.12), inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(20,32,27,.06); }
         .phone .bottomnav--hide { display:none; }
         .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:10.5px; font-weight:600; letter-spacing:.01em; color:var(--ink-soft); transition:background .28s ease, color .2s ease, transform .15s ease, box-shadow .28s ease; }
         .phone .nav-item:active { transform:scale(.94); }
-        .phone .nav-item--active { background:linear-gradient(180deg,#14644B 0%,#0F4D3A 100%); color:#fff; box-shadow:0 8px 16px -8px rgba(15,77,58,.8), inset 0 1px 0 rgba(255,255,255,.18); }
+        .phone .nav-item--active { background:linear-gradient(180deg,rgba(20,100,75,.94) 0%,rgba(15,77,58,.94) 100%); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); color:#fff; box-shadow:0 8px 16px -8px rgba(15,77,58,.8), inset 0 1px 0 rgba(255,255,255,.18); }
         .phone .nav-item--active .nav-icon-wrap { animation:navPop .38s cubic-bezier(.3,1.6,.5,1); }
         @keyframes navPop { 0% { transform:scale(.8) translateY(2px); } 100% { transform:scale(1) translateY(0); } }
         .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
