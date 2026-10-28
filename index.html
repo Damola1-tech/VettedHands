@@ -2623,7 +2623,7 @@ function CancelBar({ request: r, user, onAction, compact }) {
       ) : (
         <button className={"cx-btn" + (compact ? " cx-btn--compact" : "")} onClick={() => setSheet("ask")}>{label}</button>
       )}
-      {sheet === "ask" && (
+      {sheet === "ask" && ReactDOM.createPortal(
         <div className="sg-back" onClick={() => setSheet(null)}>
           <div className="sg-card" onClick={(e) => e.stopPropagation()}>
             <h3>{label}</h3>
@@ -2644,9 +2644,8 @@ function CancelBar({ request: r, user, onAction, compact }) {
             </button>
             <button className="sg-x" onClick={() => setSheet(null)}>Back</button>
           </div>
-        </div>
-      )}
-      {sheet === "reply" && (
+        </div>, document.body)}
+      {sheet === "reply" && ReactDOM.createPortal(
         <div className="sg-back" onClick={() => setSheet(null)}>
           <div className="sg-card" onClick={(e) => e.stopPropagation()}>
             <h3>Agree to cancel?</h3>
@@ -2658,8 +2657,7 @@ function CancelBar({ request: r, user, onAction, compact }) {
             </button>
             <button className="sg-x" onClick={() => setSheet(null)}>Back</button>
           </div>
-        </div>
-      )}
+        </div>, document.body)}
     </>
   );
 }
@@ -5099,7 +5097,7 @@ function Style() {
       .cv-job-txt b { font-weight:800; } .cv-job-txt em { font-style:normal; color:var(--ink-soft); font-weight:600; }
       .cv-job-chev { flex:none; transition:transform .2s; } .cv-job.open .cv-job-chev { transform:rotate(180deg); }
       .cv-job-cta { flex:none; background:var(--primary); color:#fff; border:none; border-radius:999px; padding:7px 12px; font:inherit; font-weight:700; font-size:12.5px; cursor:pointer; }
-      .cv-job-body { padding:4px 12px 12px; border-top:1px solid #D2E3DA; background:#F5FAF7; display:flex; flex-direction:column; gap:8px; max-height:52vh; overflow-y:auto; }
+      .cv-job-body { padding:4px 12px 12px; border-top:1px solid #D2E3DA; background:#F5FAF7; display:flex; flex-direction:column; gap:8px; max-height:62vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding-bottom:24px; }
       .cv-job-sub { display:flex; gap:14px; padding:0 12px 9px 28px; margin-top:-4px; }
       .cv-job-sub button { background:none; border:none; padding:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--primary); display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
       .cv-job-sub .cv-job-sub--warn { color:#A8402D; }

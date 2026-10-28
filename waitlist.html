@@ -7,7 +7,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="VettedHands" />
-<meta http-equiv="refresh" content="0;url=https://vettedhands.com.ng/">
 <link rel="icon" href="favicon.ico" sizes="48x48" />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="icon" type="image/png" sizes="96x96" href="favicon-96.png" />
@@ -427,8 +426,14 @@
           });
           if (res.ok) {
             form.style.display = "none";
-            const success = document.getElementById("form-success");
-            if (success) success.style.display = "block";
+            const orig = document.getElementById("form-success");
+            let success = orig;
+            if (orig && form.id !== "waitlist-form") {
+              success = orig.cloneNode(true);
+              success.style.display = "block";
+              form.parentNode.insertBefore(success, form.nextSibling);
+            }
+            if (success) { success.style.display = "block"; success.scrollIntoView({ behavior: "smooth", block: "center" }); }
           } else {
             btn.textContent = "Try again";
             btn.disabled = false;
