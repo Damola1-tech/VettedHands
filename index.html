@@ -4556,7 +4556,8 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
               )}
             </div>
           )}
-          {jobOpen && (
+          {jobOpen && ReactDOM.createPortal(
+            <div className="sg-back" onClick={() => setJobOpen(false)}><div className="sg-card jobsheet" onClick={(ev) => ev.stopPropagation()}>
             <div className="cv-job-body">
               <div className="cv-job-code">{reqCode(request.id)} · {tradeLabel(request.artisanProfile.trade)}</div>
               {ns && <p>{ns.text}</p>}
@@ -4571,7 +4572,8 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
                 </button>
               )}
             </div>
-          )}
+            <button className="sg-x" onClick={() => setJobOpen(false)}>Close</button>
+            </div></div>, document.body)}
         </div>
       ); })()}
       {jobZoom && <PhotoViewer photos={[{ id: "job", imageUrl: requestImage, createdAt: request.createdAt, text: request.job }]} startId="job" onClose={() => setJobZoom(false)} />}
@@ -5098,6 +5100,7 @@ function Style() {
       .cv-job-chev { flex:none; transition:transform .2s; } .cv-job.open .cv-job-chev { transform:rotate(180deg); }
       .cv-job-cta { flex:none; background:var(--primary); color:#fff; border:none; border-radius:999px; padding:7px 12px; font:inherit; font-weight:700; font-size:12.5px; cursor:pointer; }
       .cv-job-body { padding:4px 12px 12px; border-top:1px solid #D2E3DA; background:#F5FAF7; display:flex; flex-direction:column; gap:8px; max-height:62vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding-bottom:24px; }
+      .jobsheet { max-height:88vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; } .jobsheet .cv-job-body { max-height:none; overflow:visible; border-top:none; background:none; padding:0 0 8px; }
       .cv-job-sub { display:flex; gap:14px; padding:0 12px 9px 28px; margin-top:-4px; }
       .cv-job-sub button { background:none; border:none; padding:0; font:inherit; font-size:12.5px; font-weight:700; color:var(--primary); display:inline-flex; align-items:center; gap:4px; cursor:pointer; }
       .cv-job-sub .cv-job-sub--warn { color:#A8402D; }
