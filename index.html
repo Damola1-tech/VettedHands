@@ -55,6 +55,7 @@ function urlB64ToUint8(b64) {
   const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
+try { const r0 = new URLSearchParams(window.location.search).get("ref"); if (r0) localStorage.setItem("vh_ref", r0.slice(0, 20)); } catch (e) { /* ignore */ }
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 
 /* ============ API HELPER ============ */
@@ -305,7 +306,7 @@ function useAuth() {
   }
   async function register(name, email, password, area) {
     setError(null);
-    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area } });
+    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area, ref: (() => { try { return localStorage.getItem("vh_ref") || undefined; } catch (e) { return undefined; } })() } });
     if (d.needsVerification) return d;
     startSession(d);
   }
@@ -740,7 +741,7 @@ function App() {
         onStart={(i) => { setIntent(i); setAuthMode("register"); setScreen("auth"); }} />}
     </>;
   } else {
-    body = <MainApp auth={auth} intent={intent} />;
+    body = <EngageProvider token={auth.token}><MainApp auth={auth} intent={intent} /><Tour user={auth.user} /></EngageProvider>;
   }
 
   return (
@@ -773,6 +774,7 @@ function MainApp({ auth, intent }) {
   async function loadNotifs() { try { const d = await api("/api/notifications", { token }); setNotifs(d.notifications); } catch (e) { /* silent */ } }
 
   const [artisans, setArtisans] = useState([]);
+  const [artisansReady, setArtisansReady] = useState(false);
   const [requests, setRequests] = useState([]); // student: "mine" / artisan: "incoming"
   const [openGroups, setOpenGroups] = useState([]);
   const [legalBack, setLegalBack] = useState("help");
@@ -823,8 +825,8 @@ useEffect(() => {
       if (area !== "All areas") qs.set("area", area);
       if (query.trim()) qs.set("q", query.trim());
       const d = await api(`/api/artisans?${qs.toString()}`);
-      setArtisans(d.artisans);
-    } catch (e) { fail(e); }
+      setArtisans(d.artisans); setArtisansReady(true);
+    } catch (e) { setArtisansReady(true); fail(e); }
   }
   async function loadRequests() {
     try {
@@ -1358,7 +1360,7 @@ await payWithPopup(d);
         )}
         {view === "browse" && (
           <BrowseView query={query} setQuery={setQuery} tradeFilter={tradeFilter} setTradeFilter={setTradeFilter}
-            area={area} setArea={setArea} filtered={artisans}
+            area={area} setArea={setArea} filtered={artisans} loading={!artisansReady}
             onBack={() => { setTradeFilter(null); setView("home"); setNavTab("home"); }} onOpenProfile={(a) => openArtisanProfile(a, "browse")} />
         )}
         {view === "artisanProfile" && selectedArtisan && (
@@ -1647,10 +1649,15 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
 }
 
 /* ---------------- Browse ---------------- */
-function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setArea, filtered, onBack, onOpenProfile }) {
+function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setArea, filtered, loading, onBack, onOpenProfile }) {
   const [onlyOn, setOnlyOn] = useState(false);
   const [sort, setSort] = useState("rating");
+  const [top4, setTop4] = useState(false);
+  const [savedOnly, setSavedOnly] = useState(false);
+  const { ids: savedIds } = React.useContext(EngageCtx);
   let list = onlyOn ? filtered.filter((a) => a.online) : filtered.slice();
+  if (top4) list = list.filter((a) => (a.rating || 0) >= 4);
+  if (savedOnly) list = list.filter((a) => savedIds.includes(a.id));
   list.sort((x, y) => (Number(!!y.isPro) - Number(!!x.isPro)) || (sort === "jobs" ? y.jobsCompleted - x.jobsCompleted : (y.rating || 0) - (x.rating || 0)));
   return (
     <div className="screen">
@@ -1666,20 +1673,105 @@ function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setAre
       <div className="bw-tools">
         <label className="bw-area"><MapPin size={14} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
         <button className={"bw-on" + (onlyOn ? " bw-on--yes" : "")} onClick={() => setOnlyOn(!onlyOn)}><i />Available now</button>
+        <button className={"bw-on" + (top4 ? " bw-on--yes" : "")} onClick={() => setTop4(!top4)}>4.0 and up</button>
+        <button className={"bw-on" + (savedOnly ? " bw-on--yes" : "")} onClick={() => setSavedOnly(!savedOnly)}>Saved{savedIds.length ? ` (${savedIds.length})` : ""}</button>
         <select className="bw-sort" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort"><option value="rating">Top rated</option><option value="jobs">Most jobs</option></select>
       </div>
       <div className="hm-list bw-list">
-        {list.length === 0 && <div className="empty"><div className="empty-title">No one matches yet</div><div className="empty-sub">Try a different area or trade{onlyOn ? ", or turn off Available now" : ""}.</div></div>}
+        {list.length === 0 && loading && <SkeletonCards />}
+        {list.length === 0 && !loading && <div className="empty"><div className="empty-title">{savedOnly ? "No saved artisans yet" : "No one matches yet"}</div><div className="empty-sub">{savedOnly ? "Tap the heart on an artisan to save them here." : `Try a different area or trade${onlyOn || top4 ? ", or clear the filters" : ""}.`}</div></div>}
         {list.map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => onOpenProfile(a)} />)}
       </div>
     </div>
   );
 }
 
+/* ---------------- Saved artisans, invites, first-time tour ---------------- */
+const EngageCtx = React.createContext({ token: null, ids: [], toggle: () => {} });
+function EngageProvider({ token, children }) {
+  const [ids, setIds] = useState([]);
+  useEffect(() => {
+    if (!token) return;
+    api("/api/me/favorites", { token }).then((d) => setIds(d.ids || [])).catch(() => {});
+  }, [token]);
+  async function toggle(id) {
+    const was = ids.includes(id);
+    setIds((x) => (was ? x.filter((i) => i !== id) : [...x, id]));
+    try { await api(`/api/me/favorites/${id}`, { method: "POST", token }); }
+    catch (e) { setIds((x) => (was ? [...x, id] : x.filter((i) => i !== id))); }
+  }
+  return <EngageCtx.Provider value={{ token, ids, toggle }}>{children}</EngageCtx.Provider>;
+}
+function HeartIcon({ on, size = 20 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={on ? "#C0392B" : "none"} stroke={on ? "#C0392B" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /></svg>;
+}
+function FavHeart({ id, className }) {
+  const { ids, toggle } = React.useContext(EngageCtx);
+  if (!id) return null;
+  const on = ids.includes(id);
+  return <button type="button" className={"fav-btn " + (className || "")} aria-pressed={on} aria-label={on ? "Remove from saved" : "Save this artisan"} onClick={(e) => { e.stopPropagation(); toggle(id); }}><HeartIcon on={on} /></button>;
+}
+function InviteCard() {
+  const { token } = React.useContext(EngageCtx);
+  const [d, setD] = useState(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { if (token) api("/api/me/referral", { token }).then(setD).catch(() => {}); }, [token]);
+  if (!d || !d.code) return null;
+  const link = `https://vettedhands.com.ng/?ref=${d.code}`;
+  const text = `Join me on VettedHands: vetted artisans, and your payment is held safely until the job is done. ${link}`;
+  async function share() {
+    try { if (navigator.share) { await navigator.share({ title: "VettedHands", text, url: link }); return; } } catch (e) { return; }
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (e) { /* ignore */ }
+  }
+  return (
+    <div className="inv">
+      <div className="inv-t"><b>Invite a friend</b><span>{d.count > 0 ? `${d.count} ${d.count === 1 ? "person has" : "people have"} joined with your link` : "Share your link. Good artisans and good customers come from people you trust."}</span></div>
+      <div className="inv-code">{d.code}</div>
+      <button type="button" className="inv-btn" onClick={share}>{copied ? "Link copied" : "Share my link"}</button>
+    </div>
+  );
+}
+const TOUR = {
+  CUSTOMER: [
+    ["Find someone you can trust", "Every artisan is checked before they appear. Browse by trade, area and rating, and save your favourites with the heart."],
+    ["Your money is held safely", "You pay VettedHands first. We only release the payment to the artisan after you confirm the job is done."],
+    ["Chat, track, review", "Agree the price in chat, follow each step from your Requests, then leave a review when the work is done."],
+  ],
+  ARTISAN: [
+    ["Turn on Available", "Switch on Available so customers can find you. Accept a request to open the chat."],
+    ["Send a clear quote", "Agree the details in chat, then send a quote. The customer pays into escrow before you start, so the job is already funded."],
+    ["Get paid, build your name", "Mark the job done and the customer confirms. Your payment is released to your bank, and reviews build your rating."],
+  ],
+};
+function Tour({ user }) {
+  const key = "vh_tour_" + (user.role === "ARTISAN" ? "a" : "c");
+  const [i, setI] = useState(0);
+  const [open, setOpen] = useState(() => { try { return !localStorage.getItem(key); } catch (e) { return false; } });
+  const steps = TOUR[user.role === "ARTISAN" ? "ARTISAN" : "CUSTOMER"];
+  if (!open || user.role === "ADMIN") return null;
+  function done() { try { localStorage.setItem(key, "1"); } catch (e) { /* ignore */ } setOpen(false); }
+  const last = i === steps.length - 1;
+  return (
+    <div className="tour-back" role="dialog" aria-modal="true" aria-label="Welcome tour">
+      <div className="tour-card">
+        <div className="tour-dots">{steps.map((_, n) => <i key={n} className={n === i ? "on" : ""} />)}</div>
+        <h2>{steps[i][0]}</h2>
+        <p>{steps[i][1]}</p>
+        <button type="button" className="tour-next" onClick={() => (last ? done() : setI(i + 1))}>{last ? "Get started" : "Next"}</button>
+        {!last && <button type="button" className="tour-skip" onClick={done}>Skip</button>}
+      </div>
+    </div>
+  );
+}
+function SkeletonCards({ n = 4 }) {
+  return <>{Array.from({ length: n }).map((_, i) => <div key={i} className="sk-card"><i className="sk sk-av" /><div className="sk-lines"><i className="sk" style={{ width: "55%" }} /><i className="sk" style={{ width: "35%" }} /><i className="sk" style={{ width: "80%" }} /></div></div>)}</>;
+}
+
 function ArtisanCard({ artisan: a, onOpen }) {
   const [bg, fg] = tintFor(a.id);
   const top = a.badge === "TOP_RATED";
   return (
+    <div className="hm-ac-wrap">
     <button className="hm-ac" onClick={onOpen}>
       <div className="hm-ac-top">
         <span className="hm-ac-av" style={{ background: bg, color: fg }}><Face u={a.user} /></span>
@@ -1695,6 +1787,8 @@ function ArtisanCard({ artisan: a, onOpen }) {
         <span><MapPin size={13} /> {a.area}</span>
       </div>
     </button>
+    <FavHeart id={a.id} className="fav-btn--card" />
+    </div>
   );
 }
 
@@ -1962,6 +2056,7 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
       {banner && <div className="ap-banner">{banner}</div>}
       <div className="ap-hero">
         {onBack ? <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button> : <div style={{ height: 12 }} />}
+        {canRequest && <FavHeart id={a.id} className="fav-btn--hero" />}
         <div className="ap-id">
           <span className="ap-av">{a.user.avatarUrl ? <img src={a.user.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials(a.user.name)}</span>
           <div>
@@ -2944,6 +3039,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onGoRe
           </button>
         ))}
       </div>
+      <InviteCard />
       {!application && (
         <div className="cp-cta">
           <h2>Have a skill people need?</h2>
@@ -3128,6 +3224,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
   const me = { ...ap, user: { id: user.id, name: user.name, avatarUrl: user.avatarUrl }, reviews: myReviews, stats: { repeatCustomers: rs.repeat, totalCustomers: rs.total, reviewCount: myReviews.length, minJobs: TOP_RULES.minJobs, minRating: TOP_RULES.minRating } };
   const footer = (
     <div className="ao">
+      <InviteCard />
       <div className="ao-card">
         <h3>Manage portfolio</h3>
         <div className="photo-picker">
@@ -5271,6 +5368,33 @@ function Style() {
       .hm-sec-head .hm-h { margin:0; }
       .hm-see { background:none; border:none; color:var(--primary); font-family:inherit; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:2px; cursor:pointer; padding:6px 0 6px 10px; }
       .hm-list { display:flex; flex-direction:column; gap:12px; }
+      .hm-ac-wrap { position:relative; }
+      .hm-ac-wrap .hm-ac { width:100%; display:block; }
+      .fav-btn { width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:none; border:none; color:var(--ink-soft); cursor:pointer; border-radius:50%; }
+      .fav-btn--card { position:absolute; right:6px; bottom:4px; }
+      .fav-btn--hero { position:absolute; right:10px; top:6px; color:#F4EFE0; background:rgba(255,255,255,.12); }
+      .ap-hero { position:relative; }
+      .bw-tools { flex-wrap:wrap; }
+      .inv { margin:14px 16px 0; padding:16px; background:var(--surface); border:1px solid var(--line); border-radius:16px; display:flex; flex-direction:column; gap:10px; }
+      .inv-t b { display:block; font-family:'Bricolage Grotesque',sans-serif; font-size:16px; }
+      .inv-t span { font-size:12.5px; color:var(--ink-soft); line-height:1.45; }
+      .inv-code { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:22px; letter-spacing:3px; color:var(--primary); background:var(--accent-bg); border-radius:10px; padding:10px 14px; text-align:center; }
+      .inv-btn { height:44px; border:none; border-radius:12px; background:var(--primary); color:#fff; font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; }
+      .tour-back { position:fixed; inset:0; z-index:60; background:rgba(15,40,30,.62); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:20px; }
+      .tour-card { width:100%; max-width:380px; background:var(--surface); border-radius:22px; padding:26px 22px 18px; box-shadow:0 30px 60px -20px rgba(0,0,0,.45); text-align:center; }
+      .tour-card h2 { margin:14px 0 8px; font-family:'Bricolage Grotesque',sans-serif; font-size:22px; line-height:1.15; }
+      .tour-card p { margin:0 0 18px; font-size:14px; line-height:1.5; color:var(--ink-soft); }
+      .tour-dots { display:flex; gap:6px; justify-content:center; }
+      .tour-dots i { width:8px; height:8px; border-radius:4px; background:var(--line); transition:width .2s; }
+      .tour-dots i.on { width:22px; background:var(--primary); }
+      .tour-next { width:100%; height:48px; border:none; border-radius:14px; background:var(--primary); color:#fff; font-family:inherit; font-weight:700; font-size:15px; cursor:pointer; }
+      .tour-skip { margin-top:6px; height:40px; background:none; border:none; color:var(--ink-soft); font-family:inherit; font-size:13px; cursor:pointer; }
+      .sk { display:block; height:12px; border-radius:6px; background:linear-gradient(90deg,#ECE6D6 25%,#F5F0E4 50%,#ECE6D6 75%); background-size:200% 100%; animation:skmove 1.2s linear infinite; }
+      @keyframes skmove { to { background-position:-200% 0; } }
+      .sk-card { display:flex; gap:12px; align-items:center; padding:16px; background:var(--surface); border:1px solid var(--line); border-radius:18px; }
+      .sk-av { width:46px; height:46px; border-radius:50%; flex:none; }
+      .sk-lines { flex:1; display:flex; flex-direction:column; gap:9px; }
+      @media (prefers-reduced-motion: reduce) { .sk { animation:none; } }
       .hm-ac { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:16px; text-align:left; font-family:inherit; cursor:pointer; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
       .hm-ac-top { display:flex; align-items:center; gap:14px; }
       .hm-ac-av { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:15.5px; flex-shrink:0; }
