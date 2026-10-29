@@ -16,6 +16,7 @@
 <script src="https://js.paystack.co/v2/inline.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="qr.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script>
 // Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
@@ -1267,6 +1268,7 @@ await payWithPopup(d);
       else setView("home");
       return;
     }
+    if (t === "WEEKLY_DIGEST") { setNavTab("profile"); setView("userProfile"); return; }
     if (t === "APP_APPROVED") { setView("home"); return; }
     if (t === "RECEIPT_READY") { setReceiptReq(n.requestId || null); setView("receipts"); return; }
     if (t === "PAYOUT_SENT") { setView(isArtisan ? "earnings" : "home"); return; }
@@ -2060,6 +2062,63 @@ function timeAgo(d) {
   return `${Math.floor(days / 30)} months ago`; 
 }
 
+function QrCode({ text, size = 200, color = "#0F4D3A" }) {
+  const cells = React.useMemo(() => {
+    try {
+      const q = window.qrcode(0, "M"); q.addData(text); q.make();
+      const n = q.getModuleCount(); let d = "";
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+      return { n, d };
+    } catch (e) { return null; }
+  }, [text]);
+  if (!cells) return null;
+  const t = cells.n + 8;
+  return <svg viewBox={`-4 -4 ${t} ${t}`} width={size} height={size} shapeRendering="crispEdges" role="img" aria-label="QR code to this artisan's page"><rect x="-4" y="-4" width={t} height={t} fill="#fff" /><path d={cells.d} fill={color} /></svg>;
+}
+function ShopQr({ a, name }) {
+  const { token } = React.useContext(EngageCtx);
+  const [code, setCode] = useState(null);
+  const [poster, setPoster] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { if (token) api("/api/me/referral", { token }).then((d) => setCode(d.code)).catch(() => {}); }, [token]);
+  useEffect(() => {
+    if (!poster) return;
+    document.body.classList.add("qp-printing");
+    return () => document.body.classList.remove("qp-printing");
+  }, [poster]);
+  const url = `https://vettedhands.com.ng/?a=${a.id}`;
+  const inviteUrl = code ? `${url}&ref=${code}` : url;
+  const msg = `Hello! I now take bookings on VettedHands. Your payment is held safely until the job is done. See my page and book me here: ${inviteUrl}`;
+  async function copy() { try { await navigator.clipboard.writeText(inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (e) { /* ignore */ } }
+  return (
+    <div className="inv shopqr">
+      <div className="inv-t"><b>Your shop QR</b><span>Print it and stick it at your shop. Customers scan it to see your reviews and book you.</span></div>
+      <div className="shopqr-row">
+        <QrCode text={url} size={132} />
+        <div className="shopqr-btns">
+          <button type="button" className="inv-btn" style={{ width: "100%" }} onClick={() => setPoster(true)}>Print poster</button>
+          <a className="shopqr-wa" href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener noreferrer">Invite your customers</a>
+          <button type="button" className="shopqr-copy" onClick={copy}>{copied ? "Link copied" : "Copy my link"}</button>
+        </div>
+      </div>
+      {poster && ReactDOM.createPortal(
+        <div className="qp-poster" role="dialog" aria-modal="true" aria-label="Shop poster">
+          <div className="qp-sheet">
+            <div className="qp-brand">VettedHands</div>
+            <div className="qp-name">{name}</div>
+            <div className="qp-trade">{tradeLabel(a.trade)} · {a.area}, Ado-Ekiti</div>
+            <QrCode text={url} size={300} />
+            <div className="qp-cta">Scan to see my reviews and book me safely</div>
+            <div className="qp-sub">Your payment is held by VettedHands until the job is done.</div>
+          </div>
+          <div className="qp-actions qp-noprint">
+            <button type="button" className="inv-btn" onClick={() => window.print()}>Print</button>
+            <button type="button" className="shopqr-copy" onClick={() => setPoster(false)}>Close</button>
+          </div>
+        </div>, document.body)}
+    </div>
+  );
+}
 function ShareRow({ a, mine }) {
   const [copied, setCopied] = useState(false);
   const url = `https://vettedhands.com.ng/?a=${a.id}`;
@@ -3284,6 +3343,7 @@ function ArtisanOwnProfile({ user, requests, myReviews, onAddPhoto, onRemovePhot
   const me = { ...ap, user: { id: user.id, name: user.name, avatarUrl: user.avatarUrl }, reviews: myReviews, stats: { repeatCustomers: rs.repeat, totalCustomers: rs.total, reviewCount: myReviews.length, minJobs: TOP_RULES.minJobs, minRating: TOP_RULES.minRating } };
   const footer = (
     <div className="ao">
+      <ShopQr a={ap} name={user.name} />
       <InviteCard />
       <div className="ao-card">
         <h3>Manage portfolio</h3>
@@ -5428,6 +5488,21 @@ function Style() {
       .hm-sec-head .hm-h { margin:0; }
       .hm-see { background:none; border:none; color:var(--primary); font-family:inherit; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:2px; cursor:pointer; padding:6px 0 6px 10px; }
       .hm-list { display:flex; flex-direction:column; gap:12px; }
+      .shopqr-row { display:flex; gap:14px; align-items:center; }
+      .shopqr-row svg { flex:none; border-radius:10px; border:1px solid var(--line); }
+      .shopqr-btns { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }
+      .shopqr-wa { height:44px; display:flex; align-items:center; justify-content:center; border-radius:12px; background:#1E8E5A; color:#fff; font-weight:700; font-size:13.5px; text-decoration:none; text-align:center; padding:0 8px; }
+      .shopqr-copy { height:40px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--primary); font-family:inherit; font-weight:700; font-size:13.5px; cursor:pointer; }
+      .qp-poster { position:fixed; inset:0; z-index:80; background:#EFE9DA; overflow-y:auto; display:flex; flex-direction:column; align-items:center; padding:20px 16px 30px; gap:16px; }
+      .qp-sheet { width:100%; max-width:420px; background:#fff; border-radius:20px; padding:28px 22px; display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; box-shadow:0 20px 40px -24px rgba(0,0,0,.4); }
+      .qp-brand { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:20px; color:#0F4D3A; }
+      .qp-name { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:30px; line-height:1.1; }
+      .qp-trade { font-size:15px; color:#5C5A52; margin-bottom:6px; }
+      .qp-cta { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:20px; color:#0F4D3A; margin-top:6px; }
+      .qp-sub { font-size:13px; color:#5C5A52; }
+      .qp-actions { width:100%; max-width:420px; display:flex; gap:10px; }
+      .qp-actions .inv-btn, .qp-actions .shopqr-copy { flex:1; height:48px; }
+      @media print { .qp-poster, .qp-poster * { visibility:visible; } .qp-poster { position:absolute; left:0; top:0; width:100%; background:#fff; padding:0; display:block; overflow:visible; } .qp-sheet { max-width:none; box-shadow:none; border:none; padding-top:30mm; } .qp-sheet svg { width:120mm; height:120mm; } .qp-noprint { display:none !important; } body.qp-printing #root { display:none !important; } }
       .ap-share { display:flex; gap:10px; margin:12px 16px 0; }
       .ap-wa { flex:1; height:46px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:#1E8E5A; color:#fff; font-weight:700; font-size:14px; text-decoration:none; text-align:center; padding:0 10px; }
       .ap-copy { flex:none; padding:0 16px; height:46px; border-radius:14px; border:1px solid var(--line); background:var(--surface); color:var(--primary); font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; }
