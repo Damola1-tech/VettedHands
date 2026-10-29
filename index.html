@@ -58,6 +58,11 @@ function urlB64ToUint8(b64) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 try { const r0 = new URLSearchParams(window.location.search).get("ref"); if (r0) localStorage.setItem("vh_ref", r0.slice(0, 20)); } catch (e) { /* ignore */ }
+try {
+  const a0 = new URLSearchParams(window.location.search).get("a");
+  if (a0) { if (/^[0-9a-fA-F-]{20,40}$/.test(a0)) localStorage.setItem("vh_pending_artisan", a0); window.history.replaceState({}, "", window.location.pathname); }
+} catch (e) { /* ignore */ }
+const SHARED_ID = (() => { try { return localStorage.getItem("vh_pending_artisan"); } catch (e) { return null; } })();
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 
 /* ============ API HELPER ============ */
@@ -713,6 +718,7 @@ function App() {
   const [legalTab, setLegalTab] = useState("privacy");
   const [legalFrom, setLegalFrom] = useState("landing"); // where Terms/Privacy was opened from, so we return there
   const [authMode, setAuthMode] = useState("register");
+  const [shareId, setShareId] = useState(SHARED_ID);
   const [intent, setIntent] = useState(null); // "request" | "artisan" | null
 
   useEffect(() => { if (!auth.token) setScreen("landing"); }, [auth.token]);
@@ -737,7 +743,10 @@ function App() {
           <AuthScreen initialMode={authMode} onBack={() => setScreen("landing")} auth={auth} onLegal={(t) => { setLegalTab(t); setLegalFrom("auth"); setScreen("legal"); }} />
         </div>
       )}
-      {screen === "landing" && <Landing
+      {screen === "landing" && shareId && <PublicArtisan id={shareId}
+        onJoin={() => { setIntent("request"); setAuthMode("register"); setScreen("auth"); }}
+        onClose={() => { try { localStorage.removeItem("vh_pending_artisan"); } catch (e) { /* ignore */ } setShareId(null); }} />}
+      {screen === "landing" && !shareId && <Landing
         onSignIn={() => { setIntent(null); setAuthMode("login"); setScreen("auth"); }}
         onLegal={(t) => { setLegalTab(t); setLegalFrom("landing"); setScreen("legal"); }}
         onStart={(i) => { setIntent(i); setAuthMode("register"); setScreen("auth"); }} />}
@@ -1010,6 +1019,13 @@ useEffect(() => {
       setSelectedArtisan((prev) => (prev && prev.id === a.id ? { ...prev, photos: p.photos } : prev));
     } catch (e) { /* photos just won't show */ }
   }
+  useEffect(() => {
+    let id = null;
+    try { id = localStorage.getItem("vh_pending_artisan"); } catch (e) { /* ignore */ }
+    if (!id) return;
+    try { localStorage.removeItem("vh_pending_artisan"); } catch (e) { /* ignore */ }
+    api(`/api/artisans/${id}`).then((d) => { if (d.artisan) openArtisanProfile(d.artisan, "home"); }).catch(() => {});
+  }, []);
   async function bookAgain(artisanProfileId) {
     try {
       const d = await api(`/api/artisans/${artisanProfileId}`, { token });
@@ -1246,7 +1262,11 @@ await payWithPopup(d);
     const t = n.type;
     if (t === "CHAT_MESSAGE" && n.requestId) { openConversation(n.requestId); return; }
     if (t === "REPORT_ABOUT_YOU" && n.requestId) { setActiveRequestId(n.requestId); setView("reportReply"); return; }
-    if (t === "APP_INFO" || t === "APP_REJECTED") { if (!isArtisan) { setApplyOpen(true); setView("userProfile"); } else setView("home"); return; }
+    if (t === "APP_INFO" || t === "APP_REJECTED") {
+      if (!isArtisan) { setApplyOpen(false); setNavTab("profile"); setView("userProfile"); setTimeout(() => { const el = document.getElementById("app-status"); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 500); }
+      else setView("home");
+      return;
+    }
     if (t === "APP_APPROVED") { setView("home"); return; }
     if (t === "RECEIPT_READY") { setReceiptReq(n.requestId || null); setView("receipts"); return; }
     if (t === "PAYOUT_SENT") { setView(isArtisan ? "earnings" : "home"); return; }
@@ -1673,11 +1693,15 @@ function BrowseView({ query, setQuery, tradeFilter, setTradeFilter, area, setAre
         {trades.map((t) => <button key={t.id} className={"chip" + (tradeFilter === t.id ? " chip--active" : "")} onClick={() => setTradeFilter(t.id)}>{t.label}</button>)}
       </div>
       <div className="bw-tools">
+      <div className="bw-row">
         <label className="bw-area"><MapPin size={14} /><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
+        <select className="bw-sort" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort"><option value="rating">Top rated</option><option value="jobs">Most jobs</option></select>
+      </div>
+      <div className="bw-row bw-row--chips">
         <button className={"bw-on" + (onlyOn ? " bw-on--yes" : "")} onClick={() => setOnlyOn(!onlyOn)}><i />Available now</button>
         <button className={"bw-on" + (top4 ? " bw-on--yes" : "")} onClick={() => setTop4(!top4)}>4.0 and up</button>
         <button className={"bw-on" + (savedOnly ? " bw-on--yes" : "")} onClick={() => setSavedOnly(!savedOnly)}>Saved{savedIds.length ? ` (${savedIds.length})` : ""}</button>
-        <select className="bw-sort" value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort"><option value="rating">Top rated</option><option value="jobs">Most jobs</option></select>
+      </div>
       </div>
       <div className="hm-list bw-list">
         {list.length === 0 && loading && <SkeletonCards />}
@@ -1708,8 +1732,8 @@ function HeartIcon({ on, size = 20 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill={on ? "#C0392B" : "none"} stroke={on ? "#C0392B" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /></svg>;
 }
 function FavHeart({ id, className }) {
-  const { ids, toggle } = React.useContext(EngageCtx);
-  if (!id) return null;
+  const { ids, toggle, token } = React.useContext(EngageCtx);
+  if (!id || !token) return null;
   const on = ids.includes(id);
   return <button type="button" className={"fav-btn " + (className || "")} aria-pressed={on} aria-label={on ? "Remove from saved" : "Save this artisan"} onClick={(e) => { e.stopPropagation(); toggle(id); }}><HeartIcon on={on} /></button>;
 }
@@ -2036,6 +2060,35 @@ function timeAgo(d) {
   return `${Math.floor(days / 30)} months ago`; 
 }
 
+function ShareRow({ a, mine }) {
+  const [copied, setCopied] = useState(false);
+  const url = `https://vettedhands.com.ng/?a=${a.id}`;
+  const trade = tradeLabel(a.trade).toLowerCase();
+  const text = mine
+    ? `Hire me on VettedHands. I'm a vetted ${trade} in ${a.area}, Ado-Ekiti. See my reviews and book safely: your payment is held until the job is done. ${url}`
+    : `I found ${a.user.name}, a vetted ${trade} on VettedHands (${fmtStars(a.rating)} stars). Your payment is held safely until the job is done. ${url}`;
+  async function copy() { try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (e) { /* ignore */ } }
+  return (
+    <div className="ap-share">
+      <a className="ap-wa" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">{mine ? "Share my page on WhatsApp" : "Share on WhatsApp"}</a>
+      <button type="button" className="ap-copy" onClick={copy}>{copied ? "Copied" : "Copy link"}</button>
+    </div>
+  );
+}
+function PublicArtisan({ id, onJoin, onClose }) {
+  const [a, setA] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    api(`/api/artisans/${id}`).then((d) => {
+      setA(d.artisan);
+      api(`/api/artisans/${id}/photos`).then((p) => setA((x) => (x ? { ...x, photos: p.photos } : x))).catch(() => {});
+    }).catch(() => setErr(true));
+  }, [id]);
+  if (err) return <div className="screen" style={{ padding: 24 }}><h2>This page isn't available</h2><p>The artisan may have moved or the link is old.</p><button className="primary-btn" onClick={onClose}>Go to VettedHands</button></div>;
+  if (!a) return <Splash />;
+  return <ArtisanProfileView artisan={a} canRequest banner="Shared with you. Join free to request this artisan." onBack={onClose} onRequest={onJoin} />;
+}
+
 function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, onBack, onRequest }) {
   const [busy, setBusy] = useState(false);
   const st = a.stats || null;
@@ -2084,6 +2137,7 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
         <div className="ap-stat"><b>{st ? st.repeatCustomers : "–"}</b><span>Repeat customers</span></div>
       </div>
       <div className={"ap-avail" + (a.online ? "" : " ap-avail--off")}><i />{a.online ? `Available now · ${a.area}` : `Currently unavailable · ${a.area}`}</div>
+      <ShareRow a={a} mine={!canRequest} />
 
       {(a.travelKm || (a.workDays && /^[01]{7}$/.test(a.workDays))) && (
         <div className="ap-sec">
@@ -3054,7 +3108,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onGoRe
         </div>
       )}
       {application && application.status === "PENDING" && (
-        <div className="cp-cta">
+        <div className="cp-cta" id="app-status">
           <h2>Application under review</h2>
           <p>We're checking your details. You'll become an artisan once an admin approves it.</p>
           {application.infoRequestNote && <p>VettedHands needs more info: "{application.infoRequestNote}"</p>}
@@ -3062,7 +3116,7 @@ function CustomerProfileView({ user, requests, application, onGoRequests, onGoRe
         </div>
       )}
       {application && application.status === "REJECTED" && (
-        <div className="cp-cta">
+        <div className="cp-cta" id="app-status">
           <h2>Application not approved</h2>
           <p>Your application wasn't approved this time. Reach out to support if you have questions.</p>
         </div>
@@ -5374,6 +5428,9 @@ function Style() {
       .hm-sec-head .hm-h { margin:0; }
       .hm-see { background:none; border:none; color:var(--primary); font-family:inherit; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:2px; cursor:pointer; padding:6px 0 6px 10px; }
       .hm-list { display:flex; flex-direction:column; gap:12px; }
+      .ap-share { display:flex; gap:10px; margin:12px 16px 0; }
+      .ap-wa { flex:1; height:46px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:#1E8E5A; color:#fff; font-weight:700; font-size:14px; text-decoration:none; text-align:center; padding:0 10px; }
+      .ap-copy { flex:none; padding:0 16px; height:46px; border-radius:14px; border:1px solid var(--line); background:var(--surface); color:var(--primary); font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; }
       .hm-ac-wrap { position:relative; }
       .hm-ac-wrap .hm-ac { width:100%; display:block; }
       .fav-btn { width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:none; border:none; color:var(--ink-soft); cursor:pointer; border-radius:50%; }
@@ -6063,6 +6120,15 @@ function Style() {
       .bw-on--yes { background:var(--primary); border-color:var(--primary); color:#fff; }
       .bw-on--yes i { background:#7ee0a8; }
       .bw-off { font-size:11px; font-weight:600; color:var(--ink-soft); background:var(--bg); border-radius:10px; padding:4px 8px; white-space:nowrap; }
+      .bw-tools { flex-direction:column; align-items:stretch; gap:8px; flex-wrap:nowrap; }
+      .bw-row { display:flex; align-items:center; gap:8px; }
+      .bw-row--chips { overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+      .bw-row--chips::-webkit-scrollbar { display:none; }
+      .bw-tools .bw-area, .bw-tools .bw-sort, .bw-tools .bw-on { height:40px; font-size:13px; }
+      .bw-tools .bw-area { flex:1 1 0; padding:0 8px 0 12px; }
+      .bw-tools .bw-area select { font-size:13px; }
+      .bw-tools .bw-sort { flex:none; max-width:none; padding:0 12px; font-size:13px; }
+      .bw-tools .bw-on { flex:none; }
       .bw-list { margin-top:14px; padding:0 16px 8px; }
       /* Blog */
       .bl { padding-bottom:8px; }

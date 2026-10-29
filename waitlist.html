@@ -129,8 +129,8 @@
     flex-wrap: wrap;
     justify-content: center;
   }
-  #waitlist-form input[type="email"] {
-    flex: 1;
+  #waitlist-form input[type="email"], #waitlist-form input[type="text"], #waitlist-form input[type="tel"] {
+    flex: 1 1 100%;
     min-width: 220px;
     padding: 14px 16px;
     border-radius: 10px;
@@ -140,7 +140,7 @@
     background: var(--surface);
     color: var(--ink);
   }
-  #waitlist-form input[type="email"]:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  #waitlist-form input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
   #waitlist-form button {
     padding: 14px 22px;
     border-radius: 10px;
@@ -305,13 +305,21 @@
           <label><input type="radio" name="role" value="artisan" /><span>I'm an artisan</span></label>
         </div>
         <select name="trade" id="trade-pick" hidden>
-          <option value="">Your trade (optional)</option>
-          <option>Electrician</option><option>Plumber</option><option>Tailor</option>
-          <option>Phone / laptop repair</option><option>Painter</option><option>Carpenter</option>
-          <option>Cleaner</option><option>Barber</option><option>Mechanic</option><option>Other</option>
+          <option value="">Your trade</option>
+          <option>Electrician</option><option>Plumber</option><option>Tailor / fashion designer</option>
+          <option>Phone repair</option><option>Laptop repair</option><option>Painter</option>
+          <option>Carpenter</option><option>Cleaner</option><option>Barber</option>
+          <option>Hair stylist / makeup artist</option><option>Mechanic</option><option>AC / fridge technician</option>
+          <option>Generator technician</option><option>Welder</option><option>Tiler / bricklayer</option>
+          <option>POP / ceiling</option><option>Photographer / videographer</option><option>Caterer / baker</option>
+          <option>Tutor</option><option>Graphic design / printing</option><option>Gardener</option>
+          <option>Laundry</option><option>Driver / delivery</option><option>Other (type it below)</option>
         </select>
+        <input type="text" name="trade_other" id="trade-other" placeholder="Type your trade or service" maxlength="60" hidden />
         <input type="hidden" name="source" id="src-field" value="" />
+        <input type="text" name="name" placeholder="Your name" required maxlength="80" autocomplete="name" />
         <input type="email" name="email" placeholder="you@email.com" required />
+        <input type="tel" name="whatsapp" placeholder="WhatsApp number (optional)" maxlength="20" autocomplete="tel" />
         <button type="submit">Join the waitlist</button>
       </form>
       <div id="form-success">You're on the list, we'll reach out as soon as VettedHands opens in your area.</div>
@@ -383,6 +391,7 @@
           </ul>
         </div>
       </div>
+      <p style="text-align:center; color:var(--ink-soft); font-size:14px; margin-top:18px;">Don't see your trade? Join anyway and tell us. We add new trades based on who joins.</p>
     </div>
   </section>
 
@@ -406,6 +415,7 @@
         <input type="hidden" name="role" id="role-2" value="customer" />
         <input type="hidden" name="source" id="src-2" value="" />
         <div style="display:flex; gap:10px; max-width:440px; margin:0 auto; flex-wrap:wrap; justify-content:center;">
+          <input type="text" name="name" placeholder="Your name" required maxlength="80" autocomplete="name" style="flex:1 1 100%; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
           <input type="email" name="email" placeholder="you@email.com" required style="flex:1; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
           <button type="submit" style="padding:14px 22px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-weight:600; font-size:15px; cursor:pointer; font-family:inherit;">Join the waitlist</button>
         </div>
@@ -460,7 +470,10 @@
       const radios = document.querySelectorAll('#waitlist-form input[name="role"]');
       const trade = document.getElementById("trade-pick");
       const role2 = document.getElementById("role-2");
-      function apply(v) { trade.hidden = v !== "artisan"; if (role2) role2.value = v; }
+      const other = document.getElementById("trade-other");
+      function syncOther() { other.hidden = !(trade.value.indexOf("Other") === 0 && !trade.hidden); }
+      trade.addEventListener("change", syncOther);
+      function apply(v) { trade.hidden = v !== "artisan"; syncOther(); if (role2) role2.value = v; }
       radios.forEach((x) => { x.checked = x.value === r; x.addEventListener("change", () => apply(x.value)); });
       apply(r);
       const src = (q.get("s") || "").slice(0, 40);
