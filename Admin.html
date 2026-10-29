@@ -205,7 +205,7 @@ async function api(path, { method = "GET", body, token } = {}) {
 /* ============ helpers ============ */
 const TRADES = { ELECTRICIAN: "Electrician", PLUMBER: "Plumber", TAILOR: "Tailor", PHONE_REPAIR: "Phone Repair", LAPTOP_REPAIR: "Laptop Repair", PAINTER: "Painter", CARPENTER: "Carpenter", CLEANER: "Cleaner" };
 const tradeLabel = (t) => TRADES[t] || String(t || "").toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-const NAV = [["dashboard", "Dashboard"], ["notifications", "Notifications"], ["applications", "Artisan Applications"],["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["payments", "Payments"], ["verification", "Verification"], ["settings", "Settings"]];
+const NAV = [["dashboard", "Dashboard"], ["notifications", "Notifications"], ["applications", "Artisan Applications"],["artisans", "Artisans"], ["customers", "Customers"], ["requests", "Service Requests"], ["active", "Active Jobs"], ["completed", "Completed Jobs"], ["reviews", "Reviews"], ["blog", "Blog"], ["reports", "Reports"], ["payments", "Payments"], ["verification", "Verification"], ["waitlist", "Waitlist"], ["settings", "Settings"]];
 const PAGES = NAV.map((n) => n[0]);
 const initials = (n = "") => n.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -392,6 +392,7 @@ function Shell({ token, user, onLogout }) {
   else if (page === "reports") body = <Reports {...c} />;
   else if (page === "payments") body = <Payments {...c} />;
   else if (page === "verification") body = <Verification {...c} />;
+  else if (page === "waitlist") body = <Waitlist {...c} />;
   else body = <Settings {...c} user={user} />;
 
   return (
@@ -446,6 +447,33 @@ function Dashboard({ statsRes, go }) {
           {((statsRes.data.referrals || {}).top || []).length === 0 ? <div className="empty" style={{ padding: 18 }}>No invites used yet.</div> : statsRes.data.referrals.top.map((t, i) => <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "9px 2px", borderTop: i ? "1px solid var(--line, #E5DECF)" : "none", fontSize: 14 }}><span>{t.name}</span><b>{t.count}</b></div>)}
         </div>
       </div>
+    </>
+  );
+}
+
+function Waitlist({ token }) {
+  const res = useFetch(token, "/api/admin/waitlist");
+  const [f, setF] = useState("all");
+  const w = wait(res); if (w) return w;
+  const { total, artisans, customers, entries } = res.data;
+  const rows = entries.filter((e) => f === "all" || e.role === f);
+  return (
+    <>
+      <Head title="Waitlist" sub={`${total} ${total === 1 ? "person" : "people"} on the list`}
+        right={<button className="btn" onClick={() => downloadCsv([["Name", "Email", "WhatsApp", "Type", "Trade", "Source", "Joined"], ...entries.map((e) => [e.name, e.email, e.whatsapp || "", e.role, e.trade || "", e.source || "", fmtDate(e.createdAt)])], "waitlist.csv")}>Export CSV</button>} />
+      <div className="stats">
+        <div className="stat"><div className="stat-l">Total</div><div className="stat-n">{total}</div></div>
+        <div className="stat"><div className="stat-l">Artisans</div><div className="stat-n">{artisans}</div></div>
+        <div className="stat"><div className="stat-l">Customers</div><div className="stat-n">{customers}</div></div>
+      </div>
+      <Chips items={[["all", "All", total], ["artisan", "Artisans", artisans], ["customer", "Customers", customers]]} value={f} onChange={setF} />
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Name</th><th>Email</th><th>WhatsApp</th><th>Type</th><th>Trade</th><th>Source</th><th>Joined</th></tr></thead>
+        <tbody>
+          {rows.length === 0 && <tr><td colSpan="7" className="soft" style={{ padding: 18 }}>Nobody here yet.</td></tr>}
+          {rows.map((e) => <tr key={e.id}><td><b>{e.name}</b></td><td>{e.email}</td><td>{e.whatsapp ? <a href={`https://wa.me/${String(e.whatsapp).replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">{e.whatsapp}</a> : "—"}</td><td>{e.role}</td><td>{e.trade || "—"}</td><td>{e.source || "—"}</td><td>{fmtDate(e.createdAt)}</td></tr>)}
+        </tbody>
+      </table></div>
     </>
   );
 }

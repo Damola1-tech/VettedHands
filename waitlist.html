@@ -304,7 +304,7 @@
           <label><input type="radio" name="role" value="customer" checked /><span>I need an artisan</span></label>
           <label><input type="radio" name="role" value="artisan" /><span>I'm an artisan</span></label>
         </div>
-        <select name="trade" id="trade-pick" hidden>
+        <select name="trade" id="trade-pick" aria-label="Your trade" hidden>
           <option value="">Your trade</option>
           <option>Electrician</option><option>Plumber</option><option>Tailor / fashion designer</option>
           <option>Phone repair</option><option>Laptop repair</option><option>Painter</option>
@@ -315,15 +315,16 @@
           <option>Tutor</option><option>Graphic design / printing</option><option>Gardener</option>
           <option>Laundry</option><option>Driver / delivery</option><option>Other (type it below)</option>
         </select>
-        <input type="text" name="trade_other" id="trade-other" placeholder="Type your trade or service" maxlength="60" hidden />
+        <input type="text" name="trade_other" id="trade-other" aria-label="Your trade or service" placeholder="Type your trade or service" maxlength="60" hidden />
         <input type="hidden" name="source" id="src-field" value="" />
-        <input type="text" name="name" placeholder="Your name" required maxlength="80" autocomplete="name" />
-        <input type="email" name="email" placeholder="you@email.com" required />
-        <input type="tel" name="whatsapp" placeholder="WhatsApp number (optional)" maxlength="20" autocomplete="tel" />
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />
+        <input type="text" name="name" placeholder="Your name" aria-label="Your name" required maxlength="80" autocomplete="name" />
+        <input type="email" name="email" placeholder="you@email.com" aria-label="Your email" required />
+        <input type="tel" name="whatsapp" aria-label="WhatsApp number" placeholder="WhatsApp number (optional)" maxlength="20" autocomplete="tel" />
         <button type="submit">Join the waitlist</button>
       </form>
       <div id="form-success">You're on the list, we'll reach out as soon as VettedHands opens in your area.</div>
-      <div class="form-note">No spam. Just one email when we launch.</div>
+      <div class="form-note">No spam. We message you once when we launch. By joining you agree to be contacted about VettedHands. We never sell your details.</div>
 
       <div class="trust-strip">
         <span>✓ Vetted before listing</span>
@@ -387,7 +388,7 @@
             <li><span class="dot"></span>Mechanic</li>
             <li><span class="dot"></span>Tutor</li>
             <li><span class="dot"></span>AC technician</li>
-            <li><span class="dot"></span>Carpenter</li>
+            <li><span class="dot"></span>Hair stylist</li>
           </ul>
         </div>
       </div>
@@ -401,7 +402,7 @@
       <h2 class="section-title">Get found. Get paid. Get trusted.</h2>
       <div class="steps">
         <div class="step"><h3>Customers come to you</h3><p>Show your work, your rating and your availability to people who are ready to book.</p></div>
-        <div class="step"><h3>You're paid, guaranteed</h3><p>The customer's money is secured before you start, and sent to your bank when the job is confirmed.</p></div>
+        <div class="step"><h3>Get paid with confidence</h3><p>The customer's money is secured before you start, and sent to your bank when the job is confirmed.</p></div>
         <div class="step"><h3>Registered businesses first</h3><p>We verify artisans with their CAC registration. Not registered yet? We'll guide you to get it done.</p></div>
       </div>
     </div>
@@ -414,9 +415,10 @@
       <form class="waitlist-form-2" action="https://formspree.io/f/mrpgwrvy" method="POST" id="waitlist-form-2">
         <input type="hidden" name="role" id="role-2" value="customer" />
         <input type="hidden" name="source" id="src-2" value="" />
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />
         <div style="display:flex; gap:10px; max-width:440px; margin:0 auto; flex-wrap:wrap; justify-content:center;">
-          <input type="text" name="name" placeholder="Your name" required maxlength="80" autocomplete="name" style="flex:1 1 100%; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
-          <input type="email" name="email" placeholder="you@email.com" required style="flex:1; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
+          <input type="text" name="name" aria-label="Your name" placeholder="Your name" required maxlength="80" autocomplete="name" style="flex:1 1 100%; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
+          <input type="email" name="email" aria-label="Your email" placeholder="you@email.com" required style="flex:1; min-width:220px; padding:14px 16px; border-radius:10px; border:1px solid var(--line); font-size:15px; font-family:inherit;" />
           <button type="submit" style="padding:14px 22px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-weight:600; font-size:15px; cursor:pointer; font-family:inherit;">Join the waitlist</button>
         </div>
       </form>
@@ -438,11 +440,20 @@
         btn.disabled = true;
 
         try {
-          const res = await fetch(form.action, {
-            method: "POST",
-            body: new FormData(form),
-            headers: { Accept: "application/json" },
-          });
+          const fd = new FormData(form);
+          const payload = {};
+          fd.forEach((v, k) => { payload[k] = v; });
+          let res;
+          try {
+            res = await fetch("https://vettedhands-backend.onrender.com/api/waitlist", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          } catch (netErr) {
+            // our server is unreachable: do not lose the sign-up, send it to the backup form
+            res = await fetch(form.action, { method: "POST", body: fd, headers: { Accept: "application/json" } });
+          }
           if (res.ok) {
             form.style.display = "none";
             const orig = document.getElementById("form-success");
