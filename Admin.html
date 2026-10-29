@@ -435,12 +435,16 @@ function Dashboard({ statsRes, go }) {
         <Card l="Active jobs" n={s.activeJobs} sub="Accepted or in progress" to="active" />
         <Card l="Completed jobs" n={s.completedJobs} sub={`${s.completedThisWeek} this week`} to="completed" />
         <Card l="Open reports" n={s.openReports} tone="red" sub={`${s.fraudReports} flagged as fraud`} to="reports" />
+        <Card l="Joined by invite" n={(statsRes.data.referrals || {}).total || 0} sub={((statsRes.data.referrals || {}).top || [])[0] ? `Top inviter: ${statsRes.data.referrals.top[0].name}` : "Nobody yet"} />
       </div>
       <div className="grid2">
         <div className="card"><div className="card-h"><h3>Service requests over time</h3><span className="soft">Per week · {last(series.requests)} this week</span></div><LineChart data={series.requests} /></div>
         <div className="card"><div className="card-h"><h3>Completed jobs</h3><span className="soft">Per week · {last(series.completed)} this week</span></div><BarChart data={series.completed} color="#0F4D3A" /></div>
         <div className="card"><div className="card-h"><h3>New artisans</h3><span className="soft">Approved per week · {last(series.artisans)} this week</span></div><BarChart data={series.artisans} color="#1B6650" /></div>
         <div className="card"><div className="card-h"><h3>Popular services</h3><span className="soft">Requests, all time</span></div><HBars data={popular} /></div>
+        <div className="card"><div className="card-h"><h3>Top inviters</h3><span className="soft">People who joined with their link</span></div>
+          {((statsRes.data.referrals || {}).top || []).length === 0 ? <div className="empty" style={{ padding: 18 }}>No invites used yet.</div> : statsRes.data.referrals.top.map((t, i) => <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "9px 2px", borderTop: i ? "1px solid var(--line, #E5DECF)" : "none", fontSize: 14 }}><span>{t.name}</span><b>{t.count}</b></div>)}
+        </div>
       </div>
     </>
   );

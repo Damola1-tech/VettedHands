@@ -48,6 +48,8 @@ const { useState, useMemo, useRef, useEffect } = React;
 
 /* ============ CONFIG ============ */
 const API_BASE = "https://vettedhands-backend.onrender.com";
+// Wake the server up as soon as the page opens, so the first real request is not slow.
+try { fetch(API_BASE + "/api/health", { mode: "no-cors", cache: "no-store" }).catch(() => {}); } catch (e) { /* ignore */ }
 
 /* ============ PUSH HELPERS ============ */
 function urlB64ToUint8(b64) {
@@ -1726,8 +1728,10 @@ function InviteCard() {
   return (
     <div className="inv">
       <div className="inv-t"><b>Invite a friend</b><span>{d.count > 0 ? `${d.count} ${d.count === 1 ? "person has" : "people have"} joined with your link` : "Share your link. Good artisans and good customers come from people you trust."}</span></div>
-      <div className="inv-code">{d.code}</div>
-      <button type="button" className="inv-btn" onClick={share}>{copied ? "Link copied" : "Share my link"}</button>
+      <div className="inv-row">
+        <div className="inv-code">{d.code}</div>
+        <button type="button" className="inv-btn" onClick={share}>{copied ? "Copied" : "Share link"}</button>
+      </div>
     </div>
   );
 }
@@ -2055,8 +2059,10 @@ function ArtisanProfileView({ artisan: a, canRequest, summary, banner, footer, o
     <div className="screen ap">
       {banner && <div className="ap-banner">{banner}</div>}
       <div className="ap-hero">
-        {onBack ? <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button> : <div style={{ height: 12 }} />}
-        {canRequest && <FavHeart id={a.id} className="fav-btn--hero" />}
+        <div className="ap-toprow">
+          {onBack ? <button className="ap-back" onClick={onBack} aria-label="Back"><ArrowLeft size={22} /></button> : <div style={{ height: 12 }} />}
+          {canRequest && <FavHeart id={a.id} className="fav-btn--hero" />}
+        </div>
         <div className="ap-id">
           <span className="ap-av">{a.user.avatarUrl ? <img src={a.user.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials(a.user.name)}</span>
           <div>
@@ -5372,14 +5378,16 @@ function Style() {
       .hm-ac-wrap .hm-ac { width:100%; display:block; }
       .fav-btn { width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:none; border:none; color:var(--ink-soft); cursor:pointer; border-radius:50%; }
       .fav-btn--card { position:absolute; right:6px; bottom:4px; }
-      .fav-btn--hero { position:absolute; right:10px; top:6px; color:#F4EFE0; background:rgba(255,255,255,.12); }
-      .ap-hero { position:relative; }
+      .fav-btn--hero { margin-right:-6px; color:#F4EFE0; background:rgba(255,255,255,.12); }
       .bw-tools { flex-wrap:wrap; }
-      .inv { margin:14px 16px 0; padding:16px; background:var(--surface); border:1px solid var(--line); border-radius:16px; display:flex; flex-direction:column; gap:10px; }
+      .inv { margin:0 0 12px; padding:16px; background:var(--surface); border:1px solid var(--line); border-radius:16px; display:flex; flex-direction:column; gap:10px; }
       .inv-t b { display:block; font-family:'Bricolage Grotesque',sans-serif; font-size:16px; }
       .inv-t span { font-size:12.5px; color:var(--ink-soft); line-height:1.45; }
-      .inv-code { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:22px; letter-spacing:3px; color:var(--primary); background:var(--accent-bg); border-radius:10px; padding:10px 14px; text-align:center; }
-      .inv-btn { height:44px; border:none; border-radius:12px; background:var(--primary); color:#fff; font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; }
+      .inv-row { display:flex; gap:10px; align-items:stretch; }
+      .inv-code { flex:1; min-width:0; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:18px; letter-spacing:2px; color:var(--primary); background:var(--accent-bg); border-radius:12px; padding:0 10px; height:48px; white-space:nowrap; }
+      .inv-btn { flex:none; padding:0 18px; height:48px; border:none; border-radius:12px; background:var(--primary); color:#fff; font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; }
+      .cp .inv { margin:14px 0 0; }
+      .ap-toprow { display:flex; align-items:center; justify-content:space-between; }
       .tour-back { position:fixed; inset:0; z-index:60; background:rgba(15,40,30,.62); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:20px; }
       .tour-card { width:100%; max-width:380px; background:var(--surface); border-radius:22px; padding:26px 22px 18px; box-shadow:0 30px 60px -20px rgba(0,0,0,.45); text-align:center; }
       .tour-card h2 { margin:14px 0 8px; font-family:'Bricolage Grotesque',sans-serif; font-size:22px; line-height:1.15; }
