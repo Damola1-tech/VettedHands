@@ -1006,8 +1006,9 @@ function Reports({ token, flash, refreshStats }) {
 function ReportDetail({ token, id, flash, onChanged }) {
   const res = useFetch(token, `/api/admin/reports/${id}`);
   if (!res.data) return <div className="card empty">{res.error || "Loading…"}</div>;
-  const { report: r, artisan, messages, priorReports, recentReports } = res.data;
+  const { report: r, artisan, messages, priorReports, recentReports, payments } = res.data;
   const closed = r.status === "RESOLVED" || r.status === "DISMISSED";
+  const feed = [...messages.map((m) => ({ k: "m", at: m.createdAt, m })), { k: "r", at: r.createdAt }].sort((a, b) => new Date(a.at) - new Date(b.at));
   async function act(status, ask) {
     let note = ""; if (ask) { const v = window.prompt(ask); if (v === null) return; note = v; }
     try { await api(`/api/admin/reports/${id}`, { method: "PATCH", token, body: { status, note } }); flash("Report updated"); res.reload(); onChanged(); } catch (e) { flash(e.message); }
@@ -1025,14 +1026,25 @@ function ReportDetail({ token, id, flash, onChanged }) {
         <div><label>Reported</label><b>{r.reportedName} ({r.reportedRole})</b></div>
         <div><label>Request</label><b>{r.job}</b></div>
       </div>
+      {payments && payments.length > 0 && <div className="stmt"><b>Payment:</b> {payments.map((p) => `${p.addOnId ? "Extra work " : ""}₦${(p.amount / 100).toLocaleString()} · ${(PAY_STATUS[p.status] || [p.status])[0]}${p.refundAmount ? ` (₦${(p.refundAmount / 100).toLocaleString()} refunded)` : ""}`).join("  |  ")} <span className="soft">Decide it on the Payments page.</span></div>}
       {r.reportedRole === "artisan" && <div style={{ marginTop: 14 }}><label className="lbl">Artisan record</label><b>{artisan.jobsCompleted} jobs · {Number(artisan.rating).toFixed(1)} ★ · {plural(priorReports, "prior report")}</b></div>}
       <div className="stmt"><b>{r.reporterRole === "artisan" ? "Artisan" : "Customer"} statement:</b> {r.note ? `"${r.note}"` : <span className="soft">No details were added.</span>}</div>
       <div className="stmt"><b>Response from {r.reportedName} ({r.reportedRole}):</b> {r.respondentNote ? `"${r.respondentNote}"` : <span className="soft">No response yet.</span>}</div>
       <div className="h4">Timeline from the request log</div>
       <ul className="tl">
-        {messages.map((m) => <li key={m.id}><time>{fmtTime(m.createdAt)}</time><span>{m.audio ? <>{m.senderType === "CUSTOMER" ? "Customer" : "Artisan"}: voice note ({m.audioSecs || 0}s)<br /><audio controls preload="none" src={m.audio} style={{ height: 34, marginTop: 4, maxWidth: "100%" }} /></> : m.senderType === "SYSTEM" ? m.text : `${m.senderType === "CUSTOMER" ? "Customer" : "Artisan"}: "${m.text}"`}</span></li>)}
-        <li><time>{fmtTime(r.createdAt)}</time><span><b>Report filed: {r.reason}</b></span></li>
+        {feed.map((x) => {
+          if (x.k === "r") return <li key="rep"><time>{fmtTime(x.at)}</time><span><b>Report filed: {r.reason}</b></span></li>;
+          const m = x.m; const who = m.senderType === "CUSTOMER" ? "Customer" : "Artisan";
+          return (
+            <li key={m.id}><time>{fmtTime(m.createdAt)}</time><span>
+              {m.audio ? <>{who}: voice note ({m.audioSecs || 0}s)<br /><audio controls preload="none" src={m.audio} style={{ height: 34, marginTop: 4, maxWidth: "100%" }} /></>
+                : m.senderType === "SYSTEM" ? m.text
+                : <>{who}{m.text && m.text !== "Photo" ? `: "${m.text}"` : ": sent a photo"}{m.imageUrl && <><br /><a href={m.imageUrl} target="_blank" rel="noreferrer"><img src={m.imageUrl} alt="Photo from the chat" loading="lazy" style={{ marginTop: 4, maxWidth: 180, maxHeight: 180, borderRadius: 8 }} /></a></>}</>}
+            </span></li>
+          );
+        })}
       </ul>
+      {messages.length >= 300 && <p className="soft">Showing the latest 300 messages.</p>}
       {r.reportedRole === "artisan" && recentReports > 0 && <div className="callout"><b>Pattern:</b> {artisan.name} has {plural(recentReports, "other report")} in the last 30 days.</div>}
       {r.resolutionNote && <p className="soft" style={{ marginTop: 14 }}>Resolution note: {r.resolutionNote}</p>}
       <div className="acts">
