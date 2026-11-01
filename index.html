@@ -5844,6 +5844,8 @@ function Style() {
 
       /* ===== Artisan profile (customer view) ===== */
       .ap { padding-bottom:0; }
+      .phone > .screen.ap { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+      @media (min-width:760px) { .phone > .screen.ap { width:100%; max-width:720px; margin:0 auto; } }
       .ap-hero { background:linear-gradient(135deg,#0F4D3A 0%,#0A3A2B 100%); color:#F4EFE0; padding:calc(14px + env(safe-area-inset-top)) 20px 62px; }
       .ap-back { background:none; border:none; color:#F4EFE0; width:40px; height:40px; margin-left:-10px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
       .ap-id { display:flex; align-items:center; gap:16px; margin-top:8px; }
