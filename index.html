@@ -1262,12 +1262,18 @@ await payWithPopup(d);
     } catch (e) { fail(e); }
   }
   async function toggleOnline(next) {
+    // Switch the screen at once, then confirm with the server. If the server says no, switch it back.
+    const before = user && user.artisanProfile ? user.artisanProfile.online : !next;
+    setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: next } }));
+    flash(next ? "You're online" : "You're offline");
     try {
       const d = await api("/api/artisans/me/online", { method: "PATCH", token, body: { online: next } });
       setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: d.artisan.online } }));
-      flash(next ? "You're online" : "You're offline");
       return d.artisan;
-    } catch (e) { fail(e); }
+    } catch (e) {
+      setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: before } }));
+      fail(e);
+    }
   }
   async function setBadge(badge) {
     try {
@@ -3273,9 +3279,8 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
   const rs = repeatStats(requests, user.id);
   const fresh = requests.filter((r) => r.status === "PENDING" && r.artisanProfile.user.id === user.id);
   async function setOnline(next) {
-    if (busy || next === ap.online) return;
-    setBusy(true);
-    try { await onToggleOnline(next); } finally { setBusy(false); }
+    if (next === ap.online) return;
+    await onToggleOnline(next);
   }
   return (
     <div className="screen ah">
@@ -3307,7 +3312,7 @@ function ArtisanHome({ user, requests, myReviews, onToggleOnline, onOpenNotifs, 
             <div className="ah-avail-t"><i />{ap.online ? "Available for jobs" : "Unavailable"}</div>
             <p>{ap.online ? `Customers near ${ap.area} can see you and send requests.` : "Customers can't see you or send requests right now."}</p>
           </div>
-          <button className={"toggle" + (ap.online ? " toggle--on" : "")} disabled={busy} onClick={() => setOnline(!ap.online)} aria-label="Toggle availability"><span className="toggle-knob" /></button>
+          <button className={"toggle" + (ap.online ? " toggle--on" : "")} onClick={() => setOnline(!ap.online)} aria-label="Toggle availability"><span className="toggle-knob" /></button>
         </div>
         <div className="ah-seg">
           <button className={ap.online ? "on" : ""} onClick={() => setOnline(true)}>Available</button>
