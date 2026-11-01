@@ -6384,16 +6384,18 @@ function Style() {
         .phone { position:relative; }
         .content::after { content:""; display:block; flex:0 0 calc(96px + var(--sab, env(safe-area-inset-bottom))); }
         .content:has(+ .bottomnav--hide)::after { display:none; }
-        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:7px; gap:2px; background:linear-gradient(135deg,rgba(24,52,43,.52),rgba(14,38,30,.4)); -webkit-backdrop-filter:blur(28px) saturate(2); backdrop-filter:blur(28px) saturate(2); border:1px solid rgba(255,255,255,.28); border-radius:999px; box-shadow:0 14px 30px -14px rgba(8,30,22,.5), inset 0 1px 0 rgba(255,255,255,.35); }
+        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:5px; gap:2px; background:rgba(255,255,255,.10); -webkit-backdrop-filter:blur(14px) saturate(1.9) brightness(1.04); backdrop-filter:blur(14px) saturate(1.9) brightness(1.04); border:1px solid rgba(255,255,255,.6); border-radius:999px; box-shadow:0 10px 26px -16px rgba(20,32,27,.35), inset 0 1px 0 rgba(255,255,255,.8), inset 0 -1px 0 rgba(255,255,255,.25); }
         .phone .bottomnav--hide { display:none; }
-        .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:0; padding:12px 0; border-radius:999px; color:rgba(255,255,255,.88); filter:drop-shadow(0 1px 1px rgba(8,30,22,.35)); transition:background .25s ease, color .2s ease, transform .15s ease; }
+        .phone .nav-item { flex:1; flex-direction:row; align-items:center; justify-content:center; gap:7px; padding:11px 0; border-radius:999px; color:rgba(15,77,58,.72); font-size:13px; font-weight:700; transition:background .25s ease, color .2s ease, flex-grow .3s ease, transform .15s ease; }
         .phone .nav-item > span:last-child { display:none; }
+        .phone .nav-item--active { flex:1.9; }
+        .phone .nav-item--active > span:last-child { display:inline; }
         .phone .nav-item:active { transform:scale(.94); }
-        .phone .nav-item--active { background:rgba(255,255,255,.3); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.4); }
+        .phone .nav-item--active { background:rgba(255,255,255,.55); color:#0F4D3A; box-shadow:0 4px 12px -6px rgba(20,32,27,.3), inset 0 1px 0 rgba(255,255,255,.9); }
         .phone .nav-item--active .nav-icon-wrap { animation:navPop .38s cubic-bezier(.3,1.6,.5,1); }
         @keyframes navPop { 0% { transform:scale(.8) translateY(2px); } 100% { transform:scale(1) translateY(0); } }
         .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
-        .phone .nav-badge { top:-6px; right:-10px; border:2px solid rgba(255,255,255,.9); box-sizing:content-box; line-height:1.15; box-shadow:0 2px 4px rgba(20,32,27,.25); }
+        .phone .nav-badge { top:-6px; right:-10px; border:2px solid #fff; box-sizing:content-box; line-height:1.15; box-shadow:0 2px 4px rgba(20,32,27,.25); }
         .toast { bottom:calc(100px + var(--sab, env(safe-area-inset-bottom))); }
         /* Short installed window: no home-bar gap to respect, and cards fade out softly at the bottom edge instead of being cut off */
         html.short { --sab:0px; }
