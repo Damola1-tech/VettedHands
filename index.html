@@ -5129,8 +5129,8 @@ function BottomNav({ active, onChange, isArtisan, requestCount, messageCount, hi
   return (
     <div className={"bottomnav" + (hide ? " bottomnav--hide" : "")}>
       {items.map((it) => { const I = it.icon; const isActive = active === it.id; return (
-        <button key={it.id} className={"nav-item" + (isActive ? " nav-item--active" : "")} onClick={() => onChange(it.id)}>
-          <span className="nav-icon-wrap"><I size={19} strokeWidth={isActive ? 2.4 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
+        <button key={it.id} aria-label={it.label} title={it.label} className={"nav-item" + (isActive ? " nav-item--active" : "")} onClick={() => onChange(it.id)}>
+          <span className="nav-icon-wrap"><I size={24} strokeWidth={isActive ? 2.5 : 2} />{it.badge > 0 && <span className="nav-badge">{it.badge}</span>}</span>
           <span>{it.label}</span>
         </button>
       ); })}
@@ -6384,15 +6384,16 @@ function Style() {
         .phone { position:relative; }
         .content::after { content:""; display:block; flex:0 0 calc(96px + var(--sab, env(safe-area-inset-bottom))); }
         .content:has(+ .bottomnav--hide)::after { display:none; }
-        .phone .bottomnav { position:absolute; left:16px; right:16px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:6px; gap:2px; background:linear-gradient(135deg,rgba(255,255,255,.62),rgba(255,255,255,.38)); -webkit-backdrop-filter:blur(26px) saturate(2); backdrop-filter:blur(26px) saturate(2); border:1px solid rgba(255,255,255,.75); border-radius:999px; box-shadow:0 18px 36px -14px rgba(20,32,27,.45), 0 4px 10px -4px rgba(20,32,27,.12), inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(20,32,27,.06); }
+        .phone .bottomnav { position:absolute; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:20; padding:7px; gap:2px; background:rgba(12,52,40,.9); -webkit-backdrop-filter:blur(22px) saturate(1.6); backdrop-filter:blur(22px) saturate(1.6); border:1px solid rgba(255,255,255,.1); border-radius:999px; box-shadow:0 16px 34px -12px rgba(8,30,22,.6), 0 3px 8px -3px rgba(8,30,22,.3); }
         .phone .bottomnav--hide { display:none; }
-        .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:3px; padding:9px 0 8px; border-radius:999px; font-size:10.5px; font-weight:600; letter-spacing:.01em; color:var(--ink-soft); transition:background .28s ease, color .2s ease, transform .15s ease, box-shadow .28s ease; }
+        .phone .nav-item { flex:1; flex-direction:column; justify-content:center; gap:0; padding:12px 0; border-radius:999px; color:rgba(245,240,228,.72); transition:background .25s ease, color .2s ease, transform .15s ease; }
+        .phone .nav-item > span:last-child { display:none; }
         .phone .nav-item:active { transform:scale(.94); }
-        .phone .nav-item--active { background:linear-gradient(180deg,rgba(20,100,75,.94) 0%,rgba(15,77,58,.94) 100%); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); color:#fff; box-shadow:0 8px 16px -8px rgba(15,77,58,.8), inset 0 1px 0 rgba(255,255,255,.18); }
+        .phone .nav-item--active { background:rgba(245,240,228,.2); color:#fff; }
         .phone .nav-item--active .nav-icon-wrap { animation:navPop .38s cubic-bezier(.3,1.6,.5,1); }
         @keyframes navPop { 0% { transform:scale(.8) translateY(2px); } 100% { transform:scale(1) translateY(0); } }
         .phone .nav-icon-wrap, .phone .nav-item--active .nav-icon-wrap { padding:0; background:none; border-radius:0; }
-        .phone .nav-badge { top:-6px; right:-10px; border:2px solid #fff; box-sizing:content-box; line-height:1.15; box-shadow:0 2px 4px rgba(20,32,27,.25); }
+        .phone .nav-badge { top:-6px; right:-10px; border:2px solid #0C3428; box-sizing:content-box; line-height:1.15; box-shadow:0 2px 4px rgba(20,32,27,.25); }
         .toast { bottom:calc(100px + var(--sab, env(safe-area-inset-bottom))); }
         /* Short installed window: no home-bar gap to respect, and cards fade out softly at the bottom edge instead of being cut off */
         html.short { --sab:0px; }
