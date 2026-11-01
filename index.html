@@ -868,10 +868,14 @@ useEffect(() => {
 
   useEffect(() => { loadArtisans(); }, [tradeFilter, area, query]);
   useEffect(() => { loadRequests(); loadOpenGroups(); loadApplication(); loadNotifs(); }, []);
-  useEffect(() => {
+  function loadMyReviews() {
     if (!isArtisan) return;
     api("/api/artisans/me/reviews", { token }).then((d) => setMyReviews(d.reviews)).catch(() => {});
-  }, [isArtisan]);
+  }
+  useEffect(() => { loadMyReviews(); }, [isArtisan]);
+  // Reload the reviews as soon as a new rated job shows up in the requests list, so a fresh review appears without reopening the app.
+  const ratedCount = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
+  useEffect(() => { loadMyReviews(); }, [ratedCount]);
   // Background refresh of requests every 8s so the nav badge count and requests/messages
   // lists stay roughly current even when the user isn't actively viewing a conversation.
   useEffect(() => {
