@@ -1046,6 +1046,7 @@ useEffect(() => {
   }
 
   const [askGroup, setAskGroup] = useState(null);
+  const [doneAsk, setDoneAsk] = useState(null); // { id, busy, err }: asks the artisan for a photo of the finished work
 const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when accepting // { args, groups } while we ask "same job?"
   // Open jobs (still waiting or accepted) that this artisan is not already part of
   function openJobsFor(artisanProfileId) {
@@ -1222,9 +1223,22 @@ await payWithPopup(d);
     try {
       const d = await api(`/api/requests/${requestId}/${action}`, { method: "PATCH", token });
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, ...d.request } : r)));
-      flash(action === "start" ? "Job started" : "Marked done. Waiting for the customer to confirm");
+      flash(action === "start" ? "Job started. When you finish, send a photo of the work to mark it done." : "Marked done. Waiting for the customer to confirm");
       return true;
     } catch (e) { fail(e); }
+  }
+  // Marking a job done needs a photo of the finished work: ask for it, send it in the chat, then mark done.
+  async function doneWithPhoto(file) {
+    if (!file || !doneAsk) return;
+    const id = doneAsk.id;
+    setDoneAsk({ id, busy: true, err: null });
+    try {
+      const image = await fileToDataUrl(file, 1200, 0.75);
+      const d = await api(`/api/requests/${id}/messages`, { method: "POST", token, body: { image } });
+      setMessages((prev) => (activeRequest && activeRequest.id === id ? [...prev, d.message] : prev));
+      await jobAction(id, "done");
+      setDoneAsk(null);
+    } catch (e) { setDoneAsk({ id, busy: false, err: (e && e.message) || "Could not send the photo. Try again." }); }
   }
   async function cancelAction(requestId, path, method, body, okMsg) {
     try {
@@ -1408,7 +1422,7 @@ await payWithPopup(d);
           <RequestsListView requests={requests} user={user} onOpen={(id) => openTrack(id)}
             onRequestService={() => { setWiz({ ...blankWiz }); setView("wizard"); }}
             onCheckAvailability={() => goNav("home")}
-            onJob={jobAction}
+            onJob={(id, a) => (a === "done" ? setDoneAsk({ id, busy: false, err: null }) : jobAction(id, a))}
             onRespond={respondToRequest} />
         )}
         {view === "track" && activeRequest && (
@@ -1419,7 +1433,7 @@ await payWithPopup(d);
             onRespond={(status) => respondToRequest(activeRequest.id, status)}
             onReview={() => setView("review")}
             onStart={() => jobAction(activeRequest.id, "start")}
-            onDone={() => jobAction(activeRequest.id, "done")}
+            onDone={() => setDoneAsk({ id: activeRequest.id, busy: false, err: null })}
             onReport={() => setView("report")}
             onReceipt={() => { setReceiptReq(activeRequest.id); setView("receipts"); }}
             onBookAgain={() => bookAgain(activeRequest.artisanProfileId)}
@@ -1519,8 +1533,22 @@ await payWithPopup(d);
           </div>
         </div>
       )}
+      {doneAsk && (
+        <div className="sg-back" onClick={() => !doneAsk.busy && setDoneAsk(null)}>
+          <div className="sg-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Send a photo of the finished work</h3>
+            <p>A clear photo protects you if the customer disputes the job. It goes into the chat and the job is marked done.</p>
+            {doneAsk.err && <div className="auth-err" style={{ marginTop: 10 }}>{doneAsk.err}</div>}
+            <label className="primary-btn" style={{ margin: "12px 0 0", display: "block", textAlign: "center", cursor: "pointer", opacity: doneAsk.busy ? .6 : 1, pointerEvents: doneAsk.busy ? "none" : "auto" }}>
+              {doneAsk.busy ? "Sending…" : "Choose or take a photo"}
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files[0]; e.target.value = ""; doneWithPhoto(f); }} />
+            </label>
+            <button className="sg-x" disabled={doneAsk.busy} onClick={() => setDoneAsk(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {priceAsk && (
-  <div className="sg-back" onClick={() => !priceAsk.busy && setPriceAsk(null)}>
+  <div className="sg-back" onClick={() => !priceAsk.busy && setPriceAsk(null)}> onClick={() => !priceAsk.busy && setPriceAsk(null)}>
     <div className="sg-card" onClick={(e) => e.stopPropagation()}>
       <h3>Set your price</h3>
       <p>The customer pays this amount to VettedHands first. We hold it safely and release it to you when the job is confirmed. VettedHands keeps a small commission.</p>
@@ -2765,6 +2793,7 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
           </div>
         )}
         {artisanSide && booked && <button className="tk-btn" disabled={busy} onClick={() => run(onStart)}>{busy ? "Starting…" : "Start job"}</button>}
+        {artisanSide && working && <div className="tk-note">When the work is finished, tap Mark job done and send a photo of it. It protects you if there is a dispute.</div>}
         {artisanSide && working && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
         {!artisanSide && waitingConfirm && !disputed && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
         {!artisanSide && waitingConfirm && disputed && <div className="tk-note">This job is under review by VettedHands. We will decide what happens to the payment and update you here.</div>}
