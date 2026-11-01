@@ -1268,7 +1268,7 @@ function Settings({ token, flash, statsRes, reloadServices }) {
   const doClear = () => run("clear", async () => {
     const r = await api("/api/admin/clear-data", { method: "POST", token, body: { confirm: "CLEAR" } });
     setClear({ open: false, text: "" }); res.reload(); if (statsRes && statsRes.reload) statsRes.reload();
-    flash(`Cleared ${r.removedUsers} accounts and everything that belonged to them`);
+    flash(`Deleted ${r.removedUsers} test account(s) and their data`);
   });
   return (
     <>
@@ -1319,8 +1319,8 @@ function Settings({ token, flash, statsRes, reloadServices }) {
 
         <AgentsCard token={token} flash={flash} />
         <div className="card" style={{ borderColor: "#E9C7BD" }}><h3 style={{ color: "var(--red)" }}>Clear test data</h3>
-          <p className="soft">Deletes every customer and artisan account, with their requests, messages, reports, reviews, posts and notifications. Admin accounts stay. Uploaded photos stay on Cloudinary. This cannot be undone.</p>
-          <div className="vrow"><span>Accounts to delete</span><b>{d.counts.users}</b></div>
+          <p className="soft">Deletes only TEST accounts: any account whose email contains "+test" (for example yourname+test1@gmail.com), with their jobs, payments and receipts. Real accounts are never touched. Works only with Paystack test keys. This cannot be undone.</p>
+          <div className="vrow"><span>Accounts in total</span><b>{d.counts.users}</b></div>
           <div className="vrow"><span>Requests</span><b>{d.counts.requests}</b></div>
           <div className="vrow"><span>Blog posts</span><b>{d.counts.posts}</b></div>
           {!clear.open ? <button className="btn btn-danger" style={{ marginTop: 12 }} onClick={() => setClear({ open: true, text: "" })}>Clear test data…</button> : (
@@ -1329,7 +1329,7 @@ function Settings({ token, flash, statsRes, reloadServices }) {
               <input className="search" style={{ width: "100%" }} value={clear.text} onChange={(e) => setClear({ ...clear, text: e.target.value })} placeholder="CLEAR" />
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button className="btn" onClick={() => setClear({ open: false, text: "" })}>Cancel</button>
-                <button className="btn btn-danger" disabled={clear.text !== "CLEAR" || busy === "clear"} onClick={doClear}>{busy === "clear" ? "Deleting…" : "Delete everything"}</button>
+                <button className="btn btn-danger" disabled={clear.text !== "CLEAR" || busy === "clear"} onClick={doClear}>{busy === "clear" ? "Deleting…" : "Delete test accounts"}</button>
               </div>
             </div>
           )}</div>
