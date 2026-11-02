@@ -1991,8 +1991,10 @@ const zeroRx = { counts: { LIKE: 0, FIRE: 0, LOVE: 0 }, mine: null };
 // One tap to react, tap again to take it back. The screen changes at once; the server confirms in the background.
 function ReactionBar({ token, post, onChange, fail }) {
   const rx = post.reactions || zeroRx;
+  const seq = useRef(0);
   async function tap(type) {
     const prev = rx;
+    const mySeq = ++seq.current;
     const counts = { ...rx.counts };
     if (rx.mine) counts[rx.mine] = Math.max(0, counts[rx.mine] - 1);
     const mine = rx.mine === type ? null : type;
@@ -2000,8 +2002,8 @@ function ReactionBar({ token, post, onChange, fail }) {
     onChange({ counts, mine });
     try {
       const d = await api(`/api/blog/${post.id}/react`, { method: "POST", token, body: { type } });
-      onChange(d.reactions);
-    } catch (e) { onChange(prev); fail(e); }
+      if (mySeq === seq.current) onChange(d.reactions); // ignore an old answer if they tapped again meanwhile
+    } catch (e) { if (mySeq === seq.current) onChange(prev); fail(e); }
   }
   return (
     <div className="rx-bar" role="group" aria-label="Reactions">
@@ -2017,6 +2019,7 @@ function ReactionBar({ token, post, onChange, fail }) {
 function BlogPostView({ token, id, seed, isArtisan, flash, fail, onBack }) {
   const [p, setP] = useState(seed || null);
   const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
   const [reason, setReason] = useState(REPORT_REASONS[0]);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2027,7 +2030,7 @@ function BlogPostView({ token, id, seed, isArtisan, flash, fail, onBack }) {
   if (!p) return <div className="screen bl"><div className="bl-head"><button className="iconbtn" onClick={onBack}><ArrowLeft size={18} /></button></div><div className="bl-empty">Loading…</div></div>;
 
   async function act(fn) { if (busy) return; setBusy(true); try { await fn(); } catch (e) { fail(e); } finally { setBusy(false); } }
-  const sendReport = () => act(async () => { await api(`/api/blog/${p.id}/report`, { method: "POST", token, body: { reason } }); setReporting(false); flash("Thanks. We'll look at this post."); });
+  const sendReport = () => act(async () => { await api(`/api/blog/${p.id}/report`, { method: "POST", token, body: { reason } }); setReporting(false); setReported(true); flash("Thanks. We'll look at this post."); });
   const sendReply = () => act(async () => { const d = await api(`/api/blog/${p.id}/reply`, { method: "POST", token, body: { text: reply } }); setP(d.post); setReply(""); flash("Reply posted"); });
   const del = () => act(async () => { if (!window.confirm("Delete this post?")) return; await api(`/api/blog/${p.id}`, { method: "DELETE", token }); flash("Post deleted"); onBack(); });
   const [stateLabel, stateCls] = POST_STATE[p.status] || [];
@@ -2058,7 +2061,7 @@ function BlogPostView({ token, id, seed, isArtisan, flash, fail, onBack }) {
       {!p.builtin && (
         <div className="bl-actions">
           {p.mine ? <button className="bl-link bl-link--danger" onClick={del}><Trash size={15} /> Delete post</button>
-            : p.status === "PUBLISHED" && !reporting && <button className="bl-link" onClick={() => setReporting(true)}><Flag size={15} /> Report this post</button>}
+            : p.status === "PUBLISHED" && !reporting && (reported ? <span className="bl-hint">Reported. Thank you.</span> : <button className="bl-link" onClick={() => setReporting(true)}><Flag size={15} /> Report this post</button>)}
         </div>
       )}
       {reporting && (
