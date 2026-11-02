@@ -19,10 +19,10 @@
 <script src="qr.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script>
-// Fill the whole screen (including under the home bar). Only shrink the app while the keyboard is open.
+// fill the whole screen, home bar included. only shrink when the keyboard is open
 (function(){var r=document.documentElement,vv=window.visualViewport;if(!vv)return;
 function set(){var ae=document.activeElement,typing=!!ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)||ae.isContentEditable);var kb=typing&&(window.innerHeight-vv.height)>120;if(kb){r.classList.add("kb");r.style.setProperty("--vvh",vv.height+"px");if(vv.offsetTop>0)window.scrollTo(0,0);}else{r.classList.remove("kb");r.style.removeProperty("--vvh");}
-  // Some installed iPhone apps get a window a little shorter than the screen. Mark that case so the nav can adapt.
+  // installed iPhone apps sometimes get a window a bit shorter than the screen, flag it so the nav can adjust
   var st=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
   var short=!kb&&st&&window.innerWidth<=480&&window.innerHeight>=window.innerWidth&&window.innerHeight<screen.height-8;
   r.classList.toggle("short",short);}
@@ -49,7 +49,7 @@ const { useState, useMemo, useRef, useEffect } = React;
 
 /* ============ CONFIG ============ */
 const API_BASE = "https://vettedhands-backend.onrender.com";
-// Wake the server up as soon as the page opens, so the first real request is not slow.
+// wake the render server as soon as the page opens so the first real request isn't slow
 try { fetch(API_BASE + "/api/health", { mode: "no-cors", cache: "no-store" }).catch(() => {}); } catch (e) { /* ignore */ }
 
 /* ============ PUSH HELPERS ============ */
@@ -67,7 +67,7 @@ const SHARED_ID = (() => { try { return localStorage.getItem("vh_pending_artisan
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 
 /* ============ API HELPER ============ */
-// Talks to the real backend. Throws an Error with a readable message on failure.
+// talks to the backend, throws an Error with a readable message if it fails
 async function api(path, { method = "GET", body, token } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -396,7 +396,7 @@ function Splash() {
   );
 }
 
-/* ============ AUTH SCREEN (replaces the old AuthScreen function) ============ */
+/* ============ AUTH SCREEN ============ */
 function CodeBoxes({ value, onChange }) {
   const refs = useRef([]);
   useEffect(() => { if (refs.current[0]) refs.current[0].focus(); }, []);
@@ -577,7 +577,7 @@ function AuthScreen({ initialMode, onBack, auth, onLegal }) {
   );
 }
 
-/* ============ EDIT ARTISAN PROFILE (new, paste above function TrackRecordView) ============ */
+/* ============ EDIT ARTISAN PROFILE ============ */
 const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
 const TRAVEL_OPTIONS = [2, 5, 8, 10, 15, 20];
 function EditArtisanProfile({ user, token, flash, fail, onBack, onSave, onAvatar, onAddPhoto, onRemovePhoto }) {
@@ -727,7 +727,7 @@ function App() {
     const m = document.getElementById("themeColor");
     const c = auth.loading ? "#0F4D3A" : "#F5F0E4";
     if (m) m.setAttribute("content", c);
-    // Whatever shows under the home bar matches the screen: dark green on the splash, cream in the app
+    // colour under the home bar follows the screen: green on splash, cream in the app
     const bg = auth.loading ? "#0A3A2B" : "#F5F0E4";
     document.documentElement.style.background = bg; document.body.style.background = bg;
   }, [auth.loading]);
@@ -736,7 +736,7 @@ function App() {
   if (auth.loading) {
     body = <Splash />;
   } else if (!auth.token || !auth.user) {
-    // The sign-in form stays mounted (just hidden) while Terms/Privacy is open, so nothing typed is lost.
+    // sign-in form stays mounted (hidden) while Terms/Privacy is open so nothing typed gets lost
     body = <>
       {screen === "legal" && <LegalView initial={legalTab} onBack={() => setScreen(legalFrom)} />}
       {(screen === "auth" || (screen === "legal" && legalFrom === "auth")) && (
@@ -800,7 +800,7 @@ useEffect(() => {
   if (!isArtisan) return;
   api("/api/payments/bank", { token }).then((d) => setBank(d.bank)).catch(() => {});
 }, [isArtisan, view === "bank"]);
-// Coming back from Paystack: the URL carries ?reference=...
+// back from paystack, the url has ?reference=...
 useEffect(() => {
   const ref = new URLSearchParams(window.location.search).get("reference");
   if (!ref) return;
@@ -873,14 +873,13 @@ useEffect(() => {
     api("/api/artisans/me/reviews", { token }).then((d) => setMyReviews(d.reviews)).catch(() => {});
   }
   useEffect(() => { loadMyReviews(); }, [isArtisan]);
-  // Reload the reviews as soon as a new rated job shows up in the requests list, so a fresh review appears without reopening the app.
+  // reload reviews when a newly rated job shows up so people don't have to reopen the app
   const ratedCount = requests.filter((r) => r.status === "COMPLETED" && r.rating).length;
   useEffect(() => { loadMyReviews(); }, [ratedCount]);
-  // Background refresh of requests every 8s so the nav badge count and requests/messages
-  // lists stay roughly current even when the user isn't actively viewing a conversation.
+  // refresh requests every 8s so the nav badge and lists stay current
   useEffect(() => {
     const id = setInterval(() => { if (!document.hidden) { loadRequests(); loadNotifs(); } }, 12000);
-    // Refresh the moment a push arrives or the app comes back to the front, so the screen matches the alert.
+    // refresh when a push lands or the app comes back to the front
     const now = () => { if (!document.hidden) { loadRequests(); loadNotifs(); } };
     const onMsg = (e) => { if (e.data && e.data.type === "vh-refresh") now(); };
     if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", onMsg);
@@ -894,7 +893,7 @@ useEffect(() => {
     };
   }, []);
 
-  // Applicants: check the application every 20s. When it is approved, reload the account so the artisan app appears without logging out.
+  // applicants: check every 20s, when approved reload the account so the artisan app shows without logging out
   useEffect(() => {
     if (isArtisan || isAdmin) return;
     const id = setInterval(async () => {
@@ -909,7 +908,7 @@ useEffect(() => {
     }, 20000);
     return () => clearInterval(id);
   }, [isArtisan]);
-  // Artisans: one-time welcome, and reload the profile numbers whenever a job completes.
+  // artisans: one-time welcome, and refresh profile numbers when a job completes
   const myDoneCount = requests.filter((r) => r.status === "COMPLETED" && r.artisanProfile && r.artisanProfile.user.id === user.id).length;
   useEffect(() => {
     if (!isArtisan) return;
@@ -957,8 +956,8 @@ useEffect(() => {
     const t = setTimeout(() => setPayFx(null), 6000);
     return () => clearTimeout(t);
   }, [payFx]);
-  // Alerts are ON by default. If the browser already allows notifications, subscribe quietly (new phone, cleared subscription).
-  // If it has not been asked yet, show one friendly prompt (browsers only show the permission popup after a tap).
+  // alerts are on by default. if the browser already allows them, subscribe quietly (new phone, cleared subscription)
+  // if not asked yet, show our own prompt first because browsers only show the popup after a tap
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
     (async () => {
@@ -1015,9 +1014,7 @@ useEffect(() => {
     setProfileOrigin(origin);
     setSelectedArtisan(a);
     setView("artisanProfile");
-    // Reviews load first — small and fast. Photos load after, since base64 data
-    // URLs are large; this keeps the profile feeling instant instead of blocking
-    // on the heaviest part of the payload.
+    // reviews first, they're small. photos after because the base64 ones are big
     try { const d = await api(`/api/artisans/${a.id}`); setSelectedArtisan(d.artisan); } catch (e) { /* keep list version */ }
     try {
       const p = await api(`/api/artisans/${a.id}/photos`);
@@ -1052,7 +1049,7 @@ useEffect(() => {
   const [askGroup, setAskGroup] = useState(null);
   const [doneAsk, setDoneAsk] = useState(null); // { id, busy, err }: asks the artisan for a photo of the finished work
 const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when accepting // { args, groups } while we ask "same job?"
-  // Open jobs (still waiting or accepted) that this artisan is not already part of
+  // open jobs this artisan isn't part of yet
   function openJobsFor(artisanProfileId) {
     const m = new Map();
     for (const r of requests) {
@@ -1112,8 +1109,7 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
       setRequestImage(null);
     }
   }
-  // Silent background refresh — no toast/flash on failure, since this fires every
-  // few seconds and a transient network blip shouldn't spam the user.
+  // silent refresh, no toast on failure since it runs every few seconds
     async function pollConversation(requestId) {
     if (document.hidden) return;
     try {
@@ -1124,7 +1120,7 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
       setRequests((prev) => prev.map((r) => (r.id === requestId ? { ...r, unreadCount: 0 } : r)));
     } catch (e) { /* silent */ }
   }
-  // Typing indicator: memory-only on the server, so it costs no database reads or writes.
+  // typing indicator lives in server memory only, no db reads or writes
   function pingTyping(requestId) { api(`/api/typing/${requestId}`, { method: "POST", token }).catch(() => {}); }
   async function checkTyping(requestId) {
     if (document.hidden) return false;
@@ -1137,7 +1133,7 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
     return d.typing || [];
   }
   async function sendMessage(requestId, text, replyTo) {
-    // Show the message at once, then swap in the saved one. Feels instant even on a slow connection.
+    // show it straight away, swap in the saved one after
     const rq = requests.find((x) => x.id === requestId);
     const tempId = "tmp-" + Date.now();
     const temp = { id: tempId, senderId: user.id, senderType: rq && rq.studentId === user.id ? "CUSTOMER" : "ARTISAN", text, createdAt: new Date().toISOString(), pending: true, ...(replyTo ? { replyToId: replyTo.id, replyText: replyTo.audio ? "Voice note" : replyTo.imageUrl && (!replyTo.text || replyTo.text === "Photo") ? "Photo" : String(replyTo.text || "").slice(0, 140), replySenderId: replyTo.senderId } : {}) };
@@ -1231,7 +1227,7 @@ await payWithPopup(d);
       return true;
     } catch (e) { fail(e); }
   }
-  // Marking a job done needs a photo of the finished work: ask for it, send it in the chat, then mark done.
+  // job can't be marked done without a photo of the work: ask, send it in the chat, then mark done
   async function doneWithPhoto(file) {
     if (!file || !doneAsk) return;
     const id = doneAsk.id;
@@ -1262,7 +1258,7 @@ await payWithPopup(d);
     } catch (e) { fail(e); }
   }
   async function toggleOnline(next) {
-    // Switch the screen at once, then confirm with the server. If the server says no, switch it back.
+    // flip it right away, put it back if the server says no
     const before = user && user.artisanProfile ? user.artisanProfile.online : !next;
     setUser((u) => ({ ...u, artisanProfile: { ...u.artisanProfile, online: next } }));
     flash(next ? "You're online" : "You're offline");
@@ -1282,7 +1278,7 @@ await payWithPopup(d);
       flash(badge === "TOP_RATED" ? "You're now Top Rated!" : "Badge updated");
     } catch (e) { fail(e); }
   }
-  // One place that decides where a notification should take you.
+  // decides where a notification takes you
   function routeNotification(n) {
     const t = n.type;
     if (t === "CHAT_MESSAGE" && n.requestId) { openConversation(n.requestId); return; }
@@ -1305,7 +1301,7 @@ await payWithPopup(d);
   const routeRef = useRef(null);
   routeRef.current = routeNotification;
   useEffect(() => {
-    // A tap on a push alert: the open app gets a message, a closed app gets ?nt=...&rid=... in its address.
+    // push tap: open app gets a message, closed app gets ?nt=...&rid=... in the url
     const onMsg = (e) => { if (e.data && e.data.type === "vh-open") routeRef.current({ type: e.data.nt, requestId: e.data.rid || null }); };
     if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", onMsg);
     const q = new URLSearchParams(window.location.search);
@@ -1869,7 +1865,7 @@ const POST_STATE = {
   HIDDEN: ["Hidden", "grey"],
 };
 const REPORT_REASONS = ["Not true", "Rude or abusive", "Spam or advert", "Contains personal details", "Other"];
-// Written by us, always shown. Admin-written guides appear after it.
+// our own guides, always shown. admin-written ones come after
 const BUILT_IN_GUIDE = {
   id: "builtin-guide", kind: "GUIDE", author: "VettedHands", builtin: true,
   title: "How VettedHands works",
@@ -1988,7 +1984,7 @@ function BlogSection({ token, user, isArtisan, flash, fail, onBack }) {
 
 const REACTION_SET = [["LIKE", "👍", "Like"], ["FIRE", "🔥", "Fire"], ["LOVE", "❤️", "Love"]];
 const zeroRx = { counts: { LIKE: 0, FIRE: 0, LOVE: 0 }, mine: null };
-// One tap to react, tap again to take it back. The screen changes at once; the server confirms in the background.
+// tap to react, tap again to undo. ui updates first, server catches up
 function ReactionBar({ token, post, onChange, fail }) {
   const rx = post.reactions || zeroRx;
   const seq = useRef(0);
@@ -2372,8 +2368,8 @@ function whenText(w) {
   return "As soon as possible";
 }
 
-// Trade match is the search itself. Then: available, same area, verification,
-// rating (weighted by jobs so one 5-star job cannot outrank a proven record), jobs completed.
+// trade match is the search. then availability, area, verification, rating (weighted by jobs so one 5-star
+// can't beat a proven record) and jobs completed
 function matchScore(a, area) {
   let s = 0;
   if (a.online) s += 1000;
@@ -2620,7 +2616,7 @@ function statusMeta(status) {
   return map[status] || { label: status, cls: "" };
 }
 
-/* ---------------- Requests tab (new design) ---------------- */
+/* ---------------- Requests tab ---------------- */
 function pillFor(r, artisanSide) {
   const s = r.status;
   if (s === "PENDING") return artisanSide ? ["New request", "dark"] : ["Request sent", "amber"];
@@ -2633,7 +2629,7 @@ function pillFor(r, artisanSide) {
   if (s === "CANCELLED") return ["Cancelled", "red"];
   return ["Closed", "grey"];
 }
-// A plain-words "what happens now" line for the chat. `short` fits on the collapsed job bar, `text` is the full sentence.
+// plain "what happens now" line for the chat. short = collapsed job bar, text = full sentence
 function nextStepFor(r, artisanSide) {
   const st = r.status;
   const pay = r.payments && r.payments[0];
@@ -3534,7 +3530,7 @@ function plural2(n, w) { return `${n} ${w}${n === 1 ? "" : "s"}`; }
 const rcDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
 let RECEIPTS_CACHE = null; // last list, so the screen opens instantly and refreshes behind
 
-// Draws the receipt straight onto a canvas (no screenshot library), so the saved picture is sharp and always right.
+// receipt is drawn straight on a canvas, no screenshot lib, so it saves sharp
 async function receiptToBlob(r) {
   try { await document.fonts.ready; } catch (e) { /* fine */ }
   const art = r.side === "ARTISAN";
@@ -3623,7 +3619,7 @@ async function receiptToBlob(r) {
     ctx.fillText("PAID", 0, 1); ctx.restore();
     return y;
   }
-  // First pass on a tall scratch canvas to learn the height, second pass at the exact size.
+  // first pass on a tall scratch canvas to get the height, second at the real size
   const scratch = document.createElement("canvas"); scratch.width = W; scratch.height = 2400;
   const H = Math.ceil(paint(scratch.getContext("2d"), 2400));
   const cv = document.createElement("canvas"); cv.width = W * S; cv.height = H * S;
@@ -3890,7 +3886,7 @@ function BankView({ token, flash, fail, onBack }) {
 }
 
 const AGREEMENT_VERSION = "2026-10";
-// Plain-language draft. Have a lawyer review this before launch.
+// plain-language draft, lawyer to review before launch
 const AGREEMENT = [
   ["Who we are", "VettedHands connects customers with artisans. We are an intermediary. You work for yourself as an independent artisan. You are not our employee, and nothing here creates a partnership or employment."],
   ["Your details are true", "Everything in your application is true and yours: your name, ID, phone number, photos of work and business registration. Fake or borrowed details lead to removal and may be reported."],
@@ -3908,7 +3904,7 @@ const AGREEMENT = [
   ["Changes and ending", "We can update this agreement and will tell you in the app. You can stop using VettedHands any time. Money already held for a job is still settled as above. This agreement is governed by the laws of Nigeria."],
 ];
 
-// The applicant answers the admin's "more info" request. MainApp provides window.vhRespondInfo.
+// applicant answers the admin's more-info request (window.vhRespondInfo comes from MainApp)
 function InfoReplyBox({ application }) {
   const [text, setText] = useState("");
   const [img, setImg] = useState(null);
@@ -4197,7 +4193,7 @@ function dayLabel(d) {
   if (x.toDateString() === new Date(t.getTime() - 864e5).toDateString()) return "Yesterday";
   return x.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
-// One tick = sent, two ticks = the other person has opened the chat since.
+// one tick = sent, two = other person opened the chat since
 function Ticks({ read, lead }) {
   return (
     <svg width="17" height="11" viewBox="0 0 17 11" fill="none" stroke={read ? "#1B7F5A" : "#A39B88"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
@@ -4209,7 +4205,7 @@ function Ticks({ read, lead }) {
 }
 
 /* ---------------- Notifications ---------------- */
-// Built from the requests and messages the app already loads. Nothing new on the backend.
+// built from requests and messages we already load, no backend for this
 function buildNotifications(requests, me) {
   const out = [];
   for (const r of requests) {
@@ -4676,7 +4672,7 @@ function fmtSecs(s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s /
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob); });
 }
-// Tap-to-record. start(onClip) asks for the mic. stop(true) sends the clip, stop(false) throws it away.
+// tap to record. start(onClip) asks for the mic, stop(true) sends, stop(false) bins it
 function useRecorder(maxSecs = 60) {
   const [recording, setRecording] = useState(false);
   const [secs, setSecs] = useState(0);
@@ -4768,7 +4764,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
     }, 2000);
     return () => clearInterval(id);
   }, [request.id]);
-  // The other person's message arrived, so they are no longer typing
+  // their message arrived so they're not typing anymore
   useEffect(() => { setOtherTyping(false); }, [messages.length]);
   useEffect(() => { if (otherTyping) bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [otherTyping]);
   function onType(v) {
@@ -4790,7 +4786,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
     ? (iAmArtisanSide ? ["Is it the full job or part of it?", "How many pieces?", "Can you send a photo?", "Where exactly is the job?"] : ["I can send a photo", "Can you start today?", "Is the price negotiable?"])
     : (iAmArtisanSide ? ["I'm on my way", "I'm at the gate", "Running a bit late", "Thank you!"] : ["I'm at the gate", "Running a bit late", "Thank you!"]);
   function send(t) { const v = t.trim(); if (v) { onSend(v, replyTo); setText(""); setReplyTo(null); } }
-  // Swipe a message to the right to reply to it, like WhatsApp.
+  // swipe right to reply, like whatsapp
   function swipeProps(m) {
     if (!canAct || locked) return {};
     return {
@@ -4815,7 +4811,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const msgPreview = (m) => (m.audio ? "Voice note" : m.imageUrl && (!m.text || m.text === "Photo") ? "Photo" : String(m.text || "").slice(0, 140));
   function jumpTo(id) { const el = document.getElementById("m-" + id); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("cv-flash"); setTimeout(() => el.classList.remove("cv-flash"), 1200); } }
   let lastDay = null;
-  // Photos sent together (same person, within 90 seconds, nothing else between them) show as one album bubble, like WhatsApp.
+  // photos from the same person within 90s with nothing between them show as one album
   const purePhoto = (m) => !!m.imageUrl && !m.audio && !m.replyToId && m.senderType !== "SYSTEM" && (!m.text || m.text === "Photo");
   const shown = [];
   for (const m of messages) {
@@ -4969,13 +4965,8 @@ function ReportForm({ reasons, onCancel, onSubmit }) {
 }
 
 /* ---------------- Profile ---------------- */
-// Converts a picked image file into a base64 data URL so it can be sent straight to the
-// backend as a plain string — no separate image hosting service needed for now.
-// Resizes and compresses an image before converting to a data URL — cuts a
-// typical 2-5MB phone photo down to ~50-150KB, which is the main thing making
-// uploads, sends, and later loads feel slow. Same function signature as before,
-// so every existing call site (work photos, ID doc, request image) speeds up
-// automatically with no other changes needed.
+// picked image -> resized + compressed base64 data url. a 2-5MB phone photo ends up around 50-150KB,
+// which is what was making uploads and loads slow
 function fileToDataUrl(file, maxDim = 1000, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -5140,7 +5131,7 @@ function UserProfileView({ startWithForm, user, isArtisan, application, incoming
               <label>Tell customers about your work<textarea rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="At least 10 characters…" /></label>
               <label>Phone / WhatsApp number<input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="text-input" placeholder="e.g. 0803xxxxxxx" /></label>
               <label>Social media username (Instagram, Facebook, or Twitter/X)<input value={socialHandle} onChange={(e) => setSocialHandle(e.target.value)} className="text-input" placeholder="e.g. @tunde_electrics" /></label>
-              <label>Government ID (NIN slip, driver's license, or voter's card) — seen only by VettedHands admin
+              <label>Government ID (NIN slip, driver's license, or voter's card) - seen only by VettedHands admin
                 {idDocument ? (
                   <div className="id-preview">
                     <img src={idDocument} className="id-preview-img" alt="Preview of your ID photo" />
