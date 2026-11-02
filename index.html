@@ -1966,16 +1966,18 @@ function BlogSection({ token, user, isArtisan, flash, fail, onBack }) {
         )}
         {posts === null && <div className="bl-empty">Loading…</div>}
         {live.map((p) => (
-          <button key={p.id} className="bl-card" onClick={() => open(p, "list")}>
+          <div key={p.id} className="bl-cardwrap">
+          <button className="bl-card" onClick={() => open(p, "list")}>
             <span className="bl-top"><span className={"bl-kindpill bl-kindpill--" + p.kind}>{KIND_LABEL[p.kind]}</span><small>{postDate(p.createdAt)}</small></span>
             <b>{p.title}</b>
             <p>{p.body.length > 150 ? p.body.slice(0, 150).trim() + "…" : p.body}</p>
             <span className="bl-by">
               {p.kind === "STORY" && p.artisan ? <>{p.author} on <i>{p.artisan.name}</i> · {tradeLabel(p.artisan.trade)}</> : p.kind === "UPDATE" && p.artisan ? <>{p.author}</> : <>{p.author}</>}
               {p.reply && <span className="bl-replied"> · Artisan replied</span>}
-              {p.reactions && (p.reactions.counts.LIKE + p.reactions.counts.FIRE + p.reactions.counts.LOVE) > 0 && <span className="bl-rxsum"> · {REACTION_SET.filter(([k]) => p.reactions.counts[k] > 0).map(([k, e]) => e + " " + p.reactions.counts[k]).join("  ")}</span>}
             </span>
           </button>
+          <ReactionBar token={token} post={p} fail={fail} onChange={(r) => setPosts((all) => (all || []).map((x) => (x.id === p.id ? { ...x, reactions: r } : x)))} />
+          </div>
         ))}
         {posts !== null && live.length === 0 && !showBuiltIn && <div className="bl-empty"><b>Nothing here yet.</b>Be the first to write one.</div>}
       </div>
@@ -4732,11 +4734,11 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const sw = useRef(null);
   const inputRef = useRef(null);
   async function pickChatImage(e) {
-    const f = e.target.files[0]; e.target.value = "";
-    if (!f) return;
+    const files = Array.from(e.target.files || []).slice(0, 6); e.target.value = "";
+    if (!files.length) return;
     setVoiceBusy(true);
     setImgBusy(true);
-    try { await onSendImage(await fileToDataUrl(f, 1200, 0.75)); } finally { setVoiceBusy(false); setImgBusy(false); }
+    try { for (const f of files) await onSendImage(await fileToDataUrl(f, 1200, 0.75)); } finally { setVoiceBusy(false); setImgBusy(false); }
   }
   const [vErr, setVErr] = useState(null);
   async function startVoice() {
@@ -4907,7 +4909,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
       )}
       <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <input ref={inputRef} placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
-        <label className="cv-mic" aria-label="Send a photo" style={voiceBusy ? { opacity: .5, pointerEvents: "none" } : { cursor: "pointer" }}><input type="file" accept="image/*" style={{ display: "none" }} onChange={pickChatImage} /><Camera size={20} /></label>
+        <label className="cv-mic" aria-label="Send a photo" style={voiceBusy ? { opacity: .5, pointerEvents: "none" } : { cursor: "pointer" }}><input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={pickChatImage} /><Camera size={20} /></label>
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
       </form>
@@ -6284,6 +6286,9 @@ function Style() {
       .bl-mine { margin:12px 16px 0; width:calc(100% - 32px); display:flex; align-items:center; justify-content:space-between; background:var(--accent-bg); color:var(--ink); border:none; border-radius:12px; padding:11px 14px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; text-align:left; }
       .bl-list { display:flex; flex-direction:column; gap:12px; padding:14px 16px 0; }
       .bl-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:15px; text-align:left; font-family:inherit; cursor:pointer; display:flex; flex-direction:column; gap:6px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); }
+      .bl-cardwrap { background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:0 8px 18px -16px rgba(30,27,22,.35); padding-bottom:4px; }
+      .bl-cardwrap .bl-card { background:none; border:none; box-shadow:none; width:100%; }
+      .bl-cardwrap .rx-bar { margin:0; padding:0 15px 12px; }
       .bl-card--guide { background:linear-gradient(160deg,#0F4D3A,#0A3A2B); color:#F4EFE0; border:none; }
       .bl-card--guide p { color:rgba(244,239,224,.8); }
       .bl-card b { font-size:15.5px; line-height:1.3; }
