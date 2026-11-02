@@ -4812,6 +4812,15 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const msgPreview = (m) => (m.audio ? "Voice note" : m.imageUrl && (!m.text || m.text === "Photo") ? "Photo" : String(m.text || "").slice(0, 140));
   function jumpTo(id) { const el = document.getElementById("m-" + id); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("cv-flash"); setTimeout(() => el.classList.remove("cv-flash"), 1200); } }
   let lastDay = null;
+  // Photos sent together (same person, within 90 seconds, nothing else between them) show as one album bubble, like WhatsApp.
+  const purePhoto = (m) => !!m.imageUrl && !m.audio && !m.replyToId && m.senderType !== "SYSTEM" && (!m.text || m.text === "Photo");
+  const shown = [];
+  for (const m of messages) {
+    const prev = shown[shown.length - 1];
+    if (prev && purePhoto(m) && purePhoto(prev) && prev.senderId === m.senderId && new Date(m.createdAt) - new Date(prev._last || prev.createdAt) < 90000) {
+      prev._grp = prev._grp || [prev]; prev._grp.push(m); prev._last = m.createdAt;
+    } else shown.push({ ...m });
+  }
 
   return (
     <div className="screen cv">
@@ -4866,7 +4875,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
 
       {zoom && <PhotoViewer photos={messages.filter((x) => x.imageUrl)} startId={zoom} onClose={() => setZoom(null)} />}
       <div className="cv-msgs">
-        {messages.map((m) => {
+        {shown.map((m) => {
           const day = new Date(m.createdAt).toDateString();
           const showDay = day !== lastDay; lastDay = day;
           const sys = m.senderType === "SYSTEM";
@@ -4876,7 +4885,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
               {showDay && <div className="cv-day"><span>{dayLabel(m.createdAt)}</span></div>}
               {sys ? <div className="cv-sys">{m.text}</div> : (
                 <div id={"m-" + m.id} {...swipeProps(m)} className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
-                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them") + (m.imageUrl ? " cv-bubble--img" : "")}>{m.replyToId && <button type="button" className="cv-quote" onClick={() => jumpTo(m.replyToId)}><b>{replyWho(m)}</b><span>{m.replyText}</span></button>}{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : <>{m.imageUrl && <div className="cv-photo"><img src={m.imageUrl} alt="Shared photo" loading="lazy" onClick={() => setZoom(m.id)} />{!(m.text && m.text !== "Photo") && <span className="cv-photo-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</span>}</div>}{m.text && !(m.imageUrl && m.text === "Photo") ? <div className="cv-cap">{m.text}</div> : null}</>}</div>
+                  <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them") + (m.imageUrl ? " cv-bubble--img" : "")}>{m.replyToId && <button type="button" className="cv-quote" onClick={() => jumpTo(m.replyToId)}><b>{replyWho(m)}</b><span>{m.replyText}</span></button>}{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : <>{m._grp && m._grp.length > 1 ? <div className="cv-photo cv-album" data-n={Math.min(4, m._grp.length)}>{m._grp.slice(0, 4).map((g, gi) => <button type="button" key={g.id} className="cv-album-t" onClick={() => setZoom(g.id)}><img src={g.imageUrl} alt="Shared photo" loading="lazy" />{gi === 3 && m._grp.length > 4 && <span className="cv-album-more">+{m._grp.length - 4}</span>}</button>)}<span className="cv-photo-time">{clockTime(m._last)}{mine && <Ticks read={new Date(m._last).getTime() <= readUpTo} />}</span></div> : m.imageUrl && <div className="cv-photo"><img src={m.imageUrl} alt="Shared photo" loading="lazy" onClick={() => setZoom(m.id)} />{!(m.text && m.text !== "Photo") && <span className="cv-photo-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</span>}</div>}{m.text && !(m.imageUrl && m.text === "Photo") ? <div className="cv-cap">{m.text}</div> : null}</>}</div>
                   {!(m.imageUrl && !(m.text && m.text !== "Photo")) && <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>}
                 </div>
               )}
@@ -6063,6 +6072,12 @@ function Style() {
 .cv-bubble--me.cv-bubble--img { border-bottom-right-radius:6px; }
 .cv-bubble--them.cv-bubble--img { border-bottom-left-radius:6px; }
 .cv-photo { position:relative; line-height:0; }
+.cv-album { display:grid; grid-template-columns:1fr 1fr; gap:3px; width:240px; max-width:100%; border-radius:12px; overflow:hidden; }
+.cv-album[data-n="3"] .cv-album-t:first-child { grid-column:1 / 3; }
+.cv-album-t { position:relative; padding:0; border:0; background:#ddd; cursor:pointer; aspect-ratio:1; overflow:hidden; }
+.cv-album[data-n="3"] .cv-album-t:first-child { aspect-ratio:2/1; }
+.cv-album-t img { width:100%; height:100%; object-fit:cover; display:block; }
+.cv-album-more { position:absolute; inset:0; background:rgba(0,0,0,.5); color:#fff; font-size:26px; font-weight:700; display:flex; align-items:center; justify-content:center; line-height:1; }
 .cv-photo img { display:block; width:min(240px, 62vw); max-height:320px; object-fit:cover; border-radius:13px; cursor:pointer; background:#DDD5C0; }
 .cv-photo-time { position:absolute; right:7px; bottom:7px; display:flex; align-items:center; gap:2px; background:rgba(0,0,0,.45); color:#fff; font-size:11px; line-height:1; padding:4px 7px; border-radius:10px; }
 .cv-cap { padding:7px 10px 6px; font-size:14px; line-height:1.35; }
