@@ -480,6 +480,44 @@ function Waitlist({ token }) {
 
 /* ============ notifications ============ */
 const ADMIN_GO = { ADMIN_NEW_APP: "applications", ADMIN_APP_REPLY: "applications", ADMIN_NEW_REPORT: "reports", ADMIN_NEW_POST: "blog", ADMIN_POST_REPORTED: "blog" };
+function urlB64ToUint8(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+// turns push alerts on for this phone/browser, so new reports, applications and posts buzz you
+function PushCard({ token }) {
+  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const [on, setOn] = useState(null);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (!supported) return;
+    navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription()).then((sub) => setOn(!!sub && Notification.permission === "granted")).catch(() => setOn(false));
+  }, []);
+  async function enable() {
+    setMsg("");
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { setMsg("Notifications are blocked. Allow them in your browser or phone settings."); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const { key } = await api("/api/notifications/push-key", { token });
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
+      await api("/api/notifications/push-subscribe", { method: "POST", token, body: { subscription: sub.toJSON() } });
+      setOn(true);
+    } catch (e) { setMsg(e.message || "Couldn't turn alerts on"); }
+  }
+  if (!supported) return <div className="card" style={{ marginBottom: 12 }}><b>Alerts on this phone</b><p className="soft">This browser can't do push alerts. On iPhone, add the admin page to your Home Screen first.</p></div>;
+  if (on === null) return null;
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <b>Alerts on this phone</b>
+      <p className="soft">{on ? "On. You'll get an alert for new applications, reports and blog posts." : "Off. Turn this on so reports, new applications and blog posts reach you without opening the page."}</p>
+      {!on && <button className="btn btn-primary" onClick={enable}>Turn on alerts</button>}
+      {msg && <p className="soft" style={{ color: "#A8402D" }}>{msg}</p>}
+    </div>
+  );
+}
 function AdminNotifications({ token, nfRes, go }) {
   const w = wait(nfRes); if (w) return w;
   const items = nfRes.data.notifications;
@@ -487,6 +525,7 @@ function AdminNotifications({ token, nfRes, go }) {
   return (
     <>
       <Head title="Notifications" sub={`${nfRes.data.unread} unread`} right={nfRes.data.unread > 0 ? <button className="btn" onClick={() => read([])}>Mark all as read</button> : null} />
+      <PushCard token={token} />
       <div className="stack">
         {items.map((n) => (
           <button key={n.id} className="rep-item" style={{ width: "100%", background: n.readAt ? "#fff" : "#EEF6F1" }}
@@ -596,14 +635,15 @@ function ApplicationDetail({ token, id, go, flash, refreshStats, openImage }) {
             <h3>Business registration and agreement</h3>
             {a.cacStatus ? (<>
               <div className="kv">
-                <div><label>CAC status</label><b>{a.cacStatus === "REGISTERED" ? "Registered" : "Registering through Dannit"}</b></div>
+                <div><label>CAC status</label><b>{a.cacStatus === "REGISTERED" ? "Registered" : a.cacStatus === "VIA_DANNIT" ? "Says they contacted Dannit" : "Not registered yet"}</b></div>
                 {a.cacStatus === "REGISTERED" && <div><label>Business name</label><b>{a.cacName || "—"}</b></div>}
                 {a.cacStatus === "REGISTERED" && <div><label>RC / BN number</label><b>{a.cacNumber || "—"}</b></div>}
                 <div><label>Agreement</label><b>{a.agreedAt ? `v${a.agreementVersion} · ${fmtDate(a.agreedAt)}` : "Not accepted"}</b></div>
               </div>
               {a.cacStatus === "REGISTERED" && <div className="doc" style={{ marginTop: 12 }}><div className="doc-i" /><div className="doc-t"><b>CAC certificate</b><small>{a.cacCertUrl ? "Uploaded" : "Not provided"}</small></div>
                 {a.cacCertUrl ? <button className="btn btn-sm" onClick={() => openImage(a.cacCertUrl)}>Open</button> : <span className="pill p-red">Missing</span>}</div>}
-              {a.cacStatus === "VIA_DANNIT" && <div className="panel-warn" style={{ marginTop: 12 }}>This applicant is registering through Dannit (07068655350). Approve only after Dannit confirms.</div>}
+              {a.cacStatus === "VIA_DANNIT" && <div className="panel-warn" style={{ marginTop: 12 }}>This applicant says they contacted Dannit (07068655350). Approve only after Dannit confirms.</div>}
+              {a.cacStatus === "NOT_REGISTERED" && <div className="panel-warn" style={{ marginTop: 12 }}>Not registered with CAC yet and has not said they contacted Dannit. Do not approve until their registration is confirmed.</div>}
             </>) : <p className="soft">Applied before registration and agreement were required.</p>}
           </div>
           <div className="card">

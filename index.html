@@ -2791,15 +2791,6 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
       <h1 className="tk-h">{head}</h1>
       <p className="tk-sub">{sub}</p>
 
-      <div className="tk-card">
-        {steps.map(([t, d], i) => (
-          <div key={t} className={"tk-step " + (i < done ? "tk-step--done" : i === current ? "tk-step--now" : "tk-step--todo")}>
-            <span className="tk-dot">{i < done && <Check size={20} strokeWidth={3} />}</span>
-            <div className="tk-st"><b>{t}</b><span>{d}</span></div>
-          </div>
-        ))}
-      </div>
-
       {(() => {
   const pay = r.payments && r.payments[0];
   if (!pay || ["PENDING", "FAILED"].includes(pay.status)) return null;
@@ -2841,6 +2832,16 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
         {s === "COMPLETED" && !artisanSide && onBookAgain && <button className="tk-btn" onClick={onBookAgain}>Book this artisan again</button>}
         {s === "COMPLETED" && !!r.quotedPrice && onReceipt && <button className="tk-btn" style={{ background: "var(--surface)", color: "var(--primary)", border: "1.5px solid var(--primary)" }} onClick={onReceipt}>View receipt</button>}
       </div>
+
+      <div className="tk-card">
+        {steps.map(([t, d], i) => (
+          <div key={t} className={"tk-step " + (i < done ? "tk-step--done" : i === current ? "tk-step--now" : "tk-step--todo")}>
+            <span className="tk-dot">{i < done && <Check size={20} strokeWidth={3} />}</span>
+            <div className="tk-st"><b>{t}</b><span>{d}</span></div>
+          </div>
+        ))}
+      </div>
+
 
       <div className="tk-card">
         <div className="tk-ac">
@@ -3982,7 +3983,8 @@ function ApplyView({ user, onBack, onApply }) {
     const y = parseInt(years, 10);
     const bio = (y > 0 ? `${y} ${y === 1 ? "year" : "years"}' experience. ` : "") + about.trim();
     const extra = {
-      cacStatus: cacMode,
+      // only say "via Dannit" if they ticked that they actually contacted them
+      cacStatus: cacMode === "VIA_DANNIT" && !dannitDone ? "NOT_REGISTERED" : cacMode,
       cacName: cacMode === "REGISTERED" ? cacName.trim() : undefined,
       cacNumber: cacMode === "REGISTERED" ? cacNo.trim() : undefined,
       cacCertificate: cacMode === "REGISTERED" ? cacCert : undefined,
@@ -4732,6 +4734,8 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
   const [jobOpen, setJobOpen] = useState(false); // the job bar at the top, collapsed by default to keep the chat big
   const sw = useRef(null);
   const inputRef = useRef(null);
+  // textarea grows with what's typed, up to a few lines
+  useEffect(() => { const el = inputRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; }, [text]);
   async function pickChatImage(e) {
     const files = Array.from(e.target.files || []).slice(0, 6); e.target.value = "";
     if (!files.length) return;
@@ -4874,18 +4878,21 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
 
       {zoom && <PhotoViewer photos={messages.filter((x) => x.imageUrl)} startId={zoom} onClose={() => setZoom(null)} />}
       <div className="cv-msgs">
-        {shown.map((m) => {
+        {shown.map((m, mi) => {
           const day = new Date(m.createdAt).toDateString();
           const showDay = day !== lastDay; lastDay = day;
           const sys = m.senderType === "SYSTEM";
           const mine = !sys && m.senderId === user.id;
+          // same person, within 2 minutes, same day: stack tight like whatsapp and only time-stamp the last one
+          const nx = shown[mi + 1];
+          const tightNext = !sys && !!nx && nx.senderType !== "SYSTEM" && nx.senderId === m.senderId && new Date(nx.createdAt).toDateString() === day && (new Date(nx.createdAt) - new Date(m.createdAt)) < 120000;
           return (
             <React.Fragment key={m.id}>
               {showDay && <div className="cv-day"><span>{dayLabel(m.createdAt)}</span></div>}
               {sys ? <div className="cv-sys">{m.text}</div> : (
-                <div id={"m-" + m.id} {...swipeProps(m)} className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them")}>
+                <div id={"m-" + m.id} {...swipeProps(m)} className={"cv-row " + (mine ? "cv-row--me" : "cv-row--them") + (tightNext ? " cv-row--tight" : "")}>
                   <div className={"cv-bubble " + (mine ? "cv-bubble--me" : "cv-bubble--them") + (m.imageUrl ? " cv-bubble--img" : "")}>{m.replyToId && <button type="button" className="cv-quote" onClick={() => jumpTo(m.replyToId)}><b>{replyWho(m)}</b><span>{m.replyText}</span></button>}{m.audio ? <VoiceBubble src={m.audio} secs={m.audioSecs} mine={mine} /> : <>{m._grp && m._grp.length > 1 ? <div className="cv-photo cv-album" data-n={Math.min(4, m._grp.length)}>{m._grp.slice(0, 4).map((g, gi) => <button type="button" key={g.id} className="cv-album-t" onClick={() => setZoom(g.id)}><img src={g.imageUrl} alt="Shared photo" loading="lazy" />{gi === 3 && m._grp.length > 4 && <span className="cv-album-more">+{m._grp.length - 4}</span>}</button>)}<span className="cv-photo-time">{clockTime(m._last)}{mine && <Ticks read={new Date(m._last).getTime() <= readUpTo} />}</span></div> : m.imageUrl && <div className="cv-photo"><img src={m.imageUrl} alt="Shared photo" loading="lazy" onClick={() => setZoom(m.id)} />{!(m.text && m.text !== "Photo") && <span className="cv-photo-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</span>}</div>}{m.text && !(m.imageUrl && m.text === "Photo") ? <div className="cv-cap">{m.text}</div> : null}</>}</div>
-                  {!(m.imageUrl && !(m.text && m.text !== "Photo")) && <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>}
+                  {!tightNext && !(m.imageUrl && !(m.text && m.text !== "Photo")) && <div className="cv-time">{clockTime(m.createdAt)}{mine && <Ticks read={new Date(m.createdAt).getTime() <= readUpTo} />}</div>}
                 </div>
               )}
             </React.Fragment>
@@ -4916,7 +4923,7 @@ function ConversationView({ request, messages, requestImage, user, otherReadAt, 
         </div>
       )}
       <form className="cv-input" style={vr.recording || locked ? { display: "none" } : undefined} onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <input ref={inputRef} placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
+        <textarea ref={inputRef} rows={1} enterKeyHint="enter" placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} />
         <label className="cv-mic" aria-label="Send a photo" style={voiceBusy ? { opacity: .5, pointerEvents: "none" } : { cursor: "pointer" }}><input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={pickChatImage} /><Camera size={20} /></label>
         {!text.trim() && <button type="button" className="cv-mic" onClick={startVoice} disabled={voiceBusy} aria-label="Record a voice note"><Mic size={20} /></button>}
         {text.trim() && <button type="submit" className="cv-send" aria-label="Send"><Send size={18} /></button>}
@@ -5724,17 +5731,18 @@ function Style() {
 .cv-mic { width:48px; height:48px; border-radius:50%; background:#E3EFE9; color:var(--primary); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
 .cv-mic:disabled { opacity:.5; }
 .cv-verr { text-align:center; color:var(--danger); font-size:11.5px; padding:6px 14px 0; background:var(--bg); }
-      .cv-msgs { flex:1; min-height:240px; overflow-y:auto; background:#EFE9DA; padding:16px 14px; display:flex; flex-direction:column; gap:6px; }
+      .cv-msgs { flex:1; min-height:240px; overflow-y:auto; background:#EFE9DA; padding:14px 12px; display:flex; flex-direction:column; gap:0; }
       .cv-day { align-self:center; margin:6px 0; }
       .cv-day span { background:#E1D9C5; color:var(--ink-soft); font-size:11.5px; font-weight:600; padding:4px 12px; border-radius:999px; }
       .cv-sys { align-self:center; text-align:center; font-size:11.5px; color:var(--ink-soft); max-width:300px; line-height:1.4; margin:4px 0 8px; }
-      .cv-row { display:flex; flex-direction:column; max-width:80%; margin-bottom:6px; }
+      .cv-row { display:flex; flex-direction:column; max-width:80%; margin-bottom:8px; }
+      .cv-row--tight { margin-bottom:2px; }
       .cv-row--me { align-self:flex-end; align-items:flex-end; }
       .cv-row--them { align-self:flex-start; align-items:flex-start; }
-      .cv-bubble { padding:12px 15px; border-radius:18px; font-size:14px; line-height:1.4; word-break:break-word; }
+      .cv-bubble { padding:8px 12px; border-radius:16px; font-size:14.5px; line-height:1.35; word-break:break-word; white-space:pre-wrap; }
       .cv-bubble--me { background:var(--primary); color:#fff; border-bottom-right-radius:6px; }
       .cv-bubble--them { background:var(--surface); color:var(--ink); border-bottom-left-radius:6px; }
-      .cv-time { display:flex; align-items:center; font-size:11px; color:var(--ink-soft); margin:4px 4px 0; }
+      .cv-time { display:flex; align-items:center; font-size:11px; color:var(--ink-soft); margin:2px 4px 0; }
       .ms-typing { color:var(--primary); font-weight:700; }
       .cv-sub--typing { color:var(--primary); font-weight:700; }
       .cv-typing { display:inline-flex; align-items:center; gap:4px; padding:14px 16px; }
@@ -5745,7 +5753,8 @@ function Style() {
       .cv-quick { display:flex; gap:8px; overflow-x:auto; padding:10px 14px 4px; background:var(--bg); }
       .cv-quick button { flex-shrink:0; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:10px 16px; font-family:inherit; font-size:13px; font-weight:600; color:var(--ink); cursor:pointer; }
       .cv-input { display:flex; gap:10px; padding:10px 14px calc(10px + var(--sab, env(safe-area-inset-bottom))); background:var(--bg); }
-      .cv-input input { flex:1; min-width:0; border:none; outline:none; background:#EDE5D1; border-radius:999px; padding:14px 18px; font-family:inherit; font-size:16px; color:var(--ink); }
+      .cv-input { align-items:flex-end; }
+      .cv-input textarea { flex:1; min-width:0; border:none; outline:none; background:#EDE5D1; border-radius:24px; padding:13px 18px; font-family:inherit; font-size:16px; line-height:1.3; color:var(--ink); resize:none; max-height:120px; overflow-y:auto; display:block; }
       .cv-send { width:48px; height:48px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
       .cv-send:disabled { opacity:.4; cursor:default; }
       .cv-safe { text-align:center; font-size:11px; color:var(--ink-soft); padding:0 16px 8px; background:var(--bg); margin-top:-4px; }
@@ -6075,6 +6084,7 @@ function Style() {
 .cv-photo img { display:block; width:min(240px, 62vw); max-height:320px; object-fit:cover; border-radius:13px; cursor:pointer; background:#DDD5C0; }
 .cv-photo-time { position:absolute; right:7px; bottom:7px; display:flex; align-items:center; gap:2px; background:rgba(0,0,0,.45); color:#fff; font-size:11px; line-height:1; padding:4px 7px; border-radius:10px; }
 .cv-cap { padding:7px 10px 6px; font-size:14px; line-height:1.35; }
+.cv-bubble:not(.cv-bubble--img) > .cv-cap { padding:0; font-size:inherit; }
 .pv { position:fixed; inset:0; z-index:90; background:#000; display:flex; flex-direction:column; }
 .pv-top { position:absolute; top:0; left:0; right:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:calc(10px + env(safe-area-inset-top)) 10px 10px; color:#fff; background:linear-gradient(to bottom, rgba(0,0,0,.65), transparent); }
 .pv-top span { flex:1; text-align:center; font-size:13.5px; font-weight:600; }
