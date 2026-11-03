@@ -3736,6 +3736,21 @@ function ReceiptsView({ token, flash, fail, onBack, requestId }) {
   );
 }
 
+// plain explanation of when artisans get paid, shown on Earnings and the payout account screen
+function PayoutTiming() {
+  return (
+    <div className="tk-note" style={{ margin: "0 0 14px" }}>
+      <b>When you get paid</b>
+      <ul style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.5 }}>
+        <li>The customer confirms the job: your payout is sent straight away. Your bank may take a little while to show it.</li>
+        <li>The customer doesn't confirm: payment releases automatically 48 hours after you mark the job done. If that is your first payout, it waits another 24 hours.</li>
+        <li>You add or change your payout account: payouts pause for 24 hours to protect you from fraud.</li>
+        <li>A customer reports a problem: the money stays frozen until VettedHands reviews it.</li>
+      </ul>
+    </div>
+  );
+}
+
 function EarningsView({ token, fail, onBack }) {
   const [d, setD] = useState(null);
   useEffect(() => { api("/api/payments/earnings", { token }).then(setD).catch((e) => { setD({ totals: {}, months: [], payments: [] }); fail(e); }); }, []);
@@ -3749,6 +3764,7 @@ function EarningsView({ token, fail, onBack }) {
       {back}
       <h1 className="trk-h">Earnings</h1>
       <p className="trk-sub">What you have earned through VettedHands, after commission.</p>
+      <PayoutTiming />
       <div className="rcpt-sum" style={{ margin: "0 0 14px" }}>
         <div><span>Paid out to you</span><b>{naira(t.paidKobo)}</b></div>
         <div><span>On its way or under review</span><b>{naira(t.pendingKobo)}</b></div>
@@ -3882,6 +3898,7 @@ function BankView({ token, flash, fail, onBack }) {
       {err && <div className="auth-err" style={{ marginTop: 10 }}>{err}</div>}
       <button className="rf-go" style={{ marginTop: 16 }} disabled={!ok || busy} onClick={save}>{busy ? "Checking account…" : "Verify and save"}</button>
       <p className="apl-help">We check the account with your bank. After a change, payouts pause for 24 hours to protect you.</p>
+      <PayoutTiming />
     </div>
   );
 }
@@ -3894,7 +3911,7 @@ const AGREEMENT = [
   ["Business registration", "VettedHands prefers artisans registered with the CAC. If you are registered, you must give your correct registered name and number. If you are not yet registered, you will register through our partner Dannit, and we approve you only after they confirm."],
   ["Do the job properly", "Turn up on time, do the work you quoted, use the agreed materials and finish what you agreed. Tell the customer in the chat early if something changes."],
   ["Prices and payment", "Agree the price in the app. The customer pays through VettedHands, and we hold the money until the job is done. If the job needs more, use Extra work in the app. Do not take or ask for payment for jobs found here outside VettedHands."],
-  ["Our commission and payouts", "VettedHands keeps a commission on each paid job. It is currently 10%, or 5% for Members, with a minimum amount, and we can change it with notice. Payouts go to the bank account in your profile. A first payout and a new bank account may be held for up to 24 hours for safety. If a customer confirms the job, or 48 hours pass without a problem reported, we release the payment."],
+  ["Our commission and payouts", "VettedHands keeps a commission on each paid job. It is currently 10%, or 5% for Members, with a minimum amount, and we can change it with notice. Payouts go to the bank account in your profile. If a customer confirms the job, we send your payout straight away. If they don't confirm, we release the payment 48 hours after you mark the job done, and a first payout released this way may wait another 24 hours. A new or changed bank account pauses payouts for 24 hours for safety. If a problem is reported, the payment is frozen until we review it."],
   ["Problems and refunds", "If a customer reports a problem, the payment is frozen while VettedHands reviews it. We may release it, refund the customer, or split it. Our decision after reviewing both sides is final inside the app."],
   ["Behaviour and safety", "Treat customers and other artisans with respect. No harassment, discrimination, threats, scams or unsafe work. Do not share customers' details with anyone else."],
   ["Reviews", "Reviews come from real jobs. Do not ask customers to change or delete an honest review, or write fake ones."],
