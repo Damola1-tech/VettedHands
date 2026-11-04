@@ -2759,6 +2759,9 @@ function TrackView({ request: r, user, onBack, onMessage, onConfirm, onRespond, 
   const working = s === "CONFIRMED" && !!r.startedAt && !r.artisanDoneAt;
   const waitingConfirm = s === "CONFIRMED" && !!r.artisanDoneAt;
   const disputed = !!(r.payments && r.payments[0] && r.payments[0].status === "DISPUTED");
+  // someone asked to cancel a booked job: that has to be answered first, so it goes above the action buttons
+  const cancelWaiting = s === "CONFIRMED" && !!r.cancelRequestedAt && !r.artisanDoneAt && !disputed;
+  const theyAskedCancel = cancelWaiting && r.cancelRequestedById !== user.id;
   const done = ended || s === "PENDING" ? 1 : s === "ACCEPTED" ? 2 : booked || working ? 3 : waitingConfirm ? 4 : 6;
   const current = ended ? -1 : s === "PENDING" ? 1 : s === "ACCEPTED" ? 2 : booked || working ? 3 : waitingConfirm ? 4 : -1;
   const [label, cls] = pillFor(r, artisanSide);
@@ -2806,6 +2809,7 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
 })()}
 {quote && (s === "ACCEPTED" || r.quotedPrice) && <QuotePanel request={r} user={user} {...quote} />}
 {quote && s === "CONFIRMED" && <AddOnPanel request={r} user={user} {...quote} />}
+{cancelWaiting && <div style={{ marginBottom: 14 }}><CancelBar request={r} user={user} onAction={onCancelAction} /></div>}
 <div className="tk-actions">
         {artisanSide && s === "PENDING" && (
           <div className="rq-acts" style={{ marginTop: 0 }}>
@@ -2825,8 +2829,9 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
           </div>
         )}
         {artisanSide && booked && <button className="tk-btn" disabled={busy} onClick={() => run(onStart)}>{busy ? "Starting…" : "Start job"}</button>}
-        {artisanSide && working && <div className="tk-note">When the work is finished, tap Mark job done and send a photo of it. It protects you if there is a dispute.</div>}
-        {artisanSide && working && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
+        {artisanSide && working && !theyAskedCancel && <div className="tk-note">When the work is finished, tap Mark job done and send a photo of it. It protects you if there is a dispute.</div>}
+        {artisanSide && working && theyAskedCancel && <div className="tk-note">The customer asked to cancel. Keep or agree to the cancellation above before you do anything else.</div>}
+        {artisanSide && working && !theyAskedCancel && <button className="tk-btn" disabled={busy} onClick={() => run(onDone)}>{busy ? "Saving…" : "Mark job done"}</button>}
         {!artisanSide && waitingConfirm && !disputed && <button className="tk-btn" onClick={onReview}>Confirm job done and review</button>}
         {!artisanSide && waitingConfirm && disputed && <div className="tk-note">This job is under review by VettedHands. We will decide what happens to the payment and update you here.</div>}
         {s === "COMPLETED" && !artisanSide && onBookAgain && <button className="tk-btn" onClick={onBookAgain}>Book this artisan again</button>}
@@ -2856,7 +2861,7 @@ if (s === "CANCELLED" && pay.status === "HELD") return <div className="tk-pay"><
           </div>
         )}
       </div>
-      {!ended && s !== "COMPLETED" && <CancelBar request={r} user={user} onAction={onCancelAction} />}
+      {!ended && s !== "COMPLETED" && !cancelWaiting && <CancelBar request={r} user={user} onAction={onCancelAction} />}
       {!ended && <button className="tk-report" onClick={onReport}>Report a problem with this job</button>}
     </div>
   );
