@@ -1074,7 +1074,8 @@ useEffect(() => {
 
   const [askGroup, setAskGroup] = useState(null);
   const [doneAsk, setDoneAsk] = useState(null); // { id, busy, err }: asks the artisan for a photo of the finished work
-const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when accepting // { args, groups } while we ask "same job?"
+const respondLock = useRef(false);
+  const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when accepting // { args, groups } while we ask "same job?"
   // open jobs this artisan isn't part of yet
   function openJobsFor(artisanProfileId) {
     const m = new Map();
@@ -1201,10 +1202,17 @@ const [priceAsk, setPriceAsk] = useState(null); // artisan sets a price when acc
 }
 async function respondToRequest(requestId, status) {
   // the price is agreed in the chat now (see QuotePanel)
+    if (respondLock.current) return;
+    respondLock.current = true;
+    flash(status === "ACCEPTED" ? "Accepting…" : "Declining…");
     try {
       const d = await api(`/api/requests/${requestId}/status`, { method: "PATCH", token, body: { status } });
       setRequests((prev) => prev.map((r) => (r.id === requestId ? d.request : r)));
-    } catch (e) { fail(e); }
+      flash(status === "ACCEPTED" ? "Accepted. Chat to agree the price." : "Request declined.");
+    } catch (e) {
+      if (/payout account|bank/i.test(e.message || "")) { flash("Add your payout account first, then accept."); setNavTab("profile"); setView("bank"); }
+      else flash(e.message || "Something went wrong");
+    } finally { respondLock.current = false; }
   }
   function payWithPopup(d) {
     return new Promise((resolve) => {
