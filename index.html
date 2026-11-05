@@ -3886,7 +3886,11 @@ function BankPicker({ banks, value, onChange }) {
   const [q, setQ] = useState("");
   const sorted = useMemo(() => [...banks].sort((a, b) => a.name.localeCompare(b.name)), [banks]);
   const sel = sorted.find((b) => b.code === value);
-  const list = sorted.filter((b) => b.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const norm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const nq = norm(q);
+  const list = !nq ? sorted : sorted
+    .filter((b) => norm(b.name).includes(nq))
+    .sort((a, b) => (norm(b.name).startsWith(nq) ? 1 : 0) - (norm(a.name).startsWith(nq) ? 1 : 0));
   return (
     <div className="bp">
       <button type="button" className="apl-in bp-btn" onClick={() => setOpen(!open)}>
