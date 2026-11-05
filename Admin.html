@@ -166,6 +166,19 @@ tr.sel td{background:#EEF6F1}
 .login-left h1{font-size:46px;line-height:1.05;max-width:480px;margin-bottom:18px}
 .login-left p{opacity:.82;max-width:440px;font-size:16px;margin:0}
 .login-right{display:flex;align-items:center;justify-content:center;padding:30px}
+.login-left{background:radial-gradient(120% 90% at 20% 0%,#1B6650 0%,#0F4D3A 45%,#0A3A2B 100%);position:relative;overflow:hidden}
+.login-left>div:nth-child(2){margin-top:44px}
+.login-left h1 em{font-style:normal;color:#E9B872}
+.la-stage{position:relative;flex:1;min-height:240px;display:flex;align-items:center;justify-content:center}
+.la-glow{position:absolute;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle,rgba(233,184,114,.26),transparent 68%)}
+.la-shield{position:relative;filter:drop-shadow(0 26px 36px rgba(0,0,0,.35));animation:laFloat 6s ease-in-out infinite}
+.la-card{position:absolute;background:rgba(255,255,255,.96);color:#1E1B16;border-radius:14px;padding:10px 14px;box-shadow:0 18px 30px -16px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:2px;font-size:12px;animation:laFloat 7s ease-in-out infinite}
+.la-card b{font-size:13.5px;color:#0F4D3A}.la-card span{color:#6B6357}
+.la-c1{left:2%;top:12%;animation-delay:-1s}.la-c2{right:2%;top:40%;animation-delay:-3s}.la-c3{left:8%;bottom:8%;animation-delay:-5s}
+@keyframes laFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+@media (prefers-reduced-motion:reduce){.la-shield,.la-card{animation:none!important}}
+.login-form{background:#fff;border:1px solid var(--line);border-radius:24px;padding:34px 30px;box-shadow:0 30px 60px -38px rgba(30,27,22,.35)}
+
 .login-form{width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px}
 .login-form label{display:flex;flex-direction:column;gap:6px;font-weight:700}
 .login-form input{border:1.5px solid var(--line);border-radius:12px;padding:13px;background:#fff}
@@ -316,7 +329,18 @@ function Login({ onLogin }) {
     <div className="login">
       <div className="login-left">
         <div className="logo"><span className="logo-mark"><Shield /></span>VettedHands</div>
-        <div><h1>Trust is built by the people behind the badges.</h1><p>Review applications, verify artisans and keep every job fair. Your decisions decide who customers can trust.</p></div>
+        <div><h1>Trust is built by the people behind the <em>badges.</em></h1><p>Review applications, verify artisans and keep every job fair. Your decisions decide who customers can trust.</p></div>
+        <div className="la-stage" aria-hidden="true">
+          <div className="la-glow" />
+          <svg className="la-shield" viewBox="0 0 200 230" width="190" height="218">
+            <defs><linearGradient id="lag" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#1B6650" /><stop offset="1" stopColor="#0A3A2B" /></linearGradient></defs>
+            <path d="M100 8 L184 40 V112 C184 164 148 202 100 222 C52 202 16 164 16 112 V40 Z" fill="url(#lag)" stroke="#E9B872" strokeWidth="5" />
+            <path d="M62 116 L90 144 L142 88" fill="none" stroke="#E9B872" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div className="la-card la-c1"><b>Applications</b><span>Check ID, CAC and work photos</span></div>
+          <div className="la-card la-c2"><b>Payments</b><span>Refund, release or split fairly</span></div>
+          <div className="la-card la-c3"><b>Reports</b><span>Hear both sides before deciding</span></div>
+        </div>
         <div style={{ opacity: .6, fontSize: 13 }}>VettedHands Admin</div>
       </div>
       <div className="login-right">

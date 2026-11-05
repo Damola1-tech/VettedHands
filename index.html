@@ -432,6 +432,31 @@ function CodeBoxes({ value, onChange }) {
   );
 }
 
+// left brand panel for the sign-in / sign-up screen, only shows on wide screens (see .auth-art css)
+function AuthArt() {
+  return (
+    <aside className="auth-art" aria-hidden="true">
+      <div className="aa-brand"><span className="landing-mark"><ShieldCheck size={20} /></span>VettedHands</div>
+      <div className="aa-copy">
+        <h2>Hire help<br />you can <em>trust.</em></h2>
+        <p>Vetted artisans in Ado-Ekiti. Your payment is held safely until the job is done.</p>
+      </div>
+      <div className="aa-stage">
+        <div className="aa-glow" />
+        <svg className="aa-shield" viewBox="0 0 200 230" width="210" height="241">
+          <defs><linearGradient id="aag" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#1B6650" /><stop offset="1" stopColor="#0A3A2B" /></linearGradient></defs>
+          <path d="M100 8 L184 40 V112 C184 164 148 202 100 222 C52 202 16 164 16 112 V40 Z" fill="url(#aag)" stroke="#E9B872" strokeWidth="5" />
+          <path d="M62 116 L90 144 L142 88" fill="none" stroke="#E9B872" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div className="aa-card aa-c1"><b>Payment held</b><span>Released only when you confirm</span></div>
+        <div className="aa-card aa-c2"><b>Vetted · 4.9 ★</b><span>ID and work checked</span></div>
+        <div className="aa-card aa-c3"><b>Photo proof</b><span>Sent before the job closes</span></div>
+      </div>
+      <div className="aa-foot"><span>Escrow protection</span><span>Vetted artisans</span><span>Secure payments</span></div>
+    </aside>
+  );
+}
+
 function AuthScreen({ initialMode, onBack, auth, onLegal }) {
   const [mode, setMode] = useState(initialMode || "login"); // register | login | forgot | code
   const [after, setAfter] = useState("verify"); // what the code screen finishes: verify | reset
@@ -501,6 +526,7 @@ function AuthScreen({ initialMode, onBack, auth, onLegal }) {
 
   return (
     <div className="auth">
+      <AuthArt />
       <div className="auth-inner">
         <div className="auth-top">
           <button className="auth-back" onClick={goBack} aria-label="Back"><ArrowLeft size={20} /></button>
@@ -1554,7 +1580,7 @@ await payWithPopup(d);
         </div>
       )}
       {priceAsk && (
-  <div className="sg-back" onClick={() => !priceAsk.busy && setPriceAsk(null)}> onClick={() => !priceAsk.busy && setPriceAsk(null)}>
+  <div className="sg-back" onClick={() => !priceAsk.busy && setPriceAsk(null)}>
     <div className="sg-card" onClick={(e) => e.stopPropagation()}>
       <h3>Set your price</h3>
       <p>The customer pays this amount to VettedHands first. We hold it safely and release it to you when the job is confirmed. VettedHands keeps a small commission.</p>
@@ -5826,6 +5852,33 @@ function Style() {
       .how-t { font-weight:700; font-size:14.5px; }
       .how-d { font-size:13px; color:var(--ink-soft); margin-top:2px; line-height:1.45; }
       .auth-inner { max-width:440px; margin:0 auto; }
+      /* ===== sign-in / sign-up: split screen on wide screens ===== */
+      .auth-art { display:none; }
+      @media (min-width: 900px) {
+        .auth { display:grid; grid-template-columns:minmax(0,1.08fr) minmax(0,1fr); padding:0; align-items:start; }
+        .auth-art { display:flex; flex-direction:column; justify-content:space-between; position:sticky; top:0; height:100vh; box-sizing:border-box; padding:44px 52px; color:#F5F0E4; overflow:hidden; background:radial-gradient(120% 90% at 20% 0%, #1B6650 0%, #0F4D3A 45%, #0A3A2B 100%); }
+        .aa-brand { display:flex; align-items:center; gap:10px; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:20px; }
+        .aa-brand .landing-mark { background:rgba(255,255,255,.14); }
+        .aa-copy { margin-top:36px; }
+        .aa-copy h2 { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:clamp(40px,4.4vw,60px); line-height:1.02; letter-spacing:-.03em; margin:0 0 14px; }
+        .aa-copy h2 em { font-style:normal; color:#E9B872; }
+        .aa-copy p { margin:0; max-width:420px; font-size:16px; line-height:1.5; color:#CFE0D6; }
+        .aa-stage { position:relative; flex:1; min-height:280px; display:flex; align-items:center; justify-content:center; }
+        .aa-glow { position:absolute; width:340px; height:340px; border-radius:50%; background:radial-gradient(circle, rgba(233,184,114,.28), transparent 68%); }
+        .aa-shield { position:relative; filter:drop-shadow(0 30px 40px rgba(0,0,0,.35)); animation:aaFloat 6s ease-in-out infinite; }
+        .aa-card { position:absolute; background:rgba(255,255,255,.96); color:#1E1B16; border-radius:16px; padding:11px 15px; box-shadow:0 20px 34px -18px rgba(0,0,0,.5); display:flex; flex-direction:column; gap:2px; font-size:12.5px; animation:aaFloat 7s ease-in-out infinite; }
+        .aa-card b { font-size:14px; color:#0F4D3A; }
+        .aa-card span { color:#6B6357; }
+        .aa-c1 { left:4%; top:14%; animation-delay:-1s; }
+        .aa-c2 { right:3%; top:38%; animation-delay:-3s; }
+        .aa-c3 { left:10%; bottom:10%; animation-delay:-5s; }
+        .aa-foot { display:flex; gap:18px; flex-wrap:wrap; font-size:13px; color:#CFE0D6; }
+        .aa-foot span::before { content:"✓"; color:#E9B872; margin-right:7px; font-weight:800; }
+        .auth-inner { align-self:center; width:100%; max-width:460px; margin:48px auto; padding:36px 34px; background:#fff; border:1px solid var(--line); border-radius:26px; box-shadow:0 30px 60px -36px rgba(30,27,22,.35); box-sizing:border-box; }
+        @keyframes aaFloat { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-10px); } }
+      }
+      @media (prefers-reduced-motion: reduce) { .aa-shield, .aa-card { animation:none !important; } }
+
       .auth-top { display:flex; align-items:center; gap:10px; margin-bottom:26px; }
       .auth-back { width:36px; height:36px; border:none; background:none; color:var(--ink); display:flex; align-items:center; justify-content:center; cursor:pointer; margin-left:-8px; }
       .auth-brand { font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:16.5px; }
