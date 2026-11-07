@@ -1,0 +1,76 @@
+# Builds the static service pages people can find on Google. Run: python3 gen-seo.py
+import html, json
+SITE = "https://vettedhands.com.ng"
+PAGES = [
+ dict(slug="electrician", trade="Electrician", plural="electricians", file="electrician-ado-ekiti.html",
+  jobs=["Fixing sockets, switches and faulty wiring","Installing lights, fans and changeover switches","Tracing power trips and short circuits","House and shop wiring for new buildings"],
+  intro="A bad electrician is a risk to your home, not just your wallet. Wiring done wrong can burn out appliances or start a fire.",
+  tips=["Ask what caused the fault, not only how much the fix costs.","Agree what is included, such as cables and fittings, before work starts.","Be careful of anyone who asks for the full payment before touching the job."],
+  faq=[("How do I find a good electrician in Ado-Ekiti?","Look for someone who is verified, has reviews from real customers, and will agree the price in writing before starting. VettedHands is being built to show exactly that."),("How much does an electrician cost in Ado-Ekiti?","It depends on the job. A small fix costs far less than rewiring a room. Always get the price agreed before work begins.")]),
+ dict(slug="plumber", trade="Plumber", plural="plumbers", file="plumber-ado-ekiti.html",
+  jobs=["Leaking taps, pipes and cisterns","Blocked sinks, toilets and drains","Installing water tanks, pumps and fittings","Bathroom and kitchen plumbing"],
+  intro="A small leak that is ignored becomes a damaged ceiling or a big water bill. The right plumber fixes the cause, not just the drip.",
+  tips=["Take a photo of the problem and send it before the visit, so the plumber can come prepared.","Ask whether parts are included in the price.","Check the fix before the plumber leaves, and keep the payment until you are happy."],
+  faq=[("Where can I find a reliable plumber in Ado-Ekiti?","Choose a verified plumber with reviews from real customers. On VettedHands, your payment is held safely until you confirm the job is done."),("What should I do if a plumber does not finish the job?","Do not pay the rest. Report it. On VettedHands, our team reviews the case and can refund you.")]),
+ dict(slug="tailor", trade="Tailor", plural="tailors", file="tailor-ado-ekiti.html",
+  jobs=["Native wear, aso ebi and corporate outfits","Alterations and repairs","School uniforms and event outfits","Custom designs from a photo you show"],
+  intro="Everyone has a story about a tailor who missed the deadline or ruined the fabric. A good tailor is worth finding and keeping.",
+  tips=["Show a picture of the style you want and agree the date in writing.","Ask to see examples of their earlier work.","Confirm the price, fabric and number of fittings before you pay."],
+  faq=[("How do I find a good tailor in Ado-Ekiti?","Look for a verified tailor with a portfolio and reviews. VettedHands lets you see their work and chat before you book."),("Should I pay a tailor upfront?","A small deposit may be normal, but paying everything before the work is risky. VettedHands holds your payment until you confirm the outfit is done.")]),
+ dict(slug="barber", trade="Barber", plural="barbers", file="barber-ado-ekiti.html",
+  jobs=["Haircuts and fades","Beard grooming and shaping","Home or event grooming","Kids' haircuts"],
+  intro="A good barber knows your head shape and your style. Finding one you trust saves you from a bad cut before a big day.",
+  tips=["Show a photo of the cut you want.","Agree the price and time before you sit down.","Check reviews or ask friends before trying someone new."],
+  faq=[("How can I find a trusted barber in Ado-Ekiti?","Choose a verified barber with reviews from real customers. VettedHands is being built to make that easy."),("Can I book a barber to come to me?","Some barbers do home or event visits. Ask when you send your request and agree the price first.")]),
+ dict(slug="phone repairer", trade="Phone Repairer", plural="phone repairers", file="phone-repair-ado-ekiti.html",
+  jobs=["Cracked screens and broken glass","Battery and charging port problems","Water damage and software issues","Unlocking and phone setup"],
+  intro="Handing over your phone means handing over your photos, chats and bank apps. You want someone verified and honest.",
+  tips=["Back up your phone before any repair.","Ask what parts will be used, and whether they are original or not.","Agree the price before the repair starts, and test everything before you pay."],
+  faq=[("Where can I repair my phone in Ado-Ekiti?","Look for a verified repairer with real reviews. VettedHands is being built so you can compare repairers, agree the price in the app and pay safely."),("How do I avoid being cheated by a phone repairer?","Agree the price first, ask what parts are used, and keep payment until it works. VettedHands holds your payment until you confirm.")]),
+]
+CSS = """:root{--g:#0F4D3A;--g2:#14604A;--cream:#F5F0E4;--gold:#E9B872;--ink:#16221d}*{box-sizing:border-box}body{margin:0;font-family:'Figtree',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--cream);color:var(--ink);line-height:1.6}header{background:var(--g);color:var(--cream);padding:14px 20px}header a{color:var(--cream);text-decoration:none;font-weight:800;letter-spacing:.04em}main{max-width:720px;margin:0 auto;padding:28px 20px 60px}h1{font-family:'Bricolage Grotesque','Figtree',sans-serif;font-size:2rem;line-height:1.15;margin:.2em 0 .5em;color:var(--g)}h2{font-family:'Bricolage Grotesque','Figtree',sans-serif;color:var(--g);margin-top:1.8em}ul{padding-left:1.2em}.cta{display:inline-block;background:var(--g);color:var(--cream);padding:14px 22px;border-radius:12px;text-decoration:none;font-weight:700;margin:12px 0}.box{background:#fff;border-radius:14px;padding:16px 18px;margin:12px 0}.links a{display:inline-block;margin:4px 10px 4px 0;color:var(--g2)}footer{text-align:center;color:#556;padding:20px;font-size:.9rem}footer a{color:var(--g2)}"""
+FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">'
+def head(title, desc, url, extra=""):
+    return f'''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{html.escape(title)}</title>
+<meta name="description" content="{html.escape(desc)}">
+<link rel="canonical" href="{url}">
+<meta name="theme-color" content="#0F4D3A">
+<link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="favicon.ico" sizes="48x48">
+<meta property="og:type" content="website"><meta property="og:site_name" content="VettedHands"><meta property="og:title" content="{html.escape(title)}"><meta property="og:description" content="{html.escape(desc)}"><meta property="og:url" content="{url}"><meta property="og:image" content="{SITE}/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+{FONT}<style>{CSS}</style>{extra}</head><body>
+<header><a href="{SITE}/waitlist.html">VETTEDHANDS</a></header><main>'''
+FOOT = '</main><footer>VettedHands · Starting in Ado-Ekiti, Ekiti State · <a href="find-artisans-ado-ekiti.html">All services</a></footer></body></html>'
+def page(p):
+    url = f"{SITE}/{p['file']}"
+    t = p["trade"]; pl = p["plural"]
+    title = f"Find a Trusted {t} in Ado-Ekiti | VettedHands"
+    desc = f"Looking for a reliable {t.lower()} in Ado-Ekiti? VettedHands is building a way to book verified {pl} and pay safely. Join the waitlist."
+    faq = {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":q,"acceptedAnswer":{"@type":"Answer","text":a}} for q,a in p["faq"]]}
+    crumbs = {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"VettedHands","item":SITE+"/"},{"@type":"ListItem","position":2,"name":"Services in Ado-Ekiti","item":SITE+"/find-artisans-ado-ekiti.html"},{"@type":"ListItem","position":3,"name":t+" in Ado-Ekiti","item":url}]}
+    extra = f'<script type="application/ld+json">{json.dumps(faq)}</script><script type="application/ld+json">{json.dumps(crumbs)}</script>'
+    others = "".join(f'<a href="{o["file"]}">{o["trade"]}s</a>' for o in PAGES if o["file"] != p["file"])
+    b = head(title, desc, url, extra)
+    b += f'<h1>How to find a trusted {t.lower()} in Ado-Ekiti</h1><p>{html.escape(p["intro"])}</p>'
+    b += f'<h2>What a {t.lower()} can help with</h2><ul>' + "".join(f"<li>{html.escape(j)}</li>" for j in p["jobs"]) + "</ul>"
+    b += f'<h2>Before you hire anyone</h2><ul>' + "".join(f"<li>{html.escape(x)}</li>" for x in p["tips"]) + "</ul>"
+    b += f'<div class="box"><b>How VettedHands will help.</b> You compare verified {pl}, chat to agree the price, and pay through the app. Your payment is held safely and only goes to the {t.lower()} when you confirm the job is done. If something goes wrong, our team reviews it. We are starting in Ado-Ekiti and the waitlist is open.</div>'
+    b += '<a class="cta" href="waitlist.html">Join the waitlist</a>'
+    b += '<h2>Common questions</h2>' + "".join(f"<p><b>{html.escape(q)}</b><br>{html.escape(a)}</p>" for q,a in p["faq"])
+    b += f'<h2>Other services</h2><p class="links">{others}</p>' + FOOT
+    open(p["file"], "w", encoding="utf-8").write(b)
+def hub():
+    url = f"{SITE}/find-artisans-ado-ekiti.html"
+    title = "Find Trusted Artisans in Ado-Ekiti | VettedHands"
+    desc = "Electricians, plumbers, tailors, barbers and phone repairers in Ado-Ekiti. VettedHands is building a safer way to book verified artisans. Join the waitlist."
+    b = head(title, desc, url)
+    b += '<h1>Find trusted artisans in Ado-Ekiti</h1><p>VettedHands connects you with verified artisans and holds your payment safely until the job is done. We are starting in Ado-Ekiti, and the waitlist is open.</p><div class="box links">'
+    b += "".join(f'<a href="{o["file"]}"><b>{o["trade"]}s in Ado-Ekiti</b></a><br>' for o in PAGES) + '</div><a class="cta" href="waitlist.html">Join the waitlist</a>' + FOOT
+    open("find-artisans-ado-ekiti.html", "w", encoding="utf-8").write(b)
+for p in PAGES: page(p)
+hub()
+urls = ["/", "/waitlist.html", "/find-artisans-ado-ekiti.html"] + ["/" + p["file"] for p in PAGES]
+open("sitemap.xml", "w").write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "".join(f"  <url><loc>{SITE}{u}</loc></url>\n" for u in urls) + "</urlset>\n")
+print("pages:", len(PAGES) + 1)
