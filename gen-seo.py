@@ -120,9 +120,9 @@ simple("online-artisan-marketplace-nigeria.html",
  org)
 simple("about.html",
  "About VettedHands | Verified Artisans, Safe Payments",
- "VettedHands is a Nigerian marketplace that connects customers with verified artisans and holds payments safely until the job is done. Founded by Damola Lawal in Ado-Ekiti.",
+ "VettedHands is a Nigerian marketplace that connects customers with verified artisans and holds payments safely until the job is done. Founded by Oyindamola Lawal (Damola) in Ado-Ekiti.",
  "About VettedHands",
- "<p>Everybody in Nigeria has a story about hiring an artisan: paying upfront and getting ghosted, or half-done work. Artisans have their own story: finishing the job and not getting paid. VettedHands is being built to fix both sides.</p><h2>What we do</h2><p>We verify artisans, let customers agree the price in the app, and hold the payment safely until the customer confirms the job is done. If there is a problem, our team reviews it and decides fairly.</p><h2>Who is behind it</h2><p>VettedHands was started by Damola Lawal in Ado-Ekiti, Ekiti State, and is starting with customers and artisans around Ekiti State University.</p>",
+ "<p>Everybody in Nigeria has a story about hiring an artisan: paying upfront and getting ghosted, or half-done work. Artisans have their own story: finishing the job and not getting paid. VettedHands is being built to fix both sides.</p><h2>What we do</h2><p>We verify artisans, let customers agree the price in the app, and hold the payment safely until the customer confirms the job is done. If there is a problem, our team reviews it and decides fairly.</p><h2>Who is behind it</h2><p>VettedHands was founded by Oyindamola Lawal (Damola) in Ado-Ekiti, Ekiti State, and is starting with customers and artisans around Ekiti State University.</p>",
  org)
 simple("how-it-works.html",
  "How VettedHands Works | Book Verified Artisans Safely",
