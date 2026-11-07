@@ -100,6 +100,7 @@ def simple(file, title, desc, h1, body, extra=""):
     url = f"{SITE}/{file}"
     open(file, "w", encoding="utf-8").write(head(title, desc, url, extra) + f"<h1>{h1}</h1>" + body + '<a class="cta" href="waitlist.html">Join the waitlist</a>' + FOOT)
 org = '<script type="application/ld+json">' + json.dumps({"@context":"https://schema.org","@type":"WebSite","name":"VettedHands","url":SITE+"/","inLanguage":"en-NG"}) + '</script>'
+org += '<script type="application/ld+json">' + json.dumps({"@context":"https://schema.org","@type":"Organization","name":"VettedHands","url":SITE+"/","logo":SITE+"/icon-512.png","sameAs":["https://instagram.com/vettedhands.ng", "https://tiktok.com/@vettedhands.ng", "https://x.com/Vettedhands"]}) + '</script>'
 simple("online-artisan-marketplace-nigeria.html",
  "Online Marketplace for Verified Artisans in Nigeria | VettedHands",
  "VettedHands is an online marketplace in Nigeria where you find verified artisans, agree the price in the app, and pay safely. Starting in Ado-Ekiti. Join the waitlist.",
