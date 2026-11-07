@@ -1,0 +1,16 @@
+[
+  {"trade": "Laptop Repairer", "plural": "laptop repairers", "file": "laptop-repair-ado-ekiti.html", "jobs": ["Cracked screens and broken hinges", "Slow laptops, virus removal and Windows reinstall", "Battery, charger and keyboard replacement", "Data recovery and upgrades"], "delivery": true},
+  {"trade": "Cleaner", "plural": "cleaners", "file": "cleaner-ado-ekiti.html", "jobs": ["Home and room cleaning", "Post-construction and move-in cleaning", "Office and shop cleaning", "Deep cleaning for events"], "delivery": false},
+  {"trade": "Welder", "plural": "welders", "file": "welder-ado-ekiti.html", "jobs": ["Gates, doors and burglary proof", "Roof frames and metal structures", "Repairs to metal furniture", "Custom metalwork"], "delivery": true},
+  {"trade": "Bricklayer", "plural": "bricklayers", "file": "bricklayer-ado-ekiti.html", "jobs": ["Block work and fencing", "Plastering and screeding", "Small building and repair jobs", "Tiling and concrete work"], "delivery": false},
+  {"trade": "Cobbler", "plural": "cobblers", "file": "cobbler-ado-ekiti.html", "jobs": ["Shoe and sandal repair", "Bag and zip repairs", "Sole replacement and polishing", "Custom shoe work"], "delivery": true},
+  {"trade": "Laundry Service", "plural": "laundry services", "file": "laundry-ado-ekiti.html", "jobs": ["Washing and ironing", "Dry cleaning", "Bedding and curtains", "Pick-up and drop-off"], "delivery": true},
+  {"trade": "Caterer", "plural": "caterers", "file": "caterer-ado-ekiti.html", "jobs": ["Small chops and party food", "Event and wedding catering", "Office lunches", "Cakes and pastries"], "delivery": true},
+  {"trade": "Makeup Artist", "plural": "makeup artists", "file": "makeup-artist-ado-ekiti.html", "jobs": ["Bridal and event makeup", "Gele tying", "Photoshoot makeup", "Makeup lessons"], "delivery": false},
+  {"trade": "Photographer", "plural": "photographers", "file": "photographer-ado-ekiti.html", "jobs": ["Events and weddings", "Passport and portrait photos", "Product and business photos", "Graduation shoots"], "delivery": true},
+  {"trade": "Printer", "plural": "printers", "file": "printing-ado-ekiti.html", "jobs": ["Flyers, banners and posters", "T-shirts, caps and branded items", "Project binding and photocopying", "Business cards and stickers"], "delivery": true},
+  {"trade": "Solar and Inverter Installer", "plural": "solar and inverter installers", "file": "solar-inverter-ado-ekiti.html", "jobs": ["Inverter and battery installation", "Solar panel setup", "Fixing inverter faults", "Maintenance checks"], "delivery": false},
+  {"trade": "CCTV and DSTV Installer", "plural": "CCTV and DSTV installers", "file": "cctv-dstv-ado-ekiti.html", "jobs": ["CCTV camera installation", "DSTV and satellite dish setup", "Wi-Fi and network setup", "Repairs and relocations"], "delivery": false},
+  {"trade": "Mechanic", "plural": "mechanics", "file": "mechanic-ado-ekiti.html", "jobs": ["Car servicing and repairs", "Motorcycle and tricycle repairs", "Brake, engine and electrical faults", "Tyre and battery changes"], "delivery": false},
+  {"trade": "Fridge and Appliance Repairer", "plural": "fridge and appliance repairers", "file": "appliance-repair-ado-ekiti.html", "jobs": ["Fridge and freezer repair", "Washing machine and microwave repair", "Gas cooker and blender repair", "Small electrical appliances"], "delivery": true}
+]

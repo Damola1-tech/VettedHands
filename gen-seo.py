@@ -53,6 +53,17 @@ PAGES = [
   tips=["Agree the brand and number of coats before you start.","Ask who buys the paint and who supplies the tools.","Check one wall before the painter moves on."],
   faq=[("How do I find a reliable painter in Ado-Ekiti?","Choose a verified painter with photos of past work and real reviews. VettedHands is being built to help you compare and book safely."),("Should I pay before a painter starts?","A small deposit for materials is normal, but not the full amount. VettedHands holds your payment until you confirm.")]),
 ]
+# More services live in services.json, so adding one is a few lines of data, not code.
+def _generic(e):
+    t, pl = e["trade"], e["plural"]
+    return dict(slug=t.lower(), trade=t, plural=pl, file=e["file"], jobs=e["jobs"],
+      intro=f"Hiring a {t.lower()} should not be a gamble. The right person turns up, does the job properly and keeps their word on the price.",
+      tips=["Ask to see examples of earlier work, or read reviews from real customers.","Agree what the price covers, including parts or materials, before work starts.","Keep the payment until you have checked that the job is done properly."],
+      faq=[(f"How do I find a trusted {t.lower()} in Ado-Ekiti?", f"Look for a verified {t.lower()} with reviews from real customers. VettedHands is being built so you can compare {pl}, agree the price in the app and pay safely."),
+           (f"Is it safe to pay a {t.lower()} upfront?", "Paying everything before the work is risky. On VettedHands your payment is held safely and only released when you confirm the job is done.")])
+import os
+if os.path.exists("services.json"):
+    PAGES += [_generic(e) for e in json.load(open("services.json", encoding="utf-8"))]
 CSS = """:root{--g:#0F4D3A;--g2:#14604A;--cream:#F5F0E4;--gold:#E9B872;--ink:#16221d}*{box-sizing:border-box}body{margin:0;font-family:'Figtree',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--cream);color:var(--ink);line-height:1.6}header{background:var(--g);color:var(--cream);padding:14px 20px}header a{color:var(--cream);text-decoration:none;font-weight:800;letter-spacing:.04em}main{max-width:720px;margin:0 auto;padding:28px 20px 60px}h1{font-family:'Bricolage Grotesque','Figtree',sans-serif;font-size:2rem;line-height:1.15;margin:.2em 0 .5em;color:var(--g)}h2{font-family:'Bricolage Grotesque','Figtree',sans-serif;color:var(--g);margin-top:1.8em}ul{padding-left:1.2em}.cta{display:inline-block;background:var(--g);color:var(--cream);padding:14px 22px;border-radius:12px;text-decoration:none;font-weight:700;margin:12px 0}.box{background:#fff;border-radius:14px;padding:16px 18px;margin:12px 0}.links a{display:inline-block;margin:4px 10px 4px 0;color:var(--g2)}footer{text-align:center;color:#556;padding:20px;font-size:.9rem}footer a{color:var(--g2)}"""
 FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Figtree:wght@400;600;700&display=swap">'
 def head(title, desc, url, extra=""):
