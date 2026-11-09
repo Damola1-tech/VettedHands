@@ -113,19 +113,19 @@ def simple(file, title, desc, h1, body, extra=""):
 org = '<script type="application/ld+json">' + json.dumps({"@context":"https://schema.org","@type":"WebSite","name":"VettedHands","url":SITE+"/","inLanguage":"en-NG"}) + '</script>'
 org += '<script type="application/ld+json">' + json.dumps({"@context":"https://schema.org","@type":"Organization","name":"VettedHands","url":SITE+"/","logo":SITE+"/icon-512.png","sameAs":["https://instagram.com/vettedhands.ng", "https://tiktok.com/@vettedhands.ng", "https://x.com/Vettedhands"]}) + '</script>'
 simple("online-artisan-marketplace-nigeria.html",
- "Online Marketplace for Verified Artisans in Nigeria | VettedHands",
+ "Online Marketplace for Verified Artisans in Nigeria | VettedHands Nigeria",
  "VettedHands is an online marketplace in Nigeria where you find verified artisans, agree the price in the app, and pay safely. Starting in Ado-Ekiti. Join the waitlist.",
  "An online marketplace for verified artisans in Nigeria",
  "<p>Finding a good artisan in Nigeria usually means asking around and hoping. VettedHands is an online marketplace that makes it simpler and safer: electricians, plumbers, tailors, barbers, phone repairers and more, all in one place.</p><h2>How the marketplace works</h2><ul><li><b>Find:</b> browse verified artisans with profiles, photos and reviews.</li><li><b>Agree:</b> chat in the app and agree the price before any work starts.</li><li><b>Pay safely:</b> your payment is made through the app and held safely until you confirm the job is done.</li><li><b>Review:</b> rate the work, so the next customer knows who to trust.</li></ul><h2>For artisans</h2><p>Get verified, build your profile and reviews, and get paid for finished work without chasing customers.</p><p>We are starting in Ado-Ekiti, Ekiti State, and the waitlist is open.</p>",
  org)
 simple("about.html",
- "About VettedHands | Verified Artisans, Safe Payments",
+ "About VettedHands Nigeria | Verified Artisans, Safe Payments",
  "VettedHands is a Nigerian marketplace that connects customers with verified artisans and holds payments safely until the job is done. Founded by Oyindamola Lawal (Damola) in Ado-Ekiti.",
  "About VettedHands",
  "<p>Everybody in Nigeria has a story about hiring an artisan: paying upfront and getting ghosted, or half-done work. Artisans have their own story: finishing the job and not getting paid. VettedHands is being built to fix both sides.</p><h2>What we do</h2><p>We verify artisans, let customers agree the price in the app, and hold the payment safely until the customer confirms the job is done. If there is a problem, our team reviews it and decides fairly.</p><h2>Who is behind it</h2><p>VettedHands was founded by Oyindamola Lawal (Damola) in Ado-Ekiti, Ekiti State, and is starting with customers and artisans around Ekiti State University.</p>",
  org)
 simple("how-it-works.html",
- "How VettedHands Works | Book Verified Artisans Safely",
+ "How VettedHands Nigeria Works | Book Verified Artisans Safely",
  "How to book a verified artisan on VettedHands: send a request, chat and agree the price, pay safely through the app, and confirm when the job is done.",
  "How VettedHands works",
  "<h2>For customers</h2><ol><li>Search for the service you need and compare verified artisans.</li><li>Send a request and chat once they accept.</li><li>Agree the price in the app and pay securely.</li><li>The artisan does the job and sends a photo as proof.</li><li>You confirm, and the payment is released to the artisan.</li></ol><p>If something goes wrong, report it. Our team reviews the case and can release, refund or split the payment.</p><h2>For artisans</h2><ol><li>Apply and get verified.</li><li>Receive requests and accept the jobs you want.</li><li>The customer pays first, so you start with confidence.</li><li>Finish, send proof, and get paid once the customer confirms.</li></ol>",
