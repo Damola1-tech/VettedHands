@@ -2,7 +2,7 @@
   "name": "VettedHands",
   "short_name": "VettedHands",
   "description": "People you can trust for the job. Vetted electricians, plumbers, tailors and phone repairers.",
-  "start_url": "./",
+  "start_url": "app.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0F4D3A",

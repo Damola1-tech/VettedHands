@@ -5,7 +5,7 @@ const path = require("path");
 const esbuild = require("esbuild");
 
 const OUT = "dist";
-const PAGES = ["index.html", "Admin.html"];
+const PAGES = ["app.html", "Admin.html"];
 const SKIP = new Set(["gen-seo.py", "dist", "node_modules", ".git", ".github", "build.js", "package.json", "package-lock.json", ".gitignore", "README.md"]);
 
 fs.rmSync(OUT, { recursive: true, force: true });
