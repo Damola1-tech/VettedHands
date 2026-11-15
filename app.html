@@ -356,17 +356,16 @@ function useAuth() {
 
 function Landing({ onSignIn, onStart, onLegal }) {
   const trust = [
-    ["Vetted professionals", "Identity and contact checked before anyone is listed."],
-    ["Real reviews", "Only from customers whose job was actually completed."],
-    ["Verified track records", "Jobs done, ratings and repeat customers on every profile."],
-    ["Available near you", "Artisans switch their own availability on and off."],
+    ["Checked artisans", "We check each artisan's identity and phone number before they are listed."],
+    ["Your money is safe", "You pay in the app. We hold the money until you say the job is done."],
+    ["Honest reviews", "Only customers who finished a job can leave a review."],
+    ["Close to you", "See artisans who are available near you right now."],
   ];
   const steps = [
-    ["Request a service", "Describe the job, add a photo and your area. Send it to more than one artisan."],
-    ["We find vetted artisans", "Matched by trade, availability, distance and rating."],
-    ["Compare and chat", "Artisans who accept can message you. Ask questions and agree a time."],
-    ["Confirm one and track the job", "Your other requests close. Follow the job until it's done."],
-    ["Confirm and review", "Confirm the work is done and rate the artisan."],
+    ["Say what you need", "Describe the job and where you are. It takes about a minute."],
+    ["Choose an artisan", "Checked artisans reply. Chat with them, compare, and pick one."],
+    ["Pay safely", "Pay in the app. We keep the money safe. The artisan does not get it yet."],
+    ["Job done? Confirm", "Happy with the work? Confirm it and the artisan gets paid."],
   ];
   return (
     <div className="landing">
@@ -375,31 +374,38 @@ function Landing({ onSignIn, onStart, onLegal }) {
           <div className="landing-brand"><span className="landing-mark"><ShieldCheck size={20} /></span>VettedHands</div>
           <button className="landing-signin" onClick={onSignIn}>Sign in</button>
         </div>
-        <div className="landing-pill"><MapPin size={14} /> Starting in Ado-Ekiti</div>
-        <h1>Need someone you can trust?</h1>
-        <p className="landing-sub">Tell us what you need and we'll help you find a vetted professional around you.</p>
-        <button className="landing-cta landing-cta--primary" onClick={() => onStart("request")}>Request a service</button>
-        <button className="landing-cta landing-cta--secondary" onClick={() => onStart("artisan")}>Become an artisan</button>
-
-        <div className="trust-card">
-          <div className="trust-card-title">Find skilled people.<br />Hire with confidence.</div>
-          {trust.map(([t, d]) => (
-            <div key={t} className="trust-item">
-              <span className="trust-check">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-              </span>
-              <div><div className="trust-item-t">{t}</div><div className="trust-item-d">{d}</div></div>
+        <div className="lp-hero">
+          <div className="lp-copy">
+            <div className="landing-pill"><MapPin size={14} /> Starting in Ado-Ekiti</div>
+            <h1>Find a trusted artisan near you.</h1>
+            <p className="landing-sub">Plumbers, electricians, tailors and more. Every artisan is checked, and your money is held safely until the job is done.</p>
+            <div className="lp-ctas">
+              <button className="landing-cta landing-cta--primary" onClick={() => onStart("request")}>Find an artisan</button>
+              <button className="landing-cta landing-cta--secondary" onClick={() => onStart("artisan")}>I am an artisan</button>
             </div>
-          ))}
+          </div>
+          <div className="trust-card">
+            <div className="trust-card-title">Why people trust VettedHands</div>
+            {trust.map(([t, d]) => (
+              <div key={t} className="trust-item">
+                <span className="trust-check">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                </span>
+                <div><div className="trust-item-t">{t}</div><div className="trust-item-d">{d}</div></div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="how-title">How it works</div>
-        {steps.map(([t, d], i) => (
-          <div key={t} className="how-step">
-            <span className="how-num">{i + 1}</span>
-            <div><div className="how-t">{t}</div><div className="how-d">{d}</div></div>
-          </div>
-        ))}
+        <div className="how-steps">
+          {steps.map(([t, d], i) => (
+            <div key={t} className="how-step">
+              <span className="how-num">{i + 1}</span>
+              <div><div className="how-t">{t}</div><div className="how-d">{d}</div></div>
+            </div>
+          ))}
+        </div>
         <div className="landing-foot">
           <button onClick={() => onLegal("privacy")}>Privacy</button><span>·</span><button onClick={() => onLegal("terms")}>Terms</button><span>·</span><a href={"mailto:" + SUPPORT_EMAIL}>Support</a>
           <div>VettedHands · Ado-Ekiti, Ekiti State, Nigeria</div>
@@ -6651,6 +6657,32 @@ function Style() {
       @media (min-width: 1180px) {
         .content > .screen { max-width:1120px; padding-left:24px; padding-right:24px; }
         .feed--scroll { grid-template-columns:repeat(3, minmax(0,1fr)); }
+      }
+      .lp-ctas { display:flex; flex-direction:column; }
+      .lp-hero { display:block; }
+      @media (min-width: 900px) {
+        .landing { padding:28px 48px 40px; }
+        .landing-inner { max-width:1120px; }
+        .landing-brand { font-size:21px; }
+        .landing-mark { width:44px; height:44px; }
+        .landing-signin { font-size:15px; padding:10px 20px; border:1.5px solid var(--primary); border-radius:999px; }
+        .lp-hero { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr); gap:64px; align-items:center; margin-top:44px; }
+        .landing-pill { margin-top:0; font-size:12.5px; }
+        .landing h1 { font-size:clamp(52px,5.4vw,78px); line-height:.98; margin:20px 0 18px; }
+        .landing-sub { font-size:19px; max-width:520px; margin-bottom:32px; }
+        .lp-ctas { flex-direction:row; gap:14px; }
+        .landing-cta { width:auto; padding:17px 30px; font-size:15.5px; border-radius:999px; }
+        .landing-cta--primary { margin-bottom:0; }
+        .trust-card { margin-top:0; padding:34px 32px; }
+        .trust-card-title { font-size:26px; }
+        .trust-item-t { font-size:15.5px; }
+        .trust-item-d { font-size:14px; }
+        .how-title { font-size:34px; margin:72px 0 28px; letter-spacing:-.02em; }
+        .how-steps { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:20px; }
+        .how-step { flex-direction:column; margin:0; padding:24px; background:#fff; border:1px solid var(--line); border-radius:20px; gap:16px; }
+        .how-t { font-size:17px; }
+        .how-d { font-size:14.5px; margin-top:6px; }
+        .landing-foot { margin-top:56px; }
       }
     `}</style>
   );
