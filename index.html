@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="manifest" href="manifest.webmanifest" />
 <script>
-// Keep old links working: payment returns, shared artisan/referral links, notification taps, the installed app and signed-in users all go straight to the app.
+// old links (payment returns, shared links, installed app, logged-in users) go straight to the app
 (function(){try{var q=location.search,h=location.hash,p=new URLSearchParams(q);
 var keys=["ref","a","reference","trxref","nt","rid"],go=false;
 for(var i=0;i<keys.length;i++){if(p.has(keys[i])){go=true;break;}}
@@ -170,7 +170,7 @@ footer a:hover{color:var(--g)}
 <header class="nav"><div class="in">
   <a class="logo" href="#top"><i></i>VettedHands</a>
   <ul><li><a href="https://vettedhands.com.ng/how-it-works.html">How it works</a></li><li><a href="https://vettedhands.com.ng/find-artisans-ado-ekiti.html">Find artisans</a></li><li><a href="https://vettedhands.com.ng/about.html">About</a></li></ul>
-  <div class="navr"><a class="lg" href="https://vettedhands.com.ng/app.html">Log in</a><a class="btn sm" href="https://vettedhands.com.ng/app.html">Sign up</a></div>
+  <div class="navr"><a class="lg" href="https://vettedhands.com.ng/app.html">Log in</a><a class="btn sm" href="https://vettedhands.com.ng/waitlist.html">Join the waitlist</a></div>
 </div></header>
 
 <main id="top">
@@ -180,19 +180,19 @@ footer a:hover{color:var(--g)}
 
     <div class="copy"><div class="in">
       <div class="sc on" data-i="0">
-        <div class="eyebrow"><b></b>Ado-Ekiti</div>
+        <div class="eyebrow">Ado-Ekiti</div>
         <h1>Find a trusted artisan.<br><em>Pay safely.</em></h1>
-        <p class="sub">Plumbers, electricians, tailors and more in Ado-Ekiti. Every artisan is checked, and your money is held until the job is done.</p>
+        <p class="sub">VettedHands is a marketplace where you find artisans in Ado-Ekiti: plumbers, electricians, tailors and more. Every artisan is checked, and your money is held until the job is done.</p>
         <div class="chips"><div class="chip"><b>Checked</b><span>every artisan</span></div><div class="chip"><b>Safe payment</b><span>held until done</span></div><div class="chip"><b>Ado-Ekiti</b><span>starting here</span></div></div>
-        <div class="cta"><a class="btn" href="https://vettedhands.com.ng/app.html">Find an artisan</a><a class="btn ghost" href="#how">How it works</a></div>
+        <div class="cta"><a class="btn" href="https://vettedhands.com.ng/app.html">Join the waitlist</a><a class="btn ghost" href="#how">How it works</a></div>
       </div>
 
       <div class="sc" data-i="1">
-        <div class="eyebrow"><b></b>Step 1</div>
+        <div class="eyebrow">Step 1</div>
         <h2>Tell us<br><em>what you need.</em></h2>
         <p class="sub">Describe the job and where you are. Checked artisans near you reply.</p>
         <div class="card">
-          <div class="row"><span class="tag">Example · new request</span><span class="pill">3 matches</span></div>
+          <div class="row"><span class="tag">Example: new request</span><span class="pill">3 matches</span></div>
           <div class="t" style="margin-top:8px">Leaking kitchen tap</div>
           <div class="m">Ado-Ekiti · Today, 4:00 PM</div>
           <hr><div class="row"><span class="m">Budget</span><span class="t">₦15,000 – ₦25,000</span></div>
@@ -200,7 +200,7 @@ footer a:hover{color:var(--g)}
       </div>
 
       <div class="sc" data-i="2">
-        <div class="eyebrow"><b></b>Step 2</div>
+        <div class="eyebrow">Step 2</div>
         <h2>Pick someone<br><em>checked.</em></h2>
         <p class="sub">We check every artisan's identity first. Chat, compare, and choose.</p>
         <div class="card">
@@ -210,11 +210,11 @@ footer a:hover{color:var(--g)}
       </div>
 
       <div class="sc" data-i="3">
-        <div class="eyebrow"><b></b>Step 3</div>
+        <div class="eyebrow">Step 3</div>
         <h2>Pay safely.<br><em>We hold it.</em></h2>
         <p class="sub">You pay in the app. The money goes to VettedHands first, not to the artisan.</p>
         <div class="card">
-          <div class="row"><span class="tag">Example · money held safely</span><span class="pill gold">Held safely</span></div>
+          <div class="row"><span class="tag">Example: money held safely</span><span class="pill gold">Held safely</span></div>
           <div class="amt" style="margin-top:10px">₦25,000</div>
           <div class="bar"><i style="width:34%"></i></div>
           <div class="m" style="margin-top:8px">Paid to the artisan when you confirm</div>
@@ -222,11 +222,11 @@ footer a:hover{color:var(--g)}
       </div>
 
       <div class="sc" data-i="4">
-        <div class="eyebrow"><b></b>Step 4</div>
+        <div class="eyebrow">Step 4</div>
         <h2>Job done?<br><em>Confirm it.</em></h2>
         <p class="sub">Happy with the work? Confirm it and the artisan gets paid. Something wrong? Tell us before you confirm.</p>
         <div class="card">
-          <div class="row"><span class="tag">Example · job complete</span><span class="pill">✓ Done</span></div>
+          <div class="row"><span class="tag">Example: job complete</span><span class="pill">✓ Done</span></div>
           <div class="t" style="margin-top:8px">Leaking kitchen tap</div>
           <button class="btn full" tabindex="-1">Confirm and pay ₦25,000</button>
         </div>
@@ -238,14 +238,14 @@ footer a:hover{color:var(--g)}
 </div>
 
 <section class="blk" id="services"><div class="in">
-  <div class="kicker"><b></b>What you can book</div>
+  <div class="kicker">What you can book</div>
   <h2 class="big">A trusted pro for every job.</h2>
   <p class="lead">From a leaking pipe to a wedding outfit, find someone near you who has been checked and who stands behind the work.</p>
   <div class="svc" id="svc"></div>
 </div></section>
 
 <section class="blk" id="how" style="padding-top:0"><div class="in">
-  <div class="kicker"><b></b>How it works</div>
+  <div class="kicker">How it works</div>
   <h2 class="big">Three steps. No stress.</h2>
   <div class="steps">
     <div><em>01</em><h3>Describe the job</h3><p>Say what you need and when. Verified artisans nearby respond.</p></div>
@@ -256,13 +256,13 @@ footer a:hover{color:var(--g)}
 
 <section class="blk" style="padding-top:0"><div class="in">
   <div class="band">
-    <div><div class="kicker" style="color:var(--gold)"><b></b>For artisans</div><h2>Get verified. Get booked. Get paid.</h2><p>Steady jobs from people in your area, and payment you can trust, because it is already secured before you start.</p><a class="btn" href="https://vettedhands.com.ng/app.html">Apply to join</a></div>
+    <div><div class="kicker" style="color:var(--gold)">For artisans</div><h2>Get verified. Get booked. Get paid.</h2><p>Steady jobs from people in your area, and payment you can trust, because it is already secured before you start.</p><a class="btn" href="https://vettedhands.com.ng/waitlist.html">Artisan? Join the waitlist</a></div>
   </div>
 </div></section>
 
 <section class="final"><div class="in">
   <h2>Find your artisan in Ado-Ekiti.</h2>
-  <div class="cta"><a class="btn" href="https://vettedhands.com.ng/app.html">Get started</a><a class="btn ghost" href="https://vettedhands.com.ng/how-it-works.html">How it works</a></div>
+  <div class="cta"><a class="btn" href="https://vettedhands.com.ng/waitlist.html">Join the waitlist</a><a class="btn ghost" href="https://vettedhands.com.ng/how-it-works.html">How it works</a></div>
 </div></section>
 </main>
 
