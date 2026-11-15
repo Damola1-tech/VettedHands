@@ -59,13 +59,13 @@ a{color:inherit;text-decoration:none}
 .nav{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);z-index:50;background:rgba(246,241,229,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(10,58,43,.06)}
 .nav .in{display:flex;align-items:center;justify-content:space-between;height:64px;gap:16px}
 .logo{font-family:var(--head);font-weight:800;font-size:21px;letter-spacing:-.02em;color:var(--g);display:flex;align-items:center;gap:9px}
-.logo i{width:26px;height:26px;border-radius:8px;background:var(--g);display:grid;place-items:center}
-.logo i::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--gold)}
+.logo i{width:30px;height:30px;border-radius:8px;background:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMxRjNBMzQiLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNCAxNCkgc2NhbGUoMS41KSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRjBERkM4IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+CiAgICA8cGF0aCBkPSJNMTIgMjJzOC00IDgtMTBWNWwtOC0zLTggM3Y3YzAgNiA4IDEwIDggMTB6Ii8+CiAgICA8cG9seWxpbmUgcG9pbnRzPSI5IDEyIDExIDE0IDE1IDEwIi8+CiAgPC9nPgo8L3N2Zz4K") center/cover no-repeat;display:block;flex:none}
 .nav ul{display:flex;gap:28px;list-style:none;margin:0;padding:0;font-weight:600;font-size:14.5px;color:var(--ink2)}
 .nav ul a:hover{color:var(--g)}
 .btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:999px;background:var(--g);color:#fff;font-weight:700;font-size:15px;border:0;cursor:pointer;transition:transform .2s,background .2s}
 .btn:hover{background:var(--dark);transform:translateY(-1px)}
 .btn.sm{height:38px;padding:0 16px;font-size:14px}
+.navr{display:flex;align-items:center;gap:16px}.navr .lg{font-weight:700;font-size:14.5px;color:var(--g)}.navr .lg:hover{text-decoration:underline}
 .btn.ghost{background:transparent;color:var(--g);box-shadow:inset 0 0 0 1.5px rgba(15,77,58,.25)}
 .btn.ghost:hover{background:rgba(15,77,58,.06)}
 @media(max-width:760px){.nav ul{display:none}}
@@ -170,7 +170,7 @@ footer a:hover{color:var(--g)}
 <header class="nav"><div class="in">
   <a class="logo" href="#top"><i></i>VettedHands</a>
   <ul><li><a href="https://vettedhands.com.ng/how-it-works.html">How it works</a></li><li><a href="https://vettedhands.com.ng/find-artisans-ado-ekiti.html">Find artisans</a></li><li><a href="https://vettedhands.com.ng/about.html">About</a></li></ul>
-  <a class="btn sm" href="https://vettedhands.com.ng/waitlist">Join the waitlist</a>
+  <div class="navr"><a class="lg" href="https://vettedhands.com.ng/app.html">Log in</a><a class="btn sm" href="https://vettedhands.com.ng/app.html">Sign up</a></div>
 </div></header>
 
 <main id="top">
@@ -184,7 +184,7 @@ footer a:hover{color:var(--g)}
         <h1>Skilled hands.<br><em>Zero stress.</em></h1>
         <p class="sub">Verified artisans, one tap away. Your money stays safe until the job is done right.</p>
         <div class="chips"><div class="chip"><b>ID-checked</b><span>every artisan</span></div><div class="chip"><b>Escrow</b><span>pay on approval</span></div><div class="chip"><b>Local</b><span>Ado-Ekiti first</span></div></div>
-        <div class="cta"><a class="btn" href="https://vettedhands.com.ng/waitlist">Join the waitlist</a><a class="btn ghost" href="#how">See how it works</a></div>
+        <div class="cta"><a class="btn" href="https://vettedhands.com.ng/app.html">Get started</a><a class="btn ghost" href="#how">See how it works</a></div>
       </div>
 
       <div class="sc" data-i="1">
@@ -256,13 +256,13 @@ footer a:hover{color:var(--g)}
 
 <section class="blk" style="padding-top:0"><div class="in">
   <div class="band">
-    <div><div class="kicker" style="color:var(--gold)"><b></b>For artisans</div><h2>Get verified. Get booked. Get paid.</h2><p>Steady jobs from people in your area, and payment you can trust, because it is already secured before you start.</p><a class="btn" href="https://vettedhands.com.ng/waitlist">Apply to join</a></div>
+    <div><div class="kicker" style="color:var(--gold)"><b></b>For artisans</div><h2>Get verified. Get booked. Get paid.</h2><p>Steady jobs from people in your area, and payment you can trust, because it is already secured before you start.</p><a class="btn" href="https://vettedhands.com.ng/app.html">Apply to join</a></div>
   </div>
 </div></section>
 
 <section class="final"><div class="in">
-  <h2>Be first in Ado-Ekiti.</h2>
-  <div class="cta"><a class="btn" href="https://vettedhands.com.ng/waitlist">Join the waitlist</a><a class="btn ghost" href="https://vettedhands.com.ng/how-it-works.html">How it works</a></div>
+  <h2>Find your artisan in Ado-Ekiti.</h2>
+  <div class="cta"><a class="btn" href="https://vettedhands.com.ng/app.html">Get started</a><a class="btn ghost" href="https://vettedhands.com.ng/how-it-works.html">How it works</a></div>
 </div></section>
 </main>
 
