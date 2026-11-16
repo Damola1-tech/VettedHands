@@ -116,17 +116,27 @@ a{color:inherit;text-decoration:none}
 @keyframes flow{to{stroke-dashoffset:-10.5}}
 
 @media(max-width:760px){
-  .sc{width:calc(100% - 40px);top:84px;transform:translateY(12px)}
+  .nav .in{height:58px;gap:10px}
+  .logo{font-size:18px;gap:8px;white-space:nowrap}.logo i{width:28px;height:28px}
+  .navr{gap:12px;white-space:nowrap}.navr .lg{font-size:14px}
+  .btn.sm{height:36px;padding:0 14px;font-size:13.5px;white-space:nowrap}
+  .sc{width:calc(100% - 40px);top:78px;transform:translateY(12px)}
   .sc.on{transform:none}.sc.out{transform:translateY(-12px)}
-  .sc h1,.sc h2{font-size:clamp(34px,10.5vw,48px);margin-bottom:12px}
-  .sc p.sub{font-size:15px;margin-bottom:16px}
-  .chips{gap:8px;margin-bottom:0}.chip{padding:8px 12px}.chip b{font-size:16px}
-  .cta{display:none}
+  .sc h1,.sc h2{font-size:clamp(34px,10.5vw,46px);margin-bottom:10px}
+  .sc p.sub{font-size:15px;line-height:1.45;margin-bottom:14px}
+  .chips{display:none}
+  .cta{display:flex;gap:0}.cta .btn.ghost{display:none}.cta .btn{width:100%;justify-content:center;height:50px;font-size:16px;box-shadow:0 10px 24px -10px rgba(10,58,43,.5)}
   .card{display:none}
-  .eyebrow{margin-bottom:10px}
+  .eyebrow{margin-bottom:8px}
   .dots{display:none}
-  .copy::before{content:"";position:absolute;left:0;right:0;top:0;height:min(48%,340px);background:linear-gradient(var(--bg) 0%,var(--bg) 60%,rgba(246,241,229,0) 100%)}
+  .copy::before{content:"";position:absolute;left:0;right:0;top:0;height:min(52%,400px);background:linear-gradient(var(--bg) 0%,var(--bg) 62%,rgba(246,241,229,0) 100%)}
+  .cue{bottom:calc(14px + env(safe-area-inset-bottom,0px));flex-direction:row;gap:8px;background:rgba(246,241,229,.9);padding:7px 14px;border-radius:99px;font-size:11px}
+  .cue::after{width:14px;height:1.5px;background:var(--g)}
 }
+.dock{display:none;position:fixed;left:0;right:0;bottom:0;z-index:60;padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:rgba(246,241,229,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .35s}
+.dock.show{transform:none}
+@media(max-width:760px){.dock{display:flex}}
+.dock .btn{flex:1;justify-content:center;height:48px}
 
 /* after the story */
 section.blk{padding-block:clamp(72px,10vw,140px)}
@@ -184,7 +194,7 @@ footer a:hover{color:var(--g)}
         <h1>Find a trusted artisan.<br><em>Pay safely.</em></h1>
         <p class="sub">VettedHands is a marketplace where you find artisans in Ado-Ekiti: plumbers, electricians, tailors and more. Every artisan is checked, and your money is held until the job is done.</p>
         <div class="chips"><div class="chip"><b>Checked</b><span>every artisan</span></div><div class="chip"><b>Safe payment</b><span>held until done</span></div><div class="chip"><b>Ado-Ekiti</b><span>starting here</span></div></div>
-        <div class="cta"><a class="btn" href="https://vettedhands.com.ng/app.html">Join the waitlist</a><a class="btn ghost" href="#how">How it works</a></div>
+        <div class="cta"><a class="btn" href="https://vettedhands.com.ng/waitlist.html">Join the waitlist</a><a class="btn ghost" href="#how">How it works</a></div>
       </div>
 
       <div class="sc" data-i="1">
@@ -426,7 +436,7 @@ var W=0,H=0,mobile=false,baseK=1,cam={x:0,y:0,k:1,init:false},prog=0,tgt=null;
 function size(){
   W=stage.clientWidth;H=stage.clientHeight;mobile=W<761;
   var plateW=14.8*2*C*S*0.5*2;  // ~ screen width of plate
-  baseK=mobile?Math.min(W*1.05/1000,H*0.5/620):Math.min(W*0.62/1000,H*0.78/620);
+  baseK=mobile?Math.min(W*1.25/1000,H*0.46/620):Math.min(W*0.62/1000,H*0.78/620);
 }
 function ratioToCam(p){
   var t=target(p),q=P(t.f[0],t.f[1],t.f[2]);
@@ -450,7 +460,7 @@ function setScene(p){
     dots.forEach(function(d,j){d.classList.toggle("on",j===i);});
     cur=i;
   }
-  cue.style.opacity=p<0.03?1:0;
+  cue.style.opacity=p<0.03?1:0;var dk=document.getElementById("dock");if(dk)dk.classList.toggle("show",p>0.12);
 }
 var last=0,lastRaf=0;
 function frame(now,fromRaf){
@@ -488,5 +498,6 @@ document.getElementById("svc").innerHTML=LIST.map(function(x){return '<div><svg 
 })();
 </script>
 
+<div class="dock" id="dock"><a class="btn" href="https://vettedhands.com.ng/waitlist.html">Join the waitlist</a></div>
 </body>
 </html>
