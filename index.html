@@ -116,6 +116,10 @@ a{color:inherit;text-decoration:none}
 @keyframes flow{to{stroke-dashoffset:-10.5}}
 
 @media(max-width:760px){
+  .story{height:480vh}
+  section.blk{padding-block:48px;position:relative;z-index:2;background:var(--bg)}
+  #services{margin-top:-16vh;padding-top:40px;border-radius:28px 28px 0 0}
+  .final{padding-block:56px}
   .nav .in{height:58px;gap:10px}
   .logo{font-size:18px;gap:8px;white-space:nowrap}.logo i{width:28px;height:28px}
   .navr{gap:12px;white-space:nowrap}.navr .lg{font-size:14px}
@@ -133,10 +137,6 @@ a{color:inherit;text-decoration:none}
   .cue{bottom:calc(14px + env(safe-area-inset-bottom,0px));flex-direction:row;gap:8px;background:rgba(246,241,229,.9);padding:7px 14px;border-radius:99px;font-size:11px}
   .cue::after{width:14px;height:1.5px;background:var(--g)}
 }
-.dock{display:none;position:fixed;left:0;right:0;bottom:0;z-index:60;padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:rgba(246,241,229,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .35s}
-.dock.show{transform:none}
-@media(max-width:760px){.dock{display:flex}}
-.dock .btn{flex:1;justify-content:center;height:48px}
 
 /* after the story */
 section.blk{padding-block:clamp(72px,10vw,140px)}
@@ -436,14 +436,14 @@ var W=0,H=0,mobile=false,baseK=1,cam={x:0,y:0,k:1,init:false},prog=0,tgt=null;
 function size(){
   W=stage.clientWidth;H=stage.clientHeight;mobile=W<761;
   var plateW=14.8*2*C*S*0.5*2;  // ~ screen width of plate
-  baseK=mobile?Math.min(W*1.25/1000,H*0.46/620):Math.min(W*0.62/1000,H*0.78/620);
+  baseK=mobile?Math.min(W*0.98/1000,H*0.40/620):Math.min(W*0.62/1000,H*0.78/620);
 }
 function ratioToCam(p){
   var t=target(p),q=P(t.f[0],t.f[1],t.f[2]);
   return {x:q[0],y:q[1],k:t.k};
 }
 function apply(){
-  var ax=mobile?W*0.5:W*0.73, ay=mobile?H*0.75:H*0.56;
+  var ax=mobile?W*0.5:W*0.73, ay=mobile?H*0.70:H*0.56;
   var k=baseK*(mobile?1+(cam.k-1)*0.55:cam.k);
   wd.setAttribute("transform","translate("+(ax).toFixed(1)+","+(ay).toFixed(1)+") scale("+k.toFixed(4)+") translate("+(-cam.x).toFixed(1)+","+(-cam.y).toFixed(1)+")");
   var ls=1/k*(mobile?0.85:1);for(var i=0;i<labs.length;i++){labs[i].setAttribute("transform","translate("+labs[i].getAttribute("data-x")+","+labs[i].getAttribute("data-y")+") scale("+ls.toFixed(4)+")");}
@@ -460,7 +460,7 @@ function setScene(p){
     dots.forEach(function(d,j){d.classList.toggle("on",j===i);});
     cur=i;
   }
-  cue.style.opacity=p<0.03?1:0;var dk=document.getElementById("dock");if(dk)dk.classList.toggle("show",p>0.12);
+  cue.style.opacity=p<0.03?1:0;
 }
 var last=0,lastRaf=0;
 function frame(now,fromRaf){
@@ -498,6 +498,5 @@ document.getElementById("svc").innerHTML=LIST.map(function(x){return '<div><svg 
 })();
 </script>
 
-<div class="dock" id="dock"><a class="btn" href="https://vettedhands.com.ng/waitlist.html">Join the waitlist</a></div>
 </body>
 </html>
