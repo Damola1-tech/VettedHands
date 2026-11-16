@@ -126,7 +126,7 @@ a{color:inherit;text-decoration:none}
   .btn.sm{height:36px;padding:0 14px;font-size:13.5px;white-space:nowrap}
   .sc{width:calc(100% - 40px);top:78px;transform:translateY(12px)}
   .sc.on{transform:none}.sc.out{transform:translateY(-12px)}
-  .sc h1,.sc h2{font-size:clamp(34px,10.5vw,46px);margin-bottom:10px}
+  .sc h1,.sc h2{font-size:clamp(32px,9.6vw,42px);margin-bottom:10px}
   .sc p.sub{font-size:15px;line-height:1.45;margin-bottom:14px}
   .chips{display:none}
   .cta{display:flex;gap:0}.cta .btn.ghost{display:none}.cta .btn{width:100%;justify-content:center;height:50px;font-size:16px;box-shadow:0 10px 24px -10px rgba(10,58,43,.5)}
@@ -432,18 +432,25 @@ function target(p){
   var f=[0,1,2].map(function(j){return a.f[j]+(b.f[j]-a.f[j])*t;});
   return {f:f,k:a.k+(b.k-a.k)*t};
 }
-var W=0,H=0,mobile=false,baseK=1,cam={x:0,y:0,k:1,init:false},prog=0,tgt=null;
+var zoneY=0,W=0,H=0,mobile=false,baseK=1,cam={x:0,y:0,k:1,init:false},prog=0,tgt=null;
 function size(){
   W=stage.clientWidth;H=stage.clientHeight;mobile=W<761;
   var plateW=14.8*2*C*S*0.5*2;  // ~ screen width of plate
   baseK=mobile?Math.min(W*0.98/1000,H*0.40/620):Math.min(W*0.62/1000,H*0.78/620);
+  zoneY=H*0.70;
+  if(mobile){
+    var tb=0;scs.forEach(function(e){var r=e.offsetTop+e.offsetHeight;if(r>tb)tb=r;});
+    var top=tb+14,bot=H-12,rh=Math.max(120,bot-top);
+    baseK=Math.min(W*0.98/1000,rh*0.9/620);
+    zoneY=top+rh*0.5;
+  }
 }
 function ratioToCam(p){
   var t=target(p),q=P(t.f[0],t.f[1],t.f[2]);
   return {x:q[0],y:q[1],k:t.k};
 }
 function apply(){
-  var ax=mobile?W*0.5:W*0.73, ay=mobile?H*0.70:H*0.56;
+  var ax=mobile?W*0.5:W*0.73, ay=mobile?zoneY:H*0.56;
   var k=baseK*(mobile?1+(cam.k-1)*0.55:cam.k);
   wd.setAttribute("transform","translate("+(ax).toFixed(1)+","+(ay).toFixed(1)+") scale("+k.toFixed(4)+") translate("+(-cam.x).toFixed(1)+","+(-cam.y).toFixed(1)+")");
   var ls=1/k*(mobile?0.85:1);for(var i=0;i<labs.length;i++){labs[i].setAttribute("transform","translate("+labs[i].getAttribute("data-x")+","+labs[i].getAttribute("data-y")+") scale("+ls.toFixed(4)+")");}
@@ -479,6 +486,8 @@ var snap=/[?&]p=([\d.]+)/.exec(location.search);
 if(snap){prog=parseFloat(snap[1]);readProg=function(){};}
 frame();requestAnimationFrame(loop);
 setInterval(function(){if(performance.now()-lastRaf>200)frame(performance.now(),false);},50);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){size();cam.init=false;frame();});
+window.addEventListener("load",function(){size();frame();});
 window.addEventListener("resize",function(){size();cam.init=false;frame();});
 window.addEventListener("scroll",function(){readProg();},{passive:true});
 
