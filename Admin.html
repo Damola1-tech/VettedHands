@@ -398,7 +398,7 @@ function Shell({ token, user, onLogout }) {
 
   function go(p, id = null) { setPage(p); setParam(id); setMenu(false); window.location.hash = "/" + p; window.scrollTo(0, 0); }
   function flash(m) { setToast(m); clearTimeout(window.__vhT); window.__vhT = setTimeout(() => setToast(null), 2800); }
-  const c = { token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats, nfRes: nf, reloadServices: svc.reload };
+  const c = { isAgent, token, flash, go, param, openImage: setImg, refreshStats: stats.reload, statsRes: stats, nfRes: nf, reloadServices: svc.reload };
 
   let body;
   if (isAgent && page === "notifications") body = <AdminNotifications {...c} />;
@@ -542,7 +542,7 @@ function PushCard({ token }) {
     </div>
   );
 }
-function AdminNotifications({ token, nfRes, go }) {
+function AdminNotifications({ token, nfRes, go, isAgent, flash }) {
   const w = wait(nfRes); if (w) return w;
   const items = nfRes.data.notifications;
   async function read(ids) { try { await api("/api/notifications/read", { method: "POST", token, body: { ids } }); nfRes.reload(); } catch (e) {} }
@@ -550,6 +550,7 @@ function AdminNotifications({ token, nfRes, go }) {
     <>
       <Head title="Notifications" sub={`${nfRes.data.unread} unread`} right={nfRes.data.unread > 0 ? <button className="btn" onClick={() => read([])}>Mark all as read</button> : null} />
       <PushCard token={token} />
+      {!isAgent && <AnnounceCard token={token} flash={flash} />}
       <div className="stack">
         {items.map((n) => (
           <button key={n.id} className="rep-item" style={{ width: "100%", background: n.readAt ? "#fff" : "#EEF6F1" }}
@@ -561,6 +562,32 @@ function AdminNotifications({ token, nfRes, go }) {
         {!items.length && <div className="empty">You're all caught up.</div>}
       </div>
     </>
+  );
+}
+
+function AnnounceCard({ token, flash }) {
+  const [title, setTitle] = useState(""); const [text, setText] = useState(""); const [who, setWho] = useState("ALL"); const [busy, setBusy] = useState(false);
+  async function send() {
+    if (busy) return;
+    const label = who === "ALL" ? "all users" : who === "CUSTOMER" ? "all customers" : "all artisans";
+    if (!window.confirm("Send this to " + label + "? This cannot be undone.")) return;
+    setBusy(true);
+    try { const d = await api("/api/admin/announce", { method: "POST", token, body: { title, text, audience: who } }); setTitle(""); setText(""); flash("Sent to " + d.sent + " people"); }
+    catch (e) { flash(e.message || "Could not send"); }
+    setBusy(false);
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-h"><h3>Send an announcement</h3><span className="soft">Shows in the app bell, and as a phone alert for people who turned alerts on. No email.</span></div>
+      <div className="stack" style={{ gap: 10 }}>
+        <input className="note" style={{ minHeight: 0 }} placeholder="Title (for example: We are opening soon)" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <textarea className="note" rows={3} placeholder="Message (up to 300 characters)" maxLength={300} value={text} onChange={(e) => setText(e.target.value)} />
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <select className="search" style={{ minWidth: 0, width: "auto" }} value={who} onChange={(e) => setWho(e.target.value)}><option value="ALL">Everyone</option><option value="CUSTOMER">Customers only</option><option value="ARTISAN">Artisans only</option></select>
+          <button className="btn" disabled={busy || title.trim().length < 3 || text.trim().length < 3} onClick={send}>{busy ? "Sending..." : "Send"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
