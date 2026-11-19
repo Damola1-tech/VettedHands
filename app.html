@@ -336,9 +336,9 @@ function useAuth() {
     setError(null);
     startSession(await api("/api/auth/login", { method: "POST", body: { email, password } }));
   }
-  async function register(name, email, password, area) {
+  async function register(name, email, password, area, phone) {
     setError(null);
-    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area, ref: (() => { try { return localStorage.getItem("vh_ref") || undefined; } catch (e) { return undefined; } })() } });
+    const d = await api("/api/auth/register", { method: "POST", body: { name, email, password, area, phone: phone || undefined, ref: (() => { try { return localStorage.getItem("vh_ref") || undefined; } catch (e) { return undefined; } })() } });
     if (d.needsVerification) return d;
     startSession(d);
   }
@@ -354,7 +354,7 @@ function useAuth() {
     return { token, setToken, user, setUser, loading, error, login, register, logout, verifyEmail, resendCode, forgotPassword, resetPassword };
 }
 
-function Landing({ onSignIn, onStart, onLegal }) {
+function Landing({ onSignIn, onStart, onBrowse, onLegal }) {
   const trust = [
     ["Checked artisans", "We check each artisan's identity and phone number before they are listed."],
     ["Your money is safe", "You pay in the app. We hold the money until you say the job is done."],
@@ -380,7 +380,7 @@ function Landing({ onSignIn, onStart, onLegal }) {
             <h1>Find a trusted artisan near you.</h1>
             <p className="landing-sub">VettedHands is a marketplace for artisans in Ado-Ekiti: plumbers, electricians, tailors and more. Every artisan is checked, and your money is held safely until the job is done.</p>
             <div className="lp-ctas">
-              <button className="landing-cta landing-cta--primary" onClick={() => onStart("request")}>Find an artisan</button>
+              <button className="landing-cta landing-cta--primary" onClick={onBrowse}>Find an artisan</button>
               <button className="landing-cta landing-cta--secondary" onClick={() => onStart("artisan")}>I am an artisan</button>
             </div>
           </div>
@@ -487,13 +487,14 @@ function AuthArt() {
   );
 }
 
-function AuthScreen({ initialMode, onBack, auth, onLegal }) {
+function AuthScreen({ initialMode, intent, onBack, auth, onLegal }) {
   const [mode, setMode] = useState(initialMode || "login"); // register | login | forgot | code
   const [after, setAfter] = useState("verify"); // what the code screen finishes: verify | reset
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [area, setArea] = useState(areas[1]);
+  const [area, setArea] = useState("");
+  const [phone, setPhone] = useState("");
   const [agree, setAgree] = useState(false);
   const [code, setCode] = useState("");
   const [wait, setWait] = useState(0);
@@ -523,7 +524,7 @@ function AuthScreen({ initialMode, onBack, auth, onLegal }) {
         try { await auth.login(addr, password); }
         catch (ex) { if (ex.data && ex.data.needsVerification) { toCode("verify"); return; } throw ex; }
       } else if (mode === "register") {
-        const d = await auth.register(name.trim(), addr, password, area);
+        const d = await auth.register(name.trim(), addr, password, area, phone.trim());
         if (d && d.needsVerification) toCode("verify");
       } else if (mode === "forgot") {
         await auth.forgotPassword(addr);
@@ -599,8 +600,8 @@ function AuthScreen({ initialMode, onBack, auth, onLegal }) {
           </>
         ) : (
           <>
-            <h1 className="auth-h1">{mode === "register" ? <>Find skilled people.<br />Hire with confidence.</> : "Welcome back."}</h1>
-            <p className="auth-sub">{mode === "register" ? "Create your account in under a minute. No payment needed." : "Sign in to track your requests and jobs."}</p>
+            <h1 className="auth-h1">{mode === "register" ? (intent === "artisan" ? <>Get customers.<br />Get paid safely.</> : <>Find skilled people.<br />Hire with confidence.</>) : "Welcome back."}</h1>
+            <p className="auth-sub">{mode === "register" ? (intent === "artisan" ? "Create your free account, then apply to become a vetted artisan. Customers pay through VettedHands and you are paid when the job is confirmed." : "Create your account in under a minute. No payment needed.") : "Sign in to track your requests and jobs."}</p>
             <div className="seg">
               <button type="button" className={"seg-btn" + (mode === "register" ? " seg-btn--on" : "")} onClick={() => { setErr(null); setMode("register"); }}>Create account</button>
               <button type="button" className={"seg-btn" + (mode === "login" ? " seg-btn--on" : "")} onClick={() => { setErr(null); setMode("login"); }}>Sign in</button>
@@ -615,7 +616,10 @@ function AuthScreen({ initialMode, onBack, auth, onLegal }) {
                 <button type="button" className="auth-link auth-forgot" onClick={() => { setErr(null); setMode("forgot"); }}>Forgot password?</button>
               )}
               {mode === "register" && (
-                <label>Where are you? <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><select value={area} onChange={(e) => setArea(e.target.value)}>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
+                <label>Phone or WhatsApp <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><input type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0801 234 5678" /></label>
+              )}
+              {mode === "register" && (
+                <label>Where are you? <span style={{ fontWeight: 500, color: "var(--ink-soft)" }}>(optional)</span><select value={area} onChange={(e) => setArea(e.target.value)}><option value="">Select your area</option>{areas.filter((a) => a !== "All areas").map((a) => <option key={a}>{a}</option>)}</select></label>
               )}
               {mode === "register" && (
                 <label className="auth-agree"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><span>I am 18 or older and agree to the <button type="button" className="auth-link" onClick={() => onLegal("terms")}>Terms</button> and <button type="button" className="auth-link" onClick={() => onLegal("privacy")}>Privacy Policy</button>.</span></label>
@@ -771,7 +775,7 @@ function App() {
   useEffect(() => {
     api("/api/artisans/services").then((d) => { applyServices(d.services); bumpServices((n) => n + 1); }).catch(() => {});
   }, []);
-  const [screen, setScreen] = useState("landing"); // landing | auth | legal
+  const [screen, setScreen] = useState("landing"); // landing | browse | auth | legal
   const [legalTab, setLegalTab] = useState("privacy");
   const [legalFrom, setLegalFrom] = useState("landing"); // where Terms/Privacy was opened from, so we return there
   const [authMode, setAuthMode] = useState("register");
@@ -797,15 +801,17 @@ function App() {
       {screen === "legal" && <LegalView initial={legalTab} onBack={() => setScreen(legalFrom)} />}
       {(screen === "auth" || (screen === "legal" && legalFrom === "auth")) && (
         <div style={{ display: screen === "legal" ? "none" : "contents" }}>
-          <AuthScreen initialMode={authMode} onBack={() => setScreen("landing")} auth={auth} onLegal={(t) => { setLegalTab(t); setLegalFrom("auth"); setScreen("legal"); }} />
+          <AuthScreen initialMode={authMode} intent={intent} onBack={() => setScreen("landing")} auth={auth} onLegal={(t) => { setLegalTab(t); setLegalFrom("auth"); setScreen("legal"); }} />
         </div>
       )}
       {screen === "landing" && shareId && <PublicArtisan id={shareId}
         onJoin={() => { setIntent("request"); setAuthMode("register"); setScreen("auth"); }}
         onClose={() => { try { localStorage.removeItem("vh_pending_artisan"); } catch (e) { /* ignore */ } setShareId(null); }} />}
+      {screen === "browse" && <PublicBrowse onBack={() => setScreen("landing")} onJoin={() => { setIntent("request"); setAuthMode("register"); setScreen("auth"); }} />}
       {screen === "landing" && !shareId && <Landing
         onSignIn={() => { setIntent(null); setAuthMode("login"); setScreen("auth"); }}
         onLegal={(t) => { setLegalTab(t); setLegalFrom("landing"); setScreen("legal"); }}
+        onBrowse={() => setScreen("browse")}
         onStart={(i) => { setIntent(i); setAuthMode("register"); setScreen("auth"); }} />}
     </>;
   } else {
@@ -1758,7 +1764,7 @@ function HomeView({ user, isArtisan, requests, myReviews, area, setArea, onlineN
             </div>
           </button>
         ); })}
-        {onlineNow.length === 0 && <div className="hm-empty">No one is available right now. <button onClick={onSeeAll}>Browse all artisans</button></div>}
+        {onlineNow.length === 0 && <div className="hm-empty">Nobody is online right now, but you can still ask. Send a request and artisans reply when they are free.<br /><button onClick={onSeeAll}>Browse all artisans</button></div>}
       </div>
       <button className="hm-all" onClick={onOpenWizard}>Request an artisan <ChevronRight size={15} /></button>
       <button className="hm-blog" onClick={onOpenBlog}>
@@ -2267,6 +2273,36 @@ function ShareRow({ a, mine }) {
     </div>
   );
 }
+/* Signed-out browse: people can look at vetted artisans before making an account */
+function PublicBrowse({ onBack, onJoin }) {
+  const [list, setList] = useState(null);
+  const [trade, setTrade] = useState(null);
+  const [open, setOpen] = useState(null);
+  useEffect(() => {
+    setList(null);
+    api("/api/artisans" + (trade ? "?trade=" + trade : "")).then((d) => setList(d.artisans || [])).catch(() => setList([]));
+  }, [trade]);
+  if (open) return <PublicArtisan id={open} onJoin={onJoin} onClose={() => setOpen(null)} />;
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "calc(18px + env(safe-area-inset-top)) 20px calc(28px + var(--sab, env(safe-area-inset-bottom)))" }}>
+      <div className="bw-head">
+        <button className="iconbtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
+        <div><h1>Artisans in Ado-Ekiti</h1><p>Checked before they are listed</p></div>
+      </div>
+      <div className="chip-row">
+        <button className={"chip" + (!trade ? " chip--active" : "")} onClick={() => setTrade(null)}>All</button>
+        {trades.map((t) => <button key={t.id} className={"chip" + (trade === t.id ? " chip--active" : "")} onClick={() => setTrade(t.id)}>{t.label}</button>)}
+      </div>
+      <div className="hm-list" style={{ marginTop: 14 }}>
+        {list === null && <div className="hm-empty">Loading artisans…</div>}
+        {list && list.map((a) => <ArtisanCard key={a.id} artisan={a} onOpen={() => setOpen(a.id)} />)}
+        {list && list.length === 0 && <div className="hm-empty">We are adding checked artisans in Ado-Ekiti now. Create a free account, send a request, and we will match you as soon as someone is available.</div>}
+      </div>
+      <button className="auth-submit" style={{ width: "100%", marginTop: 18 }} onClick={onJoin}>Create a free account to request</button>
+    </div>
+  );
+}
+
 function PublicArtisan({ id, onJoin, onClose }) {
   const [a, setA] = useState(null);
   const [err, setErr] = useState(false);
