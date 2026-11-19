@@ -6616,6 +6616,7 @@ function Style() {
         /* Short installed window: no home-bar gap to respect, and cards fade out softly at the bottom edge instead of being cut off */
         html.short { --sab:0px; }
         html.short .phone .bottomnav { bottom:10px; }
+        html.short .phone::after { content:""; position:absolute; left:0; right:0; bottom:0; height:46px; pointer-events:none; z-index:19; background:linear-gradient(to top, var(--bg) 10%, rgba(245,240,228,0)); }
       }
 
       @media (max-width: 480px) {
