@@ -365,6 +365,11 @@ function Landing({ onSignIn, onStart, onBrowse, onLegal }) {
           <div className="landing-pill" style={{ marginTop: 0 }}><MapPin size={14} /> Starting in Ado-Ekiti</div>
           <h1>Find a trusted artisan near you.</h1>
           <p>Every artisan is checked. You pay in the app, and we hold your money until the job is done.</p>
+          <ul className="wl-trust">
+            <li><span><ShieldCheck size={16} /></span>Artisans are checked before they are listed</li>
+            <li><span><CheckCircle2 size={16} /></span>Your money is released only when you say the job is done</li>
+            <li><span><Star size={16} /></span>Reviews come from real customers</li>
+          </ul>
         </div>
         <div className="wl-act">
           <button className="landing-cta landing-cta--primary" onClick={() => onStart("request")}>Create account</button>
@@ -393,6 +398,12 @@ function Splash() {
 }
 
 /* ============ AUTH SCREEN ============ */
+const EMAIL_FIXES = { "gmail.con": "gmail.com", "gmail.cm": "gmail.com", "gmail.co": "gmail.com", "gmail.comm": "gmail.com", "gmial.com": "gmail.com", "gamil.com": "gmail.com", "gmai.com": "gmail.com", "gnail.com": "gmail.com", "yahoo.con": "yahoo.com", "yaho.com": "yahoo.com", "hotmail.con": "hotmail.com", "outlook.con": "outlook.com" };
+function suggestEmail(v) {
+  const m = String(v || "").trim().toLowerCase().match(/^(.+)@([^@\s]+)$/);
+  const fix = m && EMAIL_FIXES[m[2]];
+  return fix ? m[1] + "@" + fix : null;
+}
 function CodeBoxes({ value, onChange }) {
   const refs = useRef([]);
   useEffect(() => { if (refs.current[0]) refs.current[0].focus(); }, []);
@@ -490,6 +501,8 @@ function AuthScreen({ initialMode, intent, onBack, auth, onLegal }) {
         try { await auth.login(addr, password); }
         catch (ex) { if (ex.data && ex.data.needsVerification) { toCode("verify"); return; } throw ex; }
       } else if (mode === "register") {
+        const sug = suggestEmail(addr);
+        if (sug) throw new Error("Check your email: did you mean " + sug + "?");
         const d = await auth.register(name.trim(), addr, password, area, phone.trim());
         if (d && d.needsVerification) toCode("verify");
       } else if (mode === "forgot") {
@@ -559,6 +572,7 @@ function AuthScreen({ initialMode, intent, onBack, auth, onLegal }) {
             <p className="auth-sub">Enter your email and we'll send you a 6-digit code.</p>
             <form className="auth-form" onSubmit={submitMain}>
               <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label>
+              {suggestEmail(email) && <button type="button" className="auth-fix" onClick={() => setEmail(suggestEmail(email))}>Did you mean <b>{suggestEmail(email)}</b>? Tap to fix</button>}
               {err && <div className="auth-err">{err}</div>}
               <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : "Send code"}</button>
             </form>
@@ -577,6 +591,7 @@ function AuthScreen({ initialMode, intent, onBack, auth, onLegal }) {
                 <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" /></label>
               )}
               <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></label>
+              {suggestEmail(email) && <button type="button" className="auth-fix" onClick={() => setEmail(suggestEmail(email))}>Did you mean <b>{suggestEmail(email)}</b>? Tap to fix</button>}
               <label>Password<input required type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" /></label>
               {mode === "login" && (
                 <button type="button" className="auth-link auth-forgot" onClick={() => { setErr(null); setMode("forgot"); }}>Forgot password?</button>
@@ -749,14 +764,6 @@ function App() {
   const [intent, setIntent] = useState(null); // "request" | "artisan" | null
 
   useEffect(() => { if (!auth.token) setScreen("landing"); }, [auth.token]);
-  useEffect(() => {
-    const m = document.getElementById("themeColor");
-    const c = auth.loading ? "#0F4D3A" : "#F5F0E4";
-    if (m) m.setAttribute("content", c);
-    // colour under the home bar follows the screen: green on splash, cream in the app
-    const bg = auth.loading ? "#0A3A2B" : "#F5F0E4";
-    document.documentElement.style.background = bg; document.body.style.background = bg;
-  }, [auth.loading]);
 
   let body;
   if (auth.loading) {
@@ -5878,6 +5885,21 @@ function Style() {
       .landing-top { display:flex; align-items:center; justify-content:space-between; }
       .wl { flex:1; min-height:0; overflow-y:auto; display:flex; padding:calc(18px + env(safe-area-inset-top)) 22px calc(18px + var(--sab, env(safe-area-inset-bottom))); }
       .wl-in { width:100%; max-width:440px; margin:0 auto; min-height:100%; display:flex; flex-direction:column; justify-content:space-between; gap:22px; }
+      .wl-mid { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; }
+      .wl-trust { list-style:none; margin:26px 0 0; padding:0; display:flex; flex-direction:column; gap:12px; }
+      .wl-trust li { display:flex; align-items:center; gap:12px; font-size:13.5px; line-height:1.35; color:var(--ink); }
+      .wl-trust li span { flex:0 0 30px; height:30px; border-radius:50%; background:#E3EFE9; color:var(--primary); display:flex; align-items:center; justify-content:center; }
+      @media (max-height:720px) { .wl-trust { display:none; } }
+      @media (min-width:760px) {
+        .wl { align-items:center; background:radial-gradient(110% 80% at 85% 10%, #E7F0EA 0%, rgba(231,240,234,0) 60%), var(--bg); }
+        .wl-in { max-width:1040px; min-height:0; display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); grid-template-areas:"brand brand" "mid act"; column-gap:80px; row-gap:56px; align-items:center; }
+        .wl-in > .landing-brand { grid-area:brand; }
+        .wl-mid { grid-area:mid; flex:none; justify-content:flex-start; }
+        .wl-mid h1 { font-size:60px; margin:20px 0 16px; }
+        .wl-mid p { font-size:17px; max-width:480px; }
+        .wl-act { grid-area:act; background:#fff; border:1px solid var(--line); border-radius:26px; padding:34px 32px 22px; box-shadow:0 24px 50px -30px rgba(30,27,22,.35); }
+        .wl .landing-cta { display:block; width:100%; margin:0 0 12px; }
+      }
       .wl-mid h1 { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:clamp(36px,10.5vw,46px); line-height:1.03; letter-spacing:-0.02em; margin:16px 0 12px; color:var(--ink); }
       .wl-mid p { font-size:15px; line-height:1.55; color:var(--ink-soft); margin:0; }
       .wl-act .landing-cta { margin-bottom:10px; }
@@ -5948,6 +5970,7 @@ function Style() {
       .auth-form label { display:flex; flex-direction:column; gap:7px; font-size:12.5px; font-weight:700; color:var(--ink); }
       .auth-form input, .auth-form select { border:1.5px solid var(--line); border-radius:12px; padding:14px; font-size:16px; font-family:inherit; background:var(--surface); color:var(--ink); }
       .auth-form input:focus, .auth-form select:focus { outline:none; border-color:var(--primary); }
+      .auth-fix { background:#FBEFD9; color:#8A5A12; border:1px solid #EBD3A8; border-radius:10px; padding:9px 12px; font-size:12.5px; text-align:left; font-family:inherit; cursor:pointer; margin-top:-6px; }
       .auth-err { background:#F8E3DD; color:var(--danger); border-radius:10px; padding:11px 13px; font-size:12px; }
       .auth-submit { background:var(--primary); color:#fff; border:none; border-radius:14px; padding:16px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:4px; }
       .auth-submit:disabled { opacity:.5; cursor:not-allowed; }
@@ -6606,7 +6629,7 @@ function Style() {
       .hp-emg { display:flex; gap:12px; background:#F8E3DD; color:var(--danger); border-radius:14px; padding:14px; margin-top:16px; font-size:13px; line-height:1.45; }
 
       /* ===== App-style nav, fit-to-screen, form fixes ===== */
-      html, body { height:100%; overscroll-behavior-y:none; -webkit-text-size-adjust:100%; }
+      html, body { overscroll-behavior-y:none; -webkit-text-size-adjust:100%; }
       button, a, label { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
       input, textarea, select { font-size:16px !important; }
       .rf > * { flex-shrink:0; }
