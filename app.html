@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" id="themeColor" content="#F5F0E4" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="VettedHands" />
 <link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -63,6 +64,10 @@ set();vv.addEventListener("resize",set);vv.addEventListener("scroll",set);docume
   @keyframes spRun{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
   @media (prefers-reduced-motion:reduce){.sp *{animation:none!important}}
 </style>
+<script>
+(function(){if(!/[?&]debug=1/.test(location.search))return;function s(){var v=window.visualViewport,p=document.createElement("div"),c=document.createElement("div");c.style.cssText="position:fixed;left:0;top:0;width:1px;height:100vh;visibility:hidden";document.body.appendChild(c);var o=["standalone="+(navigator.standalone===true),"innerH="+innerHeight,"screenH="+screen.height,"vvH="+(v?Math.round(v.height):"-"),"clientH="+document.documentElement.clientHeight,"100vh="+c.offsetHeight,"scrollY="+scrollY];c.remove();var d=document.getElementById("vhdbg")||document.body.appendChild(Object.assign(document.createElement("div"),{id:"vhdbg"}));d.style.cssText="position:fixed;left:8px;right:8px;top:60px;z-index:99999;background:#000;color:#0f0;font:12px/1.4 monospace;padding:8px;border-radius:8px;pointer-events:none";d.textContent=o.join("  ")}
+window.addEventListener("load",function(){s();setInterval(s,1000)})})();
+</script>
 </head>
 <body>
 <noscript><h1>VettedHands: verified artisans in Nigeria</h1><p>Find verified electricians, plumbers, tailors, barbers and phone repairers. Pay through the app and your money is held safely until the job is done. Starting in Ado-Ekiti.</p><p><a href="online-artisan-marketplace-nigeria.html">Online marketplace for artisans</a> · <a href="find-artisans-ado-ekiti.html">Services in Ado-Ekiti</a> · <a href="how-it-works.html">How it works</a> · <a href="about.html">About</a> · <a href="waitlist.html">Join the waitlist</a></p></noscript>
