@@ -475,6 +475,52 @@ function Dashboard({ statsRes, go }) {
   );
 }
 
+const WL_DEFAULTS = {
+  customer: { subject: "You're on the list. VettedHands is almost ready", message: "Thank you for joining the VettedHands waitlist. You asked for a safer way to find people you can trust for a job in Ado-Ekiti, and that is exactly what we are building.\n\nHere is where we are: every artisan is checked before they appear on the platform, and we are finishing the last parts of the app. We have not opened yet. We will email you the moment we do, and you will be among the first to book.\n\nOne thing would help a lot. Do you know a good tailor, electrician, plumber, barber or phone repairer? Tell them to join the artisan list at vettedhands.com.ng. The more good people we have on day one, the better your first job will go.\n\nThank you for waiting with us." },
+  artisan: { subject: "You're on the list. Tell one artisan you trust", message: "Thank you for joining the VettedHands waitlist as an artisan. We are getting ready to open in Ado-Ekiti, and we will message you before we do.\n\nWhen we open, customers will see your verified profile, your work and your reviews, and they will request you directly. We have not opened yet, so there is nothing you need to do today.\n\nOne small favour: send vettedhands.com.ng to one other artisan you trust, such as a tailor, electrician, plumber, barber or phone repairer, so they can join the list too. A strong set of artisans at launch means more jobs for everyone on it.\n\nThank you for being early." },
+};
+function EmailList({ token, counts }) {
+  const [aud, setAud] = useState("customer");
+  const [subject, setSubject] = useState(WL_DEFAULTS.customer.subject);
+  const [message, setMessage] = useState(WL_DEFAULTS.customer.message);
+  const [open, setOpen] = useState(false);
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const n = aud === "all" ? counts.total : aud === "artisan" ? counts.artisans : counts.customers;
+  function pick(a) { setAud(a); setAsk(false); setNote(""); if (WL_DEFAULTS[a]) { setSubject(WL_DEFAULTS[a].subject); setMessage(WL_DEFAULTS[a].message); } }
+  async function send(test) {
+    setBusy(true); setNote("");
+    try {
+      const r = await api("/api/admin/waitlist/email", { method: "POST", token, body: { audience: aud, subject, message, test } });
+      setNote(test ? (r.ok ? "Test sent to " + r.to + ". Check your inbox and spam." : "The test did not send. Check the Brevo key on Render.") : "Sent to " + r.sent + " of " + r.total + (r.failed ? " (" + r.failed + " failed)" : "") + ".");
+      if (!test) setAsk(false);
+    } catch (e) { setNote(e.message); }
+    setBusy(false);
+  }
+  if (!open) return <div style={{ marginBottom: 16 }}><button className="btn btn-primary" onClick={() => setOpen(true)}>Email the waitlist</button></div>;
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-h"><h3>Email the waitlist</h3><button className="btn" onClick={() => setOpen(false)}>Close</button></div>
+      <div style={{ display: "grid", gap: 10, padding: "4px 2px 6px" }}>
+        <Chips items={[["customer", "Customers", counts.customers], ["artisan", "Artisans", counts.artisans], ["all", "Everyone", counts.total]]} value={aud} onChange={pick} />
+        <input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={120} placeholder="Subject" style={{ padding: 10, borderRadius: 10, border: "1.5px solid #D9D2C2", font: "inherit" }} />
+        <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={12} maxLength={3000} style={{ padding: 10, borderRadius: 10, border: "1.5px solid #D9D2C2", font: "inherit", lineHeight: 1.5 }} />
+        <div className="soft">Signed "The VettedHands team". Each person gets "Hi (first name)," on top and a "Visit VettedHands" button to vettedhands.com.ng. Blank lines make new paragraphs.</div>
+        {!ask ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn" disabled={busy} onClick={() => send(true)}>Send test to me</button>
+          <button className="btn btn-primary" disabled={busy || !n} onClick={() => setAsk(true)}>Send to {n} {n === 1 ? "person" : "people"}</button>
+        </div> : <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <b>Send this to {n} {n === 1 ? "person" : "people"} now? It cannot be undone.</b>
+          <button className="btn btn-primary" disabled={busy} onClick={() => send(false)}>{busy ? "Sending..." : "Yes, send"}</button>
+          <button className="btn" disabled={busy} onClick={() => setAsk(false)}>Cancel</button>
+        </div>}
+        {note && <div style={{ fontWeight: 700 }}>{note}</div>}
+      </div>
+    </div>
+  );
+}
+
 function Waitlist({ token }) {
   const res = useFetch(token, "/api/admin/waitlist");
   const [f, setF] = useState("all");
@@ -485,6 +531,7 @@ function Waitlist({ token }) {
     <>
       <Head title="Waitlist" sub={`${total} ${total === 1 ? "person" : "people"} on the list`}
         right={<button className="btn" onClick={() => downloadCsv([["Name", "Email", "WhatsApp", "Type", "Trade", "Source", "Joined"], ...entries.map((e) => [e.name, e.email, e.whatsapp || "", e.role, e.trade || "", e.source || "", fmtDate(e.createdAt)])], "waitlist.csv")}>Export CSV</button>} />
+      <EmailList token={token} counts={{ total, artisans, customers }} />
       <div className="stats">
         <div className="stat"><div className="stat-l">Total</div><div className="stat-n">{total}</div></div>
         <div className="stat"><div className="stat-l">Artisans</div><div className="stat-n">{artisans}</div></div>
